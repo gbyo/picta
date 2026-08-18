@@ -124,11 +124,21 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      # Publish outright. A draft release is invisible to the in-app update
+      # check, which asks GitHub for /releases/latest and never sees drafts,
+      # so a tag that only ever produced a draft told nobody anything.
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          draft: true
+          draft: false
+          generate_release_notes: true
           body: |
-            Windows: download `Picta-windows-x64.exe`, put it anywhere and run it.
-            No installer and no administrator rights are needed. It uses the
-            WebView2 runtime already present on modern Windows.
+            ## Downloads
+
+            - **Windows** — `Picta-windows-x64.exe` (or `Picta-windows-arm64.exe`).
+              Put it anywhere and run it. No installer and no administrator rights
+              are needed; it uses the WebView2 runtime already present on modern
+              Windows.
+            - **macOS** — `Picta-macos-universal.dmg`. Universal binary for Apple
+              silicon and Intel.
+            - **Linux** — `Picta-linux-x86_64.AppImage`. Mark it executable and run it.
