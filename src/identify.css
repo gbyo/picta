@@ -1,0 +1,30 @@
+/* One very large number, readable from across a room. Nothing else. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #101114;
+  cursor: default;
+}
+
+.number {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 62vmin;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  border: 1vmin solid #ffffff;
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}

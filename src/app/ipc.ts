@@ -1,0 +1,63 @@
+/**
+ * Typed wrappers around Picta's Rust commands.
+ *
+ * Every filesystem and window operation the frontend can perform is in this
+ * file, which makes the app's whole native surface easy to audit.
+ */
+
+import { invoke } from '@tauri-apps/api/core';
+import type { DisplayInfo } from '../core/monitors.js';
+import type { PathStyle } from '../core/paths.js';
+
+export function listDisplays(): Promise<DisplayInfo[]> {
+  return invoke<DisplayInfo[]>('list_displays');
+}
+
+export function identifyDisplays(): Promise<void> {
+  return invoke<void>('identify_displays');
+}
+
+export function openPresentation(displayId: string): Promise<DisplayInfo> {
+  return invoke<DisplayInfo>('open_presentation', { displayId });
+}
+
+export function closePresentation(): Promise<void> {
+  return invoke<void>('close_presentation');
+}
+
+export function allowImages(paths: string[]): Promise<void> {
+  return invoke<void>('allow_images', { paths });
+}
+
+export function pathsExist(paths: string[]): Promise<boolean[]> {
+  if (paths.length === 0) return Promise.resolve([]);
+  return invoke<boolean[]>('paths_exist', { paths });
+}
+
+export function readPicta(path: string): Promise<string> {
+  return invoke<string>('read_picta', { path });
+}
+
+export function writePicta(path: string, contents: string): Promise<void> {
+  return invoke<void>('write_picta', { path, contents });
+}
+
+export function loadPrefs(): Promise<unknown> {
+  return invoke<unknown>('load_prefs');
+}
+
+export function savePrefs(value: unknown): Promise<void> {
+  return invoke<void>('save_prefs', { value });
+}
+
+export function startupFile(): Promise<string | null> {
+  return invoke<string | null>('startup_file');
+}
+
+export function pathStyle(): Promise<PathStyle> {
+  return invoke<PathStyle>('path_style');
+}
+
+export function quitApp(): Promise<void> {
+  return invoke<void>('quit_app');
+}

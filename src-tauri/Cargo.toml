@@ -1,0 +1,30 @@
+[package]
+name = "picta"
+version = "1.0.0"
+description = "Display and automatically rotate still images on a specific monitor."
+authors = ["Picta contributors"]
+license = "MIT"
+repository = "https://github.com/picta-app/picta"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "picta_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+incremental = false

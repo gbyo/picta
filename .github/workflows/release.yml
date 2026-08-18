@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The portable x64 Windows executable is the primary artifact.
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: Picta-windows-x64.exe
+          - os: macos-latest
+            target: universal-apple-darwin
+            artifact: Picta-macos-universal.dmg
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: Picta-linux-x86_64.AppImage
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target != 'universal-apple-darwin' && matrix.target || 'x86_64-apple-darwin,aarch64-apple-darwin' }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - name: Install Linux build dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      # Windows: no installer and no bundled WebView2. Just the executable,
+      # which is the whole application.
+      - name: Build portable executable (Windows)
+        if: startsWith(matrix.os, 'windows')
+        run: npm run tauri build -- --target ${{ matrix.target }} --no-bundle
+      - name: Collect Windows artifact
+        if: startsWith(matrix.os, 'windows')
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp "src-tauri/target/${{ matrix.target }}/release/Picta.exe" "artifacts/${{ matrix.artifact }}"
+          ls -l artifacts
+
+      - name: Build (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: npm run tauri build -- --target universal-apple-darwin --bundles dmg
+      - name: Collect macOS artifact
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          mkdir -p artifacts
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg "artifacts/${{ matrix.artifact }}"
+
+      - name: Build (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: npm run tauri build -- --bundles appimage
+      - name: Collect Linux artifact
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          mkdir -p artifacts
+          cp src-tauri/target/release/bundle/appimage/*.AppImage "artifacts/${{ matrix.artifact }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  # Optional: ARM64 Windows. Kept out of the required set because the
+  # windows-11-arm runner is not available to every account, and a job that
+  # never gets a runner would otherwise block the release indefinitely.
+  build-windows-arm64:
+    runs-on: windows-11-arm
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: aarch64-pc-windows-msvc
+      - run: npm ci
+      - run: npm run tauri build -- --target aarch64-pc-windows-msvc --no-bundle
+      - shell: bash
+        run: |
+          mkdir -p artifacts
+          cp "src-tauri/target/aarch64-pc-windows-msvc/release/Picta.exe" artifacts/Picta-windows-arm64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Picta-windows-arm64.exe
+          path: artifacts/Picta-windows-arm64.exe
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: true
+          body: |
+            Windows: download `Picta-windows-x64.exe`, put it anywhere and run it.
+            No installer and no administrator rights are needed. It uses the
+            WebView2 runtime already present on modern Windows.

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+      - name: Check formatting (TypeScript)
+        run: npm run fmt:check
+      - name: Typecheck
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+
+      - name: Check formatting (Rust)
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Picta</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1 class="wordmark">Picta</h1>
+
+      <!-- Idle: build the show -------------------------------------------- -->
+      <div id="setup">
+        <section class="block" aria-labelledby="images-heading">
+          <h2 class="block-title" id="images-heading">Images</h2>
+
+          <button type="button" id="dropzone" class="dropzone">
+            <span class="dropzone-line">Drop images here</span>
+            <span class="dropzone-sub">or <span class="link-ish">Choose Images</span></span>
+          </button>
+
+          <ul id="thumbs" class="thumbs" aria-label="Images, in playback order"></ul>
+
+          <div class="row">
+            <p id="image-count" class="muted" aria-live="polite">No images</p>
+            <button type="button" id="clear-images" class="text-button" hidden>Clear</button>
+          </div>
+
+          <div id="missing-notice" class="notice" role="status" hidden>
+            <p id="missing-text"></p>
+            <div class="notice-actions">
+              <button type="button" id="locate-images" class="small-button">Locate Images</button>
+              <button type="button" id="remove-missing" class="small-button">Remove Missing</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="block" aria-labelledby="display-heading">
+          <h2 class="block-title" id="display-heading">Display</h2>
+          <label class="visually-hidden" for="display-select">Output display</label>
+          <select id="display-select" class="control"></select>
+          <p id="display-detail" class="muted detail"></p>
+          <button type="button" id="identify" class="small-button">Identify Displays</button>
+        </section>
+
+        <section class="block" aria-labelledby="interval-heading">
+          <h2 class="block-title" id="interval-heading">Change every</h2>
+          <label class="visually-hidden" for="interval-select">Seconds between images</label>
+          <select id="interval-select" class="control"></select>
+        </section>
+
+        <section class="block" aria-labelledby="transition-heading">
+          <h2 class="block-title" id="transition-heading">Transition</h2>
+          <label class="visually-hidden" for="transition-select">Transition style</label>
+          <select id="transition-select" class="control">
+            <option value="crossfade">Crossfade</option>
+            <option value="none">None</option>
+          </select>
+        </section>
+
+        <section class="block" aria-labelledby="sizing-heading">
+          <h2 class="block-title" id="sizing-heading">Image sizing</h2>
+          <label class="visually-hidden" for="sizing-select">How images fill the display</label>
+          <select id="sizing-select" class="control">
+            <option value="fit">Fit</option>
+            <option value="fill">Fill</option>
+          </select>
+        </section>
+
+        <button type="button" id="start" class="primary">Start</button>
+      </div>
+
+      <!-- Running: control the show ---------------------------------------- -->
+      <div id="running" hidden>
+        <p class="running-line">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="running-display">Running</span>
+        </p>
+        <p id="running-detail" class="muted detail"></p>
+        <p id="running-position" class="position" aria-live="polite">Image 1 of 1</p>
+
+        <div class="row gap">
+          <button type="button" id="previous" class="small-button grow">Previous</button>
+          <button type="button" id="next" class="small-button grow">Next</button>
+        </div>
+
+        <button type="button" id="stop" class="primary">Stop</button>
+      </div>
+
+      <p id="message" class="message" role="status" hidden></p>
+      <button type="button" id="resume" class="small-button" hidden>Resume</button>
+    </main>
+
+    <!--
+      Three-button save prompt. The native dialog plugin only offers two
+      buttons, and Save / Don't Save / Cancel is the flow desktop users expect.
+    -->
+    <dialog id="confirm-dialog" class="confirm">
+      <form method="dialog">
+        <p id="confirm-text"></p>
+        <div class="confirm-actions">
+          <button type="submit" value="cancel" class="small-button">Cancel</button>
+          <button type="submit" value="discard" class="small-button">Don't Save</button>
+          <button type="submit" value="save" class="small-button primary-ish" autofocus>
+            Save
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "name": "picta",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Display and automatically rotate still images on a specific monitor.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fmt": "prettier --write \"src/**/*.{ts,css,html}\" \"tests/**/*.ts\" \"*.html\" \"*.ts\" \"*.json\"",
+    "fmt:check": "prettier --check \"src/**/*.{ts,css,html}\" \"tests/**/*.ts\" \"*.html\" \"*.ts\"",
+    "verify": "npm run fmt:check && npm run check && npm run test"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^24.13.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
+  }
+}
