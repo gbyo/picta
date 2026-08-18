@@ -9,8 +9,12 @@ mod displays;
 mod files;
 mod identify;
 mod presentation;
+mod update;
 
-use tauri::menu::{AboutMetadata, Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{
+    AboutMetadata, CheckMenuItemBuilder, Menu, MenuItemBuilder, MenuItemKind, PredefinedMenuItem,
+    SubmenuBuilder,
+};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 pub const MAIN_WINDOW: &str = "main";
@@ -103,6 +107,14 @@ fn quit_app(app: tauri::AppHandle) {
 // Menu
 // ---------------------------------------------------------------------------
 
+/// Whether automatic update checking is switched on, defaulting to on.
+fn update_checks_enabled(app: &tauri::AppHandle) -> bool {
+    files::load_prefs(app)
+        .get("updateChecks")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let new_item = MenuItemBuilder::with_id("new", "New")
         .accelerator("CmdOrCtrl+N")
@@ -117,6 +129,13 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .accelerator("CmdOrCtrl+Shift+S")
         .build(app)?;
 
+    let check_updates_item =
+        MenuItemBuilder::with_id("check-updates", "Check for Updates…").build(app)?;
+    let auto_updates_item =
+        CheckMenuItemBuilder::with_id("auto-update-checks", "Check for Updates Automatically")
+            .checked(update_checks_enabled(app))
+            .build(app)?;
+
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&new_item)
         .item(&open_item)
@@ -125,6 +144,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .item(&save_as_item)
         .separator()
         .item(&PredefinedMenuItem::close_window(app, Some("Close"))?)
+        .build()?;
+
+    #[cfg(not(target_os = "macos"))]
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&check_updates_item)
+        .item(&auto_updates_item)
         .build()?;
 
     let menu = Menu::new(app)?;
@@ -139,6 +164,9 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 Some(AboutMetadata::default()),
             )?)
             .separator()
+            .item(&check_updates_item)
+            .item(&auto_updates_item)
+            .separator()
             .item(&PredefinedMenuItem::hide(app, None)?)
             .item(&PredefinedMenuItem::hide_others(app, None)?)
             .separator()
@@ -148,6 +176,9 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     }
 
     menu.append(&file_menu)?;
+
+    #[cfg(not(target_os = "macos"))]
+    menu.append(&help_menu)?;
 
     #[cfg(target_os = "macos")]
     {
@@ -202,6 +233,8 @@ pub fn run() {
             startup_file,
             path_style,
             quit_app,
+            update::check_for_update,
+            update::open_releases_page,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -216,7 +249,29 @@ pub fn run() {
             }
 
             app.on_menu_event(move |app, event| {
-                let _ = app.emit(MENU_EVENT, event.id().0.as_str());
+                let id = event.id().0.as_str();
+
+                // A check item does not toggle its own tick, so flip it here and
+                // tell the controller what the new value is.
+                if id == "auto-update-checks" {
+                    if let Some(MenuItemKind::Check(item)) =
+                        app.menu().and_then(|menu| menu.get(id))
+                    {
+                        let enabled = !item.is_checked().unwrap_or(true);
+                        let _ = item.set_checked(enabled);
+                        let _ = app.emit(
+                            MENU_EVENT,
+                            if enabled {
+                                "update-checks-on"
+                            } else {
+                                "update-checks-off"
+                            },
+                        );
+                    }
+                    return;
+                }
+
+                let _ = app.emit(MENU_EVENT, id);
             });
 
             Ok(())

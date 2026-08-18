@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Display and automatically rotate still images on a specific monitor."
 authors = ["Picta contributors"]
 license = "MIT"
-repository = "https://github.com/picta-app/picta"
+repository = "https://github.com/gbyo/picta"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -20,6 +20,17 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Version check only. `native-tls` uses the operating system's own TLS stack
+# (Schannel on Windows, Security.framework on macOS) rather than bundling one,
+# which keeps the portable executable small. `system-proxy` matters because
+# venue networks often route through a proxy.
+reqwest = { version = "0.13", default-features = false, features = [
+  "native-tls",
+  "json",
+  "http2",
+  "system-proxy",
+] }
+semver = "1"
 
 [profile.release]
 opt-level = "s"

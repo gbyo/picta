@@ -7,6 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type { DisplayInfo } from '../core/monitors.js';
+import type { UpdateStatus } from '../core/update.js';
 import type { PathStyle } from '../core/paths.js';
 
 export function listDisplays(): Promise<DisplayInfo[]> {
@@ -60,4 +61,24 @@ export function pathStyle(): Promise<PathStyle> {
 
 export function quitApp(): Promise<void> {
   return invoke<void>('quit_app');
+}
+
+/**
+ * Ask whether a newer Picta has been released.
+ *
+ * The request is made in Rust against one compile-time URL, so the webview has
+ * no network capability of its own and cannot be talked into fetching something
+ * else. Never rejects: a machine with no internet simply reports nothing new.
+ */
+export async function checkForUpdate(): Promise<UpdateStatus | null> {
+  try {
+    return await invoke<UpdateStatus>('check_for_update');
+  } catch {
+    return null;
+  }
+}
+
+/** Open the releases page in the operator's browser. */
+export async function openReleasesPage(): Promise<void> {
+  await invoke('open_releases_page');
 }

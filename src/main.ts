@@ -14,7 +14,7 @@ import { message as messageDialog } from '@tauri-apps/plugin-dialog';
 import { EVENT_MENU } from './app/events.js';
 import * as ipc from './app/ipc.js';
 import { Playback, type StopReason } from './app/playback.js';
-import { readPrefs, writePrefs, flushPrefs, type Prefs } from './app/prefs.js';
+import { emptyPrefs, readPrefs, writePrefs, flushPrefs, type Prefs } from './app/prefs.js';
 import { renderThumbs } from './app/thumbs.js';
 import {
   chooseFolder,
@@ -45,6 +45,13 @@ import {
 } from './core/monitors.js';
 import { moveItem } from './core/playlist.js';
 import { basename, type PathStyle } from './core/paths.js';
+import {
+  UPDATE_CHECK_INTERVAL_MS,
+  shouldCheckNow,
+  shouldNotify,
+  updateNoticeText,
+  type UpdateStatus,
+} from './core/update.js';
 import { applyRelink, planRelink } from './core/relink.js';
 import {
   INTERVAL_CHOICES,
@@ -91,19 +98,26 @@ const ui = {
   resume: need<HTMLButtonElement>('resume'),
   confirmDialog: need<HTMLDialogElement>('confirm-dialog'),
   confirmText: need<HTMLParagraphElement>('confirm-text'),
+  updateNotice: need<HTMLDivElement>('update-notice'),
+  updateText: need<HTMLParagraphElement>('update-text'),
+  updateOpen: need<HTMLButtonElement>('update-open'),
+  updateDismiss: need<HTMLButtonElement>('update-dismiss'),
 };
 
 // --- state ------------------------------------------------------------------
 
 let style: PathStyle = 'posix';
 let doc: DocumentState = newDocument();
-let prefs: Prefs = { displayHint: null, lastDirectory: null, window: null };
+let prefs: Prefs = { ...emptyPrefs };
 let displays: DisplayInfo[] = [];
 let selectedDisplayId: string | null = null;
 /** Set when a run ended because its output display vanished. */
 let lostDisplayHint: Prefs['displayHint'] = null;
 let watchHandle: number | null = null;
 let busy = false;
+/** The version currently named in the update notice, if one is showing. */
+let noticedVersion: string | null = null;
+let updateCheckHandle: number | null = null;
 
 const appWindow = getCurrentWindow();
 
@@ -552,6 +566,71 @@ async function resume(): Promise<void> {
   await start();
 }
 
+// --- updates ----------------------------------------------------------------
+
+/**
+ * Tell the operator when a newer Picta exists. Picta never downloads or
+ * installs anything: on a machine that boots from a USB stick in a booth,
+ * silently swapping the executable is not a favour. `Not Now` silences this
+ * version only, so the next release is still announced.
+ */
+function showUpdateNotice(status: UpdateStatus): void {
+  noticedVersion = status.latestVersion;
+  ui.updateText.textContent = updateNoticeText(status);
+  ui.updateNotice.hidden = false;
+}
+
+function hideUpdateNotice(): void {
+  noticedVersion = null;
+  ui.updateNotice.hidden = true;
+}
+
+async function runUpdateCheck(manual: boolean): Promise<void> {
+  if (!manual && !shouldCheckNow(updateState(), Date.now(), { running: playback.active })) {
+    return;
+  }
+
+  const status = await ipc.checkForUpdate();
+  // Record the attempt either way, so a machine behind a firewall does not
+  // retry on every single poll.
+  prefs = { ...prefs, lastUpdateCheck: Date.now() };
+  writePrefs(prefs);
+
+  if (status === null) {
+    if (manual) setMessage('Could not check for updates. Picta works fine offline.');
+    return;
+  }
+
+  // A manual check reports whatever it found, including good news; an automatic
+  // one stays silent unless there is something new.
+  if (shouldNotify(status, manual ? null : prefs.dismissedVersion)) {
+    showUpdateNotice(status);
+  } else if (manual) {
+    setMessage(`Picta ${status.currentVersion} is up to date.`);
+  }
+}
+
+function updateState() {
+  return {
+    enabled: prefs.updateChecks,
+    lastCheck: prefs.lastUpdateCheck,
+    dismissedVersion: prefs.dismissedVersion,
+  };
+}
+
+/**
+ * Re-examine whether a check is due. This is a plain hourly timer rather than
+ * anything clever: `shouldCheckNow` owns the once-a-day rule, and it refuses
+ * while a show is running, so the check simply happens at the next opportunity.
+ */
+function startUpdateSchedule(): void {
+  if (updateCheckHandle !== null) return;
+  updateCheckHandle = window.setInterval(
+    () => void runUpdateCheck(false),
+    Math.min(UPDATE_CHECK_INTERVAL_MS, 60 * 60 * 1000),
+  );
+}
+
 // --- keyboard ---------------------------------------------------------------
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -640,6 +719,20 @@ function wire(): void {
   ui.next.addEventListener('click', () => playback.next());
   ui.resume.addEventListener('click', () => void resume());
 
+  ui.updateOpen.addEventListener('click', () => {
+    void ipc.openReleasesPage().catch(() => {
+      setMessage('Could not open the browser. Visit github.com/gbyo/picta/releases.');
+    });
+  });
+
+  ui.updateDismiss.addEventListener('click', () => {
+    if (noticedVersion !== null) {
+      prefs = { ...prefs, dismissedVersion: noticedVersion };
+      writePrefs(prefs);
+    }
+    hideUpdateNotice();
+  });
+
   window.addEventListener('keydown', (event) => {
     if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     if (ui.confirmDialog.open) return;
@@ -678,6 +771,20 @@ function wire(): void {
         break;
       case 'save-as':
         void saveAs();
+        break;
+      case 'check-updates':
+        setMessage('Checking for updates…');
+        void runUpdateCheck(true);
+        break;
+      case 'update-checks-on':
+        prefs = { ...prefs, updateChecks: true };
+        writePrefs(prefs);
+        void runUpdateCheck(false);
+        break;
+      case 'update-checks-off':
+        prefs = { ...prefs, updateChecks: false };
+        writePrefs(prefs);
+        hideUpdateNotice();
         break;
       default:
         break;
@@ -760,6 +867,11 @@ async function main(): Promise<void> {
 
   await appWindow.show();
   await appWindow.setFocus();
+
+  // Last, and never blocking startup: whether a newer Picta exists matters far
+  // less than the window being usable.
+  startUpdateSchedule();
+  void runUpdateCheck(false);
 }
 
 void main().catch((error: unknown) => {

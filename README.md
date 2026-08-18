@@ -189,12 +189,45 @@ Opening a show whose images have moved gives you a short notice:
 if ten images moved together, one dialog fixes all ten. Nothing about a missing
 image is ever shown on the presentation display.
 
-## Offline, and staying that way
+## Update notifications
 
-Picta makes no network requests. No update checks, no telemetry, no analytics, no
-accounts, no cloud, no CDN fonts or scripts. The Content Security Policy blocks
-remote content outright, and the frontend has no HTTP permission at all. It uses
-system fonts.
+Picta tells you when a newer version has been released. It does **not** install
+anything — it checks the version number on GitHub and shows one line:
+
+```
+Picta 1.1.0 is available. You are running 1.0.0.
+[ What's New ]  [ Not Now ]
+```
+
+**What's New** opens the releases page in your browser so you can read the notes
+and download the new `Picta.exe` yourself. **Not Now** silences that one version;
+the next release is still announced.
+
+This is deliberately notify-only. Picta is usually a portable executable running
+on a machine in a booth that somebody else owns, often minutes before an event.
+Silently replacing that file is not a favour, so replacing it stays your
+decision.
+
+The check happens once when the controller opens and at most once a day after
+that. It is **never** made while a show is running — nothing gets to interrupt
+images on an output display. It is a single request to
+`api.github.com/repos/gbyo/picta/releases/latest`, made by the Rust side against
+a compile-time URL, so the interface itself has no network capability and cannot
+be pointed anywhere else. If the machine is offline, behind a firewall or on a
+locked-down school network, the check fails silently and Picta behaves exactly as
+it always does.
+
+To switch it off entirely, untick **Check for Updates Automatically** (in the
+**Help** menu on Windows and Linux, the **Picta** menu on macOS). With it off,
+Picta makes no network requests at all. **Check for Updates…** in the same menu
+runs a check on demand.
+
+## Otherwise entirely offline
+
+Apart from that one version check, Picta does not use the network. No telemetry,
+no analytics, no accounts, no cloud, no CDN fonts or scripts, no remote images.
+The Content Security Policy blocks remote content outright and the interface has
+no HTTP permission of its own. It uses system fonts.
 
 The only file access Picta has is through its own commands, which accept
 `.picta` documents and PNG/JPEG/WebP images and nothing else.
@@ -237,7 +270,10 @@ if you only want that file.
   use.
 - **No file associations.** Double-clicking a `.picta` file is not wired up in
   the portable build; use **Open…** or pass the path on the command line.
-- **No auto-update.** Download a new build when you want one.
+- **No auto-install of updates.** Picta tells you a new version exists; you
+  download and replace the executable yourself. Tauri's official updater cannot
+  update a portable `.exe` — it works by running an NSIS or MSI installer — and
+  portable use comes first.
 - **Monitor identity is best-effort.** It relies on what the OS reports. Two
   identical monitors of the same model and resolution can be indistinguishable;
   in that case Picta asks rather than guesses.

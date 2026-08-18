@@ -90,6 +90,19 @@
 
       <p id="message" class="message" role="status" hidden></p>
       <button type="button" id="resume" class="small-button" hidden>Resume</button>
+
+      <!--
+        Update notice. Picta only ever says a new version exists; downloading
+        and replacing the executable stays a deliberate human act, which keeps
+        the portable single-file model intact.
+      -->
+      <div id="update-notice" class="notice info" role="status" hidden>
+        <p id="update-text"></p>
+        <div class="notice-actions">
+          <button type="button" id="update-open" class="small-button">What's New</button>
+          <button type="button" id="update-dismiss" class="small-button">Not Now</button>
+        </div>
+      </div>
     </main>
 
     <!--

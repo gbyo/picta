@@ -16,9 +16,20 @@ export interface Prefs {
   displayHint: DisplayHint | null;
   lastDirectory: string | null;
   window: { width: number; height: number; x: number; y: number } | null;
+  /** Automatic update checking. On unless the operator turns it off. */
+  updateChecks: boolean;
+  lastUpdateCheck: number | null;
+  dismissedVersion: string | null;
 }
 
-export const emptyPrefs: Prefs = { displayHint: null, lastDirectory: null, window: null };
+export const emptyPrefs: Prefs = {
+  displayHint: null,
+  lastDirectory: null,
+  window: null,
+  updateChecks: true,
+  lastUpdateCheck: null,
+  dismissedVersion: null,
+};
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -56,10 +67,17 @@ export function parsePrefs(raw: unknown): Prefs {
   if (typeof raw !== 'object' || raw === null) return { ...emptyPrefs };
   const o = raw as Record<string, unknown>;
   const lastDirectory = o['lastDirectory'];
+  const lastUpdateCheck = o['lastUpdateCheck'];
+  const dismissedVersion = o['dismissedVersion'];
   return {
     displayHint: parseHint(o['displayHint']),
     lastDirectory: typeof lastDirectory === 'string' && lastDirectory !== '' ? lastDirectory : null,
     window: parseWindow(o['window']),
+    // Anything other than an explicit `false` leaves checking on, matching the
+    // default the native menu is built with.
+    updateChecks: o['updateChecks'] !== false,
+    lastUpdateCheck: isFiniteNumber(lastUpdateCheck) ? lastUpdateCheck : null,
+    dismissedVersion: typeof dismissedVersion === 'string' ? dismissedVersion : null,
   };
 }
 

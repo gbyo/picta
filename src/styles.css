@@ -339,6 +339,12 @@ button {
   gap: 8px;
 }
 
+/* An update notice is information, not a problem, so it does not borrow the
+   warning colour used for missing images. */
+.notice.info {
+  border-left-color: var(--accent);
+}
+
 .notice p {
   margin: 0;
 }
