@@ -59,14 +59,33 @@ tests.
 
 ## Custom layouts
 
-The Output tab keeps normal playback controls separate from the explicit
-**Edit Zones** mode. Inside the draft editor, select a zone, split it
-left/right or top/bottom, assign a role, adjust a divider, or merge a selected
-leaf with its sibling. The controller and physical display show the draft as a
-diagnostic preview with solid role colors, zone number/id, exact dimensions,
-area share and an optional roughly 4.5% safe-area overlay. The physical preview
-has no controls or pointer handling and normal media/cue audio is stopped while
-it is visible.
+Layout building lives entirely inside the explicit **Edit Zones** mode, in the
+Output tab. Normal Output shows the scene's layout preview and a single
+**Edit Zones** button; there are no destructive preset buttons outside the
+draft. Starting zone editing from another tab switches to Output first, so the
+operator never puts the physical board into calibration mode and then has to
+hunt for Done or Cancel.
+
+Inside the editor, the presets above act as **Start from** choices that change
+the draft only, so Cancel restores the exact original scene. From there, select
+a zone, split it left/right or top/bottom, assign a role, drag a divider or
+merge a selected leaf with its sibling. Any layout becomes custom simply by
+being split, resized or re-roled, so "custom" is a description rather than a
+choice.
+
+While output is live, Edit Zones only edits the scene the board is actually
+using. Selecting a different scene in Output offers an explicit
+**Switch to …** action first, so the active scene and the edited scene can
+never disagree.
+
+The controller and physical display show the draft as a diagnostic preview with
+solid role colors, an operator-facing zone number and role, and exact
+dimensions. Internal zone ids stay stable but stay internal. The optional
+safe-area overlay is drawn **per zone**: on a 3840 × 1080 half-and-half wall
+each 1920 × 1080 zone gets its own roughly 4.5% inset rather than one rectangle
+inset from the whole canvas. The toggle is preview-only and is never persisted.
+The physical preview has no controls or pointer handling and normal media/cue
+audio is stopped while it is visible.
 
 Cancel discards the draft without dirtying the show. Done commits once and
 resumes the same background item. It does not provide free-position boxes,

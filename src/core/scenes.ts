@@ -224,6 +224,23 @@ export function removeScene(set: SceneSet, sceneId: string): SceneSet | null {
   };
 }
 
+/**
+ * Reorder scenes.  The saved order is also the order of the live scene
+ * buttons, so this is real configuration rather than a view preference.  The
+ * default scene is identified by id and so survives any reordering.
+ */
+export function moveScene(set: SceneSet, sceneId: string, delta: number): SceneSet {
+  const from = set.scenes.findIndex((scene) => scene.id === sceneId);
+  if (from < 0) return { scenes: set.scenes.map(cloneScene), defaultSceneId: set.defaultSceneId };
+  const to = Math.max(0, Math.min(set.scenes.length - 1, from + delta));
+  const scenes = set.scenes.map(cloneScene);
+  if (to !== from) {
+    const [moved] = scenes.splice(from, 1);
+    if (moved) scenes.splice(to, 0, moved);
+  }
+  return { scenes, defaultSceneId: set.defaultSceneId };
+}
+
 export function renameScene(set: SceneSet, sceneId: string, name: string): SceneSet {
   return {
     scenes: set.scenes.map((scene) =>

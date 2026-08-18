@@ -43,6 +43,32 @@ describe('cue queue', () => {
     await promise;
     expect(queue.active).toBe(false);
   });
+
+  it('reports an outcome per cue so callers never guess what played', async () => {
+    const queue = new CueQueue({
+      run: async (cue) => cue.type === 'player-card' && cue.name !== 'bad',
+    });
+    await expect(queue.play([card('good'), card('bad'), card('last')])).resolves.toEqual([
+      'played',
+      'failed',
+      'played',
+    ]);
+  });
+
+  it('reports a cancelled cue as cancelled, not as played', async () => {
+    let resolveFirst: (value: boolean) => void = () => undefined;
+    const queue = new CueQueue({
+      run: () =>
+        new Promise<boolean>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    });
+    const promise = queue.play([card('only')]);
+    queue.cancel();
+    // A late resolution from the abandoned cue must not rewrite the outcome.
+    resolveFirst(true);
+    await expect(promise).resolves.toEqual(['cancelled']);
+  });
 });
 
 describe('mixed media playback', () => {
