@@ -1,4 +1,4 @@
-//! Picta — display and automatically rotate still images on a chosen monitor.
+//! Picta — show local media on a display you choose.
 //!
 //! The Rust side owns the things that genuinely need native behaviour: monitor
 //! enumeration, window placement, narrow filesystem access and the menu.
@@ -56,6 +56,11 @@ fn allow_images(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String>
 }
 
 #[tauri::command]
+fn allow_media(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
+    files::allow_media(&app, &paths)
+}
+
+#[tauri::command]
 fn paths_exist(paths: Vec<String>) -> Vec<bool> {
     files::paths_exist(&paths)
 }
@@ -66,8 +71,23 @@ fn read_picta(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn read_document(path: String) -> Result<String, String> {
+    files::read_document(&path)
+}
+
+#[tauri::command]
 fn write_picta(path: String, contents: String) -> Result<(), String> {
     files::write_picta(&path, &contents)
+}
+
+#[tauri::command]
+fn write_document(path: String, contents: String) -> Result<(), String> {
+    files::write_document(&path, &contents)
+}
+
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    files::reveal_path(&path)
 }
 
 #[tauri::command]
@@ -225,9 +245,13 @@ pub fn run() {
             open_presentation,
             close_presentation,
             allow_images,
+            allow_media,
             paths_exist,
             read_picta,
+            read_document,
             write_picta,
+            write_document,
+            reveal_path,
             load_prefs,
             save_prefs,
             startup_file,

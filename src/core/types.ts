@@ -39,6 +39,11 @@ export const MIN_INTERVAL_SECONDS = 1;
 export const MAX_INTERVAL_SECONDS = 86_400;
 
 export const SUPPORTED_IMAGE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg', 'webp'];
+export const SUPPORTED_VIDEO_EXTENSIONS: readonly string[] = ['mp4', 'webm'];
+export const SUPPORTED_MEDIA_EXTENSIONS: readonly string[] = [
+  ...SUPPORTED_IMAGE_EXTENSIONS,
+  ...SUPPORTED_VIDEO_EXTENSIONS,
+];
 
 /** One image in the show, as held in memory by the controller. */
 export interface ImageItem {
@@ -78,6 +83,17 @@ export function isSupportedImagePath(path: string): boolean {
   if (dot < 0) return false;
   const ext = path.slice(dot + 1).toLowerCase();
   return SUPPORTED_IMAGE_EXTENSIONS.includes(ext);
+}
+
+export function isSupportedVideoPath(path: string): boolean {
+  const dot = path.lastIndexOf('.');
+  if (dot < 0) return false;
+  const ext = path.slice(dot + 1).toLowerCase();
+  return SUPPORTED_VIDEO_EXTENSIONS.includes(ext);
+}
+
+export function isSupportedMediaPath(path: string): boolean {
+  return isSupportedImagePath(path) || isSupportedVideoPath(path);
 }
 
 export function isTransition(value: unknown): value is Transition {

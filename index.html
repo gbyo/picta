@@ -8,18 +8,21 @@
   </head>
   <body>
     <main class="app">
-      <h1 class="wordmark">Picta</h1>
+      <header class="app-header">
+        <h1 class="wordmark">Picta</h1>
+        <p id="global-status" class="global-status" aria-live="polite">Ready</p>
+      </header>
 
       <div class="tabs" role="tablist" aria-label="Picta sections">
         <button
           type="button"
           class="tab"
-          id="tab-images"
+          id="tab-media"
           role="tab"
           aria-selected="true"
-          aria-controls="panel-images"
+          aria-controls="panel-media"
         >
-          Images
+          Media
         </button>
         <button
           type="button"
@@ -32,176 +35,260 @@
         >
           Players
         </button>
+        <button
+          type="button"
+          class="tab"
+          id="tab-output"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-output"
+          tabindex="-1"
+        >
+          Output
+        </button>
       </div>
 
-      <div id="panel-images" role="tabpanel" aria-labelledby="tab-images">
-        <!-- Idle: build the show -------------------------------------------- -->
-        <div id="setup">
-          <section class="block" aria-labelledby="images-heading">
-            <h2 class="block-title" id="images-heading">Images</h2>
-
-            <button type="button" id="dropzone" class="dropzone">
-              <span class="dropzone-line">Drop images here</span>
-              <span class="dropzone-sub">or <span class="link-ish">Choose Images</span></span>
-            </button>
-
-            <ul id="thumbs" class="thumbs" aria-label="Images, in playback order"></ul>
-
-            <div class="row">
-              <p id="image-count" class="muted" aria-live="polite">No images</p>
-              <button type="button" id="clear-images" class="text-button" hidden>Clear</button>
+      <section id="panel-media" class="tab-panel" role="tabpanel" aria-labelledby="tab-media">
+        <div class="resource-header">
+          <div>
+            <h2 class="block-title">Media</h2>
+            <p id="media-resource-name" class="muted">Inline media</p>
+          </div>
+          <details class="resource-menu">
+            <summary aria-label="Media set file menu">⋯</summary>
+            <div class="menu-panel">
+              <button type="button" id="media-new-set">New Media Set</button>
+              <button type="button" id="media-open-set">Open Media Set…</button>
+              <button type="button" id="media-save-set">Save Media Set</button>
+              <button type="button" id="media-save-set-as">Save Media Set As…</button>
+              <button type="button" id="media-reveal-set">Reveal in Finder / Explorer</button>
             </div>
+          </details>
+        </div>
 
-            <div id="missing-notice" class="notice" role="status" hidden>
-              <p id="missing-text"></p>
-              <div class="notice-actions">
-                <button type="button" id="locate-images" class="small-button">Locate Images</button>
-                <button type="button" id="remove-missing" class="small-button">
-                  Remove Missing
-                </button>
-              </div>
-            </div>
-          </section>
+        <button type="button" id="media-dropzone" class="dropzone">
+          <span class="dropzone-line">Drop images or videos here</span>
+          <span class="dropzone-sub">or <span class="link-ish">Choose Media</span></span>
+        </button>
+        <div id="media-list" class="media-list" aria-label="Media in playback order"></div>
+        <div class="row">
+          <p id="media-count" class="muted" aria-live="polite">No media</p>
+          <button type="button" id="media-clear" class="text-button">Clear</button>
+        </div>
+        <div id="media-missing" class="notice" role="status" hidden>
+          <p id="media-missing-text"></p>
+          <button type="button" id="media-locate" class="small-button">Locate Files…</button>
+        </div>
 
-          <section class="block" aria-labelledby="display-heading">
-            <h2 class="block-title" id="display-heading">Display</h2>
-            <label class="visually-hidden" for="display-select">Output display</label>
-            <select id="display-select" class="control"></select>
-            <p id="display-detail" class="muted detail"></p>
-            <button type="button" id="identify" class="small-button">Identify Displays</button>
-          </section>
-
-          <section class="block" aria-labelledby="interval-heading">
-            <h2 class="block-title" id="interval-heading">Change every</h2>
-            <label class="visually-hidden" for="interval-select">Seconds between images</label>
-            <select id="interval-select" class="control"></select>
-          </section>
-
-          <section class="block" aria-labelledby="transition-heading">
-            <h2 class="block-title" id="transition-heading">Transition</h2>
-            <label class="visually-hidden" for="transition-select">Transition style</label>
-            <select id="transition-select" class="control">
+        <section class="settings-grid" aria-label="Media settings">
+          <label
+            >Images stay
+            <select id="media-duration" class="control"></select
+          ></label>
+          <label
+            >Transition
+            <select id="media-transition" class="control">
               <option value="crossfade">Crossfade</option>
               <option value="none">None</option>
-            </select>
-          </section>
-
-          <section class="block" aria-labelledby="layout-heading">
-            <h2 class="block-title" id="layout-heading">Screen Layout</h2>
-            <label class="visually-hidden" for="layout-select">Screen layout</label>
-            <select id="layout-select" class="control">
-              <option value="full">Full screen — images only</option>
-              <option value="split">Split — images left, on-court stats right</option>
-            </select>
-            <p id="layout-detail" class="muted detail"></p>
-          </section>
-
-          <section class="block" aria-labelledby="sizing-heading">
-            <h2 class="block-title" id="sizing-heading">Image sizing</h2>
-            <label class="visually-hidden" for="sizing-select">How images fill the display</label>
-            <select id="sizing-select" class="control">
+            </select></label
+          >
+          <label
+            >Sizing
+            <select id="media-sizing" class="control">
               <option value="fit">Fit</option>
               <option value="fill">Fill</option>
-            </select>
-          </section>
-
-          <button type="button" id="start" class="primary">Start</button>
+            </select></label
+          >
+        </section>
+        <div class="row gap">
+          <button type="button" id="media-previous" class="small-button grow">Previous</button>
+          <button type="button" id="media-next" class="small-button grow">Next</button>
         </div>
+      </section>
 
-        <!-- Running: control the show ---------------------------------------- -->
-        <div id="running" hidden>
-          <p class="running-line">
-            <span class="dot" aria-hidden="true"></span>
-            <span id="running-display">Running</span>
-          </p>
-          <p id="running-detail" class="muted detail"></p>
-          <p id="running-position" class="position" aria-live="polite">Image 1 of 1</p>
-
+      <section
+        id="panel-players"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-players"
+        hidden
+      >
+        <div id="no-team" class="empty-state">
+          <h2 class="block-title">Players</h2>
+          <p>No team loaded.</p>
           <div class="row gap">
-            <button type="button" id="previous" class="small-button grow">Previous</button>
-            <button type="button" id="next" class="small-button grow">Next</button>
+            <button type="button" id="team-new" class="small-button grow">New Team</button
+            ><button type="button" id="team-open" class="small-button grow">Open Team…</button>
           </div>
+        </div>
+        <div id="team-loaded" hidden>
+          <div class="resource-header">
+            <div>
+              <h2 id="team-name" class="section-heading"></h2>
+              <p id="team-detail" class="muted"></p>
+              <p id="team-file-name" class="muted"></p>
+              <div id="custom-sport-editor" class="custom-sport-editor" hidden></div>
+            </div>
+            <details class="resource-menu">
+              <summary aria-label="Team file menu">⋯</summary>
+              <div class="menu-panel">
+                <button type="button" id="team-new-menu">New Team</button
+                ><button type="button" id="team-open-menu">Open Team…</button
+                ><button type="button" id="team-save">Save Team</button
+                ><button type="button" id="team-save-as">Save Team As…</button
+                ><button type="button" id="team-reveal">Reveal in Finder / Explorer</button
+                ><button type="button" id="team-locate">Locate Missing Media…</button>
+              </div>
+            </details>
+          </div>
+          <div class="subtabs" role="tablist" aria-label="Player views">
+            <button type="button" id="roster-view-tab" class="subtab active" role="tab">
+              Roster</button
+            ><button type="button" id="live-view-tab" class="subtab" role="tab">Live</button>
+          </div>
+          <div id="roster-view">
+            <div class="row">
+              <h3 class="subheading">Groups</h3>
+              <select
+                id="group-select"
+                class="control compact-control"
+                aria-label="Roster group"
+              ></select>
+            </div>
+            <div id="group-editor" class="group-editor"></div>
+            <form id="add-player" class="add-player">
+              <input
+                id="new-number"
+                class="field-number"
+                type="text"
+                placeholder="#"
+                aria-label="Jersey number"
+                maxlength="3"
+                autocomplete="off"
+              /><input
+                id="new-name"
+                type="text"
+                placeholder="Player name"
+                aria-label="Player name"
+                autocomplete="off"
+              /><input
+                id="new-position"
+                class="field-position"
+                type="text"
+                placeholder="Pos"
+                aria-label="Position"
+                maxlength="8"
+                autocomplete="off"
+              /><button type="submit" class="small-button">Add Player</button>
+            </form>
+            <div id="roster-list" class="roster-list"></div>
+          </div>
+          <div id="live-view" hidden>
+            <div class="row">
+              <h3 class="subheading">Live stats</h3>
+              <select
+                id="live-group-select"
+                class="control compact-control"
+                aria-label="Live group"
+              ></select>
+            </div>
+            <div id="live-table" class="live-table"></div>
+          </div>
+          <aside id="player-inspector" class="inspector" hidden></aside>
+        </div>
+      </section>
 
-          <p id="takeover-status" class="takeover-status" role="status" hidden>
-            <span id="takeover-who"></span>
-            <button type="button" id="takeover-return" class="small-button">Back to Images</button>
-          </p>
+      <section
+        id="panel-output"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-output"
+        hidden
+      >
+        <section class="block">
+          <h2 class="block-title">Display</h2>
+          <select id="display-select" class="control" aria-label="Output display"></select>
+          <p id="display-detail" class="muted detail"></p>
+          <button type="button" id="identify" class="small-button">Identify Displays</button>
+        </section>
+        <section class="block">
+          <h2 class="block-title">Layout</h2>
+          <div id="layout-presets" class="preset-buttons">
+            <button type="button" data-layout="full" class="small-button">Full</button
+            ><button type="button" data-layout="half-half" class="small-button">Half + Half</button
+            ><button type="button" data-layout="program-2-3" class="small-button">2/3 + 1/3</button
+            ><button type="button" data-layout="board-1-3" class="small-button">
+              Board 1/3 + Program 2/3</button
+            ><button type="button" data-layout="custom" class="small-button">Custom…</button>
+          </div>
+          <div id="layout-preview" class="layout-preview" aria-label="Output layout preview"></div>
+          <p id="layout-detail" class="muted detail"></p>
+          <div id="custom-layout-tools" class="custom-layout-tools" hidden>
+            <select
+              id="custom-zone-select"
+              class="control"
+              aria-label="Selected layout zone"
+            ></select
+            ><button type="button" id="split-columns" class="small-button">
+              Split Left / Right</button
+            ><button type="button" id="split-rows" class="small-button">Split Top / Bottom</button>
+            ><select id="custom-role-select" class="control" aria-label="Zone role">
+              <option value="program">Program</option>
+              <option value="live-board">Live Board</option>
+              <option value="media">Media</option>
+              <option value="blank">Blank</option>
+            </select>
+            ><button type="button" id="merge-zone" class="small-button">Merge Selected</button>
+          </div>
+        </section>
+        <section class="settings-grid">
+          <label
+            >Live Board
+            <select id="output-group" class="control"></select></label
+          ><label
+            >Background
+            <select id="output-background" class="control">
+              <option value="black">Black</option>
+              <option value="primary">Team primary</option>
+              <option value="secondary">Team secondary</option>
+            </select></label
+          >
+        </section>
+        <div class="output-actions">
+          <button type="button" id="output-start" class="primary">Start Output</button
+          ><button type="button" id="output-stop" class="small-button danger-button" hidden>
+            Stop Output
+          </button>
+        </div>
+      </section>
 
-          <button type="button" id="stop" class="primary">Stop</button>
+      <p id="message" class="message" role="status" aria-live="polite" hidden></p>
+      <div id="cue-controls" class="cue-controls" hidden>
+        <p id="cue-status" class="muted"></p>
+        <div class="row gap">
+          <button type="button" id="cue-previous" class="small-button grow">Previous</button
+          ><button type="button" id="cue-next" class="small-button grow">Next</button
+          ><button type="button" id="cue-end" class="small-button grow">End</button>
         </div>
       </div>
-
-      <div id="panel-players" role="tabpanel" aria-labelledby="tab-players" hidden>
-        <p id="lineup-line" class="muted detail" aria-live="polite"></p>
-
-        <div class="table-scroll">
-          <table id="roster" class="roster"></table>
-        </div>
-
-        <form id="add-player" class="add-player">
-          <label class="visually-hidden" for="new-number">Jersey number</label>
-          <input
-            id="new-number"
-            class="field-number"
-            type="text"
-            placeholder="#"
-            autocomplete="off"
-            maxlength="3"
-          />
-          <label class="visually-hidden" for="new-name">Player name</label>
-          <input id="new-name" type="text" placeholder="Player name" autocomplete="off" />
-          <label class="visually-hidden" for="new-position">Position</label>
-          <input
-            id="new-position"
-            class="field-position"
-            type="text"
-            placeholder="Pos"
-            autocomplete="off"
-            maxlength="4"
-          />
-          <button type="submit" class="small-button">Add</button>
-        </form>
-
-        <div class="roster-footer">
-          <p id="team-totals"></p>
-          <button type="button" id="reset-stats" class="small-button">Reset Stats</button>
-        </div>
-      </div>
-
-      <p id="message" class="message" role="status" hidden></p>
-      <button type="button" id="resume" class="small-button" hidden>Resume</button>
-
-      <!--
-        Update notice. Picta only ever says a new version exists; downloading
-        and replacing the executable stays a deliberate human act, which keeps
-        the portable single-file model intact.
-      -->
       <div id="update-notice" class="notice info" role="status" hidden>
         <p id="update-text"></p>
-        <div class="notice-actions">
-          <button type="button" id="update-open" class="small-button">What's New</button>
-          <button type="button" id="update-dismiss" class="small-button">Not Now</button>
-        </div>
+        <button type="button" id="update-open" class="small-button">What’s New</button>
       </div>
     </main>
 
-    <!--
-      Three-button save prompt. The native dialog plugin only offers two
-      buttons, and Save / Don't Save / Cancel is the flow desktop users expect.
-    -->
     <dialog id="confirm-dialog" class="confirm">
       <form method="dialog">
         <p id="confirm-text"></p>
         <div class="confirm-actions">
-          <button type="submit" value="cancel" class="small-button">Cancel</button>
-          <button type="submit" value="discard" class="small-button">Don't Save</button>
-          <button type="submit" value="save" class="small-button primary-ish" autofocus>
-            Save
+          <button type="submit" value="cancel" class="small-button">Cancel</button
+          ><button type="submit" value="discard" class="small-button">Don’t Save</button
+          ><button type="submit" value="save" class="small-button primary-ish" autofocus>
+            Save All
           </button>
         </div>
       </form>
     </dialog>
-
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

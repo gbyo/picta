@@ -30,6 +30,10 @@ export function allowImages(paths: string[]): Promise<void> {
   return invoke<void>('allow_images', { paths });
 }
 
+export function allowMedia(paths: string[]): Promise<void> {
+  return invoke<void>('allow_media', { paths });
+}
+
 export function pathsExist(paths: string[]): Promise<boolean[]> {
   if (paths.length === 0) return Promise.resolve([]);
   return invoke<boolean[]>('paths_exist', { paths });
@@ -39,8 +43,20 @@ export function readPicta(path: string): Promise<string> {
   return invoke<string>('read_picta', { path });
 }
 
+export function readDocument(path: string): Promise<string> {
+  return invoke<string>('read_document', { path });
+}
+
 export function writePicta(path: string, contents: string): Promise<void> {
   return invoke<void>('write_picta', { path, contents });
+}
+
+export function writeDocument(path: string, contents: string): Promise<void> {
+  return invoke<void>('write_document', { path, contents });
+}
+
+export function revealPath(path: string): Promise<void> {
+  return invoke<void>('reveal_path', { path });
 }
 
 export function loadPrefs(): Promise<unknown> {

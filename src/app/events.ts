@@ -1,6 +1,7 @@
 /** Event names exchanged between the controller and the presentation window. */
 
-import type { BoardRow } from '../core/lineup.js';
+import type { BoardData, Cue, LayoutNode } from '../core/domain.js';
+import type { BoardRow as LegacyBoardRow } from '../core/lineup.js';
 import type { ImageSizing, Layout, Transition } from '../core/types.js';
 
 export const EVENT_SHOW = 'picta://present-show';
@@ -13,6 +14,11 @@ export const EVENT_TAKEOVER = 'picta://present-takeover';
 export const EVENT_TAKEOVER_END = 'picta://present-takeover-end';
 export const EVENT_LAYOUT = 'picta://present-layout';
 export const EVENT_BOARD = 'picta://present-board';
+export const EVENT_BACKGROUND = 'picta://present-background';
+export const EVENT_CUE = 'picta://present-cue';
+export const EVENT_CUE_END = 'picta://present-cue-end';
+export const EVENT_PLAYBACK = 'picta://present-playback';
+export const EVENT_THEME = 'picta://present-theme';
 
 export interface ShowRequest {
   token: number;
@@ -27,13 +33,23 @@ export interface ShowResult {
   ok: boolean;
 }
 
+export type PlaybackEvent =
+  | { token: number; event: 'ready' | 'started' | 'ended' | 'failed'; ok: boolean; zoneId?: string }
+  | { token: number; event: 'cancelled'; ok: true; zoneId?: string };
+
+export interface ResultMessage {
+  token: number;
+  ok: boolean;
+  zoneId?: string;
+}
+
 export interface KeyMessage {
   key: string;
 }
 
 /** Which way the output display is divided. */
 export interface LayoutMessage {
-  layout: Layout;
+  layout: Layout | LayoutNode;
 }
 
 /**
@@ -41,7 +57,8 @@ export interface LayoutMessage {
  * stats do: one implementation of the box-score rules, in the controller.
  */
 export interface BoardMessage {
-  rows: BoardRow[];
+  rows?: LegacyBoardRow[];
+  data?: BoardData;
 }
 
 /**
@@ -56,4 +73,30 @@ export interface TakeoverRequest {
   stats: { label: string; value: string }[];
   /** Crossfade-scale sweep, in milliseconds. */
   sweepMs: number;
+}
+
+export interface BackgroundMediaMessage {
+  token: number;
+  zoneId?: string;
+  src: string;
+  type?: 'image' | 'video';
+  sizing: ImageSizing;
+  transition: Transition;
+  fadeMs: number;
+  muted?: boolean;
+}
+
+export interface CueMessage {
+  cue: Cue;
+  token?: number;
+  src?: string;
+  /** Optional asset-protocol source for player photos. */
+  photoSrc?: string;
+}
+
+export interface ThemeMessage {
+  primary: string;
+  secondary: string;
+  foreground: string;
+  background: 'black' | 'primary' | 'secondary';
 }
