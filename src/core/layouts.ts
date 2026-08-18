@@ -64,7 +64,15 @@ export const BOARD_TWO_THIRDS_LAYOUT: LayoutNode = {
   second: zone('program', 'program'),
 };
 
+/**
+ * `custom` is a description, not a choice: it is what `layoutPresetId` reports
+ * when a layout matches no preset.  Any layout becomes custom simply by being
+ * split, resized or re-roled, so it is never offered as a starting point.
+ */
 export type LayoutPresetId = 'full' | 'half-half' | 'program-2-3' | 'board-1-3' | 'custom';
+
+/** The starting points offered inside Edit Zones, in display order. */
+export const LAYOUT_PRESETS = ['full', 'half-half', 'program-2-3', 'board-1-3'] as const;
 
 export function layoutPreset(id: Exclude<LayoutPresetId, 'custom'>): LayoutNode {
   switch (id) {
@@ -193,6 +201,30 @@ export function resolveZoneRects(
   return out;
 }
 
+/**
+ * Title-safe inset, as a fraction of a single zone's own width and height.
+ * It matches the inset the board applies to its generated graphics.
+ */
+export const SAFE_AREA_INSET = 0.045;
+
+/**
+ * Inset one zone by the safe-area margin.  The inset is zone-local: on a
+ * 3840×1080 half-and-half wall each 1920×1080 zone gets its own rectangle,
+ * rather than one rectangle inset from the whole canvas.
+ */
+export function safeAreaForRect(rect: ZoneRect, inset = SAFE_AREA_INSET): ZoneRect {
+  const insetX = rect.width * inset;
+  const insetY = rect.height * inset;
+  return {
+    id: rect.id,
+    role: rect.role,
+    x: rect.x + insetX,
+    y: rect.y + insetY,
+    width: Math.max(0, rect.width - insetX * 2),
+    height: Math.max(0, rect.height - insetY * 2),
+  };
+}
+
 export function legacyLayoutToTree(layout: 'full' | 'split'): LayoutNode {
   return layout === 'split' ? cloneLayout(HALF_HALF_LAYOUT) : cloneLayout(FULL_LAYOUT);
 }
@@ -204,11 +236,25 @@ export function layoutPresetLabel(id: LayoutPresetId): string {
     case 'half-half':
       return 'Half + Half';
     case 'program-2-3':
-      return 'Program 2/3 + Board 1/3';
+      return '2/3 + 1/3';
     case 'board-1-3':
       return 'Board 1/3 + Program 2/3';
     case 'custom':
-      return 'Custom…';
+      return 'Custom';
+  }
+}
+
+/** Operator-facing zone naming.  Internal ids stay stable but stay internal. */
+export function zoneRoleLabel(role: ZoneRole): string {
+  switch (role) {
+    case 'program':
+      return 'Program';
+    case 'live-board':
+      return 'Live Board';
+    case 'media':
+      return 'Media';
+    case 'blank':
+      return 'Blank';
   }
 }
 

@@ -76,13 +76,27 @@ button:disabled {
   flex-direction: column;
   gap: 15px;
 }
-.app-header,
 .resource-header,
-.row {
+.row,
+.header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+/* Compact and sticky: the live status and scene switch stay reachable while
+   a long football or baseball roster scrolls underneath. */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -15px -18px 0;
+  padding: 15px 18px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 .wordmark {
   margin: 0;
@@ -106,19 +120,17 @@ button:disabled {
 }
 .scene-strip {
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 8px 0 2px;
-  border-bottom: 1px solid var(--border);
-}
-.scene-strip-heading {
   align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
-.scene-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 2px 7px;
+.scene-strip[hidden] {
+  display: none;
+}
+.scene-strip-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
 }
 .scene-buttons {
   display: flex;
@@ -136,13 +148,18 @@ button:disabled {
   color: var(--muted);
   white-space: nowrap;
 }
-.scene-button[aria-current='true'] {
+.scene-button[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--text);
   font-weight: 650;
 }
-.scene-button[aria-pressed='true'] {
+/* Which scene the board is actually using, when it is not the selected one. */
+.scene-button.scene-live {
   box-shadow: inset 0 -3px 0 var(--running);
+}
+.scene-default-mark {
+  color: var(--muted);
+  font-size: 11px;
 }
 .tab,
 .subtab {
@@ -453,19 +470,37 @@ button:disabled {
   border-left: 3px solid var(--accent);
   background: var(--surface);
 }
-.manual-rows {
+.manual-heading {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
+.manual-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+/* Two columns when there is room; one on a narrow controller window. */
+.manual-rows {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+@media (min-width: 620px) {
+  .manual-rows {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+/* Sized for a glance and a click during introductions, not for editing. */
 .manual-row {
   display: grid;
-  grid-template-columns: 1.5em minmax(0, 1fr) auto;
+  grid-template-columns: 1.1em 2.9em minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
-  min-height: 32px;
-  padding: 5px 7px;
+  min-height: 43px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--control);
@@ -474,14 +509,28 @@ button:disabled {
 .manual-row:hover:not(:disabled) {
   border-color: var(--accent);
 }
-.manual-check {
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1;
+.manual-row.playing {
+  border-color: var(--running);
 }
-.manual-check.shown {
+.manual-number {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+.manual-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manual-position,
+.manual-state {
+  color: var(--muted);
+  font-size: 12px;
+}
+.manual-check {
   color: var(--running);
+  font-size: 15px;
   font-weight: 800;
+  line-height: 1;
 }
 .checkbox-label {
   display: inline-flex;
@@ -490,10 +539,44 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
 }
-.zone-edit-panel .custom-layout-tools {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.zone-edit-section {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+}
+.zone-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.zone-edit-actions button {
+  flex: 1 1 auto;
+}
+.field-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stacked-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.stacked-field input,
+.stacked-field select {
+  color: var(--text);
+  font-size: 13px;
+}
+.dialog-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.dialog-error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: 12px;
 }
 .group-row {
   display: grid;
@@ -658,7 +741,7 @@ button:disabled {
   flex-wrap: wrap;
   gap: 5px;
 }
-.preset-buttons button.active {
+.preset-buttons button[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 650;
@@ -683,6 +766,14 @@ button:disabled {
   font-size: clamp(10px, 1.8vw, 15px);
   text-align: center;
 }
+.preview-zone:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.preview-zone-label {
+  white-space: pre-line;
+  line-height: 1.2;
+}
 .preview-zone.program {
   background: #234b76;
 }
@@ -700,10 +791,10 @@ button:disabled {
   border: 3px solid #fff;
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45);
 }
+/* One per zone: a tiled wall has a safe area per physical screen. */
 .preview-safe-area {
   position: absolute;
   z-index: 3;
-  inset: 4.5%;
   border: 1px dashed rgba(255, 255, 255, 0.85);
   pointer-events: none;
 }
@@ -724,14 +815,11 @@ button:disabled {
   cursor: row-resize;
   transform: translateY(-50%);
 }
-.custom-layout-tools {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
-  gap: 6px;
-}
 .manual-session[hidden],
 .zone-edit-panel[hidden],
-.custom-layout-tools[hidden] {
+#roster-setup[hidden],
+#player-subtabs[hidden],
+#layout-normal[hidden] {
   display: none;
 }
 .output-actions {
@@ -744,8 +832,13 @@ button:disabled {
   padding: 8px 0;
   border-top: 1px solid var(--border);
 }
-.cue-controls p {
-  margin-bottom: 6px;
+.cue-status {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cue-controls button[hidden] {
+  display: none;
 }
 .message {
   margin: 0;

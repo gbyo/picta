@@ -14,8 +14,8 @@ operator-triggered player cue beside or over the normal program.
 
 1. Open Picta and drop PNG, JPEG, WebP, MP4 or WebM files into **Media**.
 2. Choose a physical output in **Output**.
-3. Choose a scene, pick **Full**, **Half + Half**, or another layout, and press
-   **Start Output**.
+3. Choose the scene to start with and press **Start Output**. Layouts are built
+   inside **Edit Zones**, not from the normal Output screen.
 
 The controller stays usable while the output window is live. Previous, Next,
 Show Now and Stop affect only the selected Picta output. The presentation window
@@ -69,45 +69,92 @@ hitting percentage, total blocks and points are derived. Recording a kill or
 attack error also records an attempt. Other sports intentionally expose useful
 starter counters rather than attempting to be complete scorebooks.
 
-Groups can be edited and reordered. **Play in Order** queues each player's
-intro video when available and falls back to the same canonical player card
-builder used by individual and manual presentation. **Present Manually** opens
-a runtime-only lineup session: each player row can be presented once, shown
-players get a checkmark, and the operator can undo, end or replay the session.
-A manual session never dirties the show or team file. A missing or unsupported
+Groups can be edited and reordered. Every presentation path — **Play in Order**,
+**Present Manually** and a single preferred presentation — uses the same
+canonical player cue, so the same player produces the same output no matter who
+decided to show them. Only the choice of who goes next differs.
+
+Presentation intent is explicit and deterministic:
+
+- **Show Card** always shows the player card, even when an intro video exists.
+- **Play Intro Video** always attempts the video. If there is none, or it fails,
+  the controller says so rather than quietly showing a card.
+- Preferred presentation plays the intro video when it is usable and falls back
+  to the player card only if that video fails.
+
+**Present Manually** turns the Players tab into a runtime-only lineup workspace:
+setup controls collapse, and each row reads number → name → position. A shown
+player keeps its checkmark but stays clickable, so a repeated announcement is
+one click away from a replay — a replay does not change the shown count or the
+first-shown order. **Undo Last** unmarks the most recently first-presented
+player and **End Lineup** returns to the normal roster UI.
+
+A player is marked shown only after Picta successfully presented something, so a
+corrupt video never produces a checkmark. A manual session never dirties the
+show or team file, and never reorders the saved group. A missing or unsupported
 video never creates an output-side error.
 
 ## Scenes, layouts and cues
 
 Scenes are reusable show configurations. Each scene has a stable id, unique
 case-insensitive name, recursive layout, optional live-board group and
-background. New, duplicate, rename, delete and default-scene actions change the
-saved show; clicking a scene while output is live switches the running output
-without changing the `.picta` file's dirty state. Scene changes preserve a
-full-board cue, while a Program cue is ended cleanly before the new scene is
-shown.
+background.
+
+Switching scenes and managing them are deliberately separate. While output is
+live, a compact **Scene** strip sits in the sticky header and does one thing:
+switch the scene the board is using, from any tab. That is a runtime operation
+and never changes the `.picta` file's dirty state. When output is stopped the
+strip disappears, so image-only Picta stays simple.
+
+Scene management lives in Output, behind a **⋯** menu: new, duplicate, rename,
+set as default, move left/right and delete. Those change the saved show. The
+default scene is marked with a small ★ and is the initial selection when a show
+is created, opened or stopped; **Start Output** then starts whichever scene is
+visibly selected, and the Output tab says which one that is. Scene order is
+saved and is also the order of the live scene buttons. The scene on the board
+cannot be deleted, and neither can the last remaining scene.
+
+Scene changes preserve a full-board cue, while a Program cue is ended cleanly
+before the new scene is shown.
 
 Layouts are recursive proportional split trees, not saved pixel rectangles. They
 always contain exactly one **Program** zone and at most four zones. Other roles
 are **Live Board**, **Media** and **Blank**. The Output preview uses the selected
 display's actual dimensions, including portrait and ultrawide displays.
 
-Built-in layouts are:
+Layout building happens only inside the explicit **Edit Zones** mode, which
+lives in Output next to the layout it edits. Normal Output shows the scene's
+preview and a single **Edit Zones** button — there are no destructive preset
+buttons that mutate a scene outside the draft. Starting zone editing from
+another tab switches to Output first, so the board never enters calibration mode
+with Done and Cancel out of sight.
+
+Inside the editor, **Start from** offers the built-in layouts:
 
 - Full Program
 - Half + Half: Program and Live Board
-- Program 2/3 + Board 1/3
+- 2/3 + 1/3
 - Board 1/3 + Program 2/3
-- Custom tiled splits with role assignment and merge controls
 
-The controller preview has an explicit **Edit Zones** mode. Normal Output
-stays compact; only the edit mode exposes split, merge, role and divider
-controls. It edits a draft session, shows exact output dimensions and a safe
-area, and sends a read-only physical-display diagnostic preview with solid
-role colors, zone number/id, dimensions and area share. **Cancel** leaves the
-scene and output untouched. **Done** commits the scene once and resumes the
-same background item with a fresh interval. The saved layout remains recursive
-and ratio-based; no pixel rectangles are persisted.
+Choosing one changes the draft only. From there, split a zone left/right or
+top/bottom, assign a role, drag a divider or merge a leaf with its sibling. Any
+layout becomes custom simply by being split, resized or re-roled.
+
+Preview zones are real buttons: tab to one, press Enter or Space, and focus is
+visible. Zones are named for the operator — "Zone 2 · Live Board" — rather than
+by internal id; ids stay stable but stay internal.
+
+The optional safe-area overlay is drawn **per zone**, so on a 3840 × 1080
+half-and-half wall each 1920 × 1080 zone gets its own roughly 4.5% inset rather
+than one rectangle inset from the whole canvas. It is preview-only and is never
+saved.
+
+While output is live, Edit Zones only edits the scene the board is actually
+using; selecting a different scene offers an explicit **Switch to …** action
+first, so the active and edited scenes can never disagree. **Cancel** leaves the
+scene and output untouched. **Done** commits the scene once and resumes the same
+background item with a fresh interval. The saved layout remains recursive and
+ratio-based; no pixel rectangles are persisted.
 
 For example, Half + Half resolves to 1920 × 1080 zones on a 3840 × 1080 board.
 The same saved layout scales to another resolution without gaps or overlaps.
@@ -117,6 +164,14 @@ temporarily takes priority over Program, pauses background advancement, then
 returns to the same background item with a fresh interval. Media-only zones keep
 showing their background, and mirrored video zones are muted so only the primary
 Program path produces audio.
+
+One playback engine runs underneath, but the controls describe the operation
+rather than the queue. An ordered lineup shows its name, its position in the
+sequence and Previous / Next / End Lineup. A single manually chosen player has
+no "next", so it gets only **End Player**. A single Show Now media cue gets
+**End**. The live status line says what Picta believes is on the board —
+`● LIVE · Game · Starting Lineup 3/6`, `● LIVE · Game · #14 Dana Whitfield` —
+and failures are reported in the controller, never on the output screen.
 
 ## Files
 

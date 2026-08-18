@@ -37,7 +37,7 @@ import {
 } from './app/events.js';
 import type { BoardData, Cue, LayoutNode, ZoneRole } from './core/domain.js';
 import type { BoardRow as LegacyBoardRow } from './core/lineup.js';
-import { legacyLayoutToTree } from './core/layouts.js';
+import { legacyLayoutToTree, safeAreaForRect, zoneRoleLabel } from './core/layouts.js';
 
 type LayerName = 'a' | 'b';
 
@@ -171,24 +171,33 @@ function rendererForZone(zoneId?: string): ZoneRenderer | undefined {
 function renderEditPreview(message: LayoutEditPreviewMessage): void {
   editPreview.replaceChildren();
   editPreview.hidden = false;
+  const width = Math.max(1, message.outputWidth);
+  const height = Math.max(1, message.outputHeight);
   for (const zone of message.zones) {
     const element = document.createElement('div');
     element.className = `edit-zone edit-role-${zone.role}`;
     if (zone.id === message.selectedZoneId) element.classList.add('selected');
-    element.style.left = `${(zone.x / Math.max(1, message.outputWidth)) * 100}%`;
-    element.style.top = `${(zone.y / Math.max(1, message.outputHeight)) * 100}%`;
-    element.style.width = `${(zone.width / Math.max(1, message.outputWidth)) * 100}%`;
-    element.style.height = `${(zone.height / Math.max(1, message.outputHeight)) * 100}%`;
+    element.style.left = `${(zone.x / width) * 100}%`;
+    element.style.top = `${(zone.y / height) * 100}%`;
+    element.style.width = `${(zone.width / width) * 100}%`;
+    element.style.height = `${(zone.height / height) * 100}%`;
     const label = document.createElement('span');
     label.className = 'edit-zone-label';
-    label.textContent = `Zone ${zone.number} · ${zone.role}\n${zone.id}\n${zone.width} × ${zone.height} · ${zone.sharePercent}%`;
+    // Operators calibrate a physical wall; internal zone ids are not their job.
+    label.textContent = `ZONE ${zone.number}\n${zoneRoleLabel(zone.role).toUpperCase()}\n${zone.width} × ${zone.height}\n${zone.sharePercent}%`;
     element.append(label);
+    // A tiled wall needs one safe area per screen, not one per canvas.
+    if (message.showSafeAreas) {
+      const safe = document.createElement('div');
+      safe.className = 'edit-safe-area';
+      const inset = safeAreaForRect(zone);
+      safe.style.left = `${((inset.x - zone.x) / Math.max(1, zone.width)) * 100}%`;
+      safe.style.top = `${((inset.y - zone.y) / Math.max(1, zone.height)) * 100}%`;
+      safe.style.width = `${(inset.width / Math.max(1, zone.width)) * 100}%`;
+      safe.style.height = `${(inset.height / Math.max(1, zone.height)) * 100}%`;
+      element.append(safe);
+    }
     editPreview.append(element);
-  }
-  if (message.showSafeAreas) {
-    const safe = document.createElement('div');
-    safe.className = 'edit-safe-area';
-    editPreview.append(safe);
   }
 }
 

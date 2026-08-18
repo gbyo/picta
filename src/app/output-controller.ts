@@ -29,7 +29,7 @@ import {
 } from './events.js';
 import type { BoardData, Cue, LayoutNode, MediaSet } from '../core/domain.js';
 import { layoutZones, zoneIdForRole } from '../core/layouts.js';
-import { CueQueue, type CueQueueState } from '../core/cues.js';
+import { CueQueue, type CueOutcome, type CueQueueState } from '../core/cues.js';
 import { MediaPlaybackMachine, type MediaPlaybackEvent } from '../core/media-playback.js';
 import { CROSSFADE_MS } from '../core/types.js';
 
@@ -44,6 +44,18 @@ export interface OutputSettings {
 }
 
 export type OutputStopReason = 'user' | 'exhausted' | 'display-lost';
+
+/**
+ * What the operator asked for, so the controller can label its cue controls
+ * without exposing the queue abstraction.  One playback engine underneath.
+ */
+export type CueContextKind = 'ordered-group' | 'single-player' | 'single-media';
+
+export interface CueContext {
+  kind: CueContextKind;
+  /** Short operator-facing name, e.g. "Starting Lineup" or "#14 Dana Whitfield". */
+  label: string;
+}
 
 export interface OutputHandlers {
   onPosition(position: number, total: number): void;
@@ -93,10 +105,13 @@ export class OutputController {
       },
       {
         onState: (state) => this.#handlers.onCueState(state),
-        onSkipped: (cue) =>
+        onSkipped: (cue, _index, reason) => {
+          // Cancelling is the operator's choice, not something to warn about.
+          if (reason !== 'failed') return;
           this.#handlers.onWarning(
             `Skipped ${cue.type.replace('-', ' ')} because it could not play.`,
-          ),
+          );
+        },
       },
     );
   }
@@ -107,6 +122,10 @@ export class OutputController {
 
   get cueActive(): boolean {
     return this.#cueQueue.active;
+  }
+
+  get cueState(): CueQueueState {
+    return this.#cueQueue.state;
   }
 
   async init(): Promise<void> {
@@ -265,27 +284,28 @@ export class OutputController {
     this.#step(-1);
   }
 
-  playCue(cue: Cue, src?: string, photoSrc?: string): Promise<void> {
-    if (!this.#active) return Promise.resolve();
-    const sourceKey = cue.type === 'video' || cue.type === 'image' ? cue.path : null;
-    this.#cueSources = src && sourceKey ? new Map([[sourceKey, src]]) : new Map();
-    this.#cuePhotos =
-      photoSrc && cue.type === 'player-card' && cue.photo
-        ? new Map([[cue.photo.path, photoSrc]])
-        : new Map();
-    return this.#cueQueue.play([cue]);
+  /** Run one cue and report whether the audience actually saw it. */
+  async playCue(cue: Cue, context: CueContext): Promise<CueOutcome> {
+    const outcomes = await this.playCues([cue], context);
+    return outcomes[0] ?? 'failed';
   }
 
-  playCues(
+  async playCues(
     cues: readonly Cue[],
+    context: CueContext,
     sources: ReadonlyMap<string, string> = new Map(),
     photos: ReadonlyMap<string, string> = new Map(),
-  ): Promise<void> {
-    if (!this.#active) return Promise.resolve();
+  ): Promise<CueOutcome[]> {
+    if (!this.#active) return [];
     // Sources are held separately so the pure Cue data stays serializable.
     this.#cueSources = sources;
     this.#cuePhotos = photos;
+    this.#cueContext = context;
     return this.#cueQueue.play(cues);
+  }
+
+  get cueContext(): CueContext | null {
+    return this.#cueQueue.active ? this.#cueContext : null;
   }
 
   cancelCue(): void {
@@ -302,6 +322,7 @@ export class OutputController {
 
   #cueSources: ReadonlyMap<string, string> = new Map();
   #cuePhotos: ReadonlyMap<string, string> = new Map();
+  #cueContext: CueContext | null = null;
 
   #step(direction: 1 | -1): void {
     if (!this.#active || !this.#machine) return;
