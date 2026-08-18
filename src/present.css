@@ -15,6 +15,18 @@ body {
   cursor: none;
   -webkit-user-select: none;
   user-select: none;
+  /* The takeover card is the only thing Picta draws with type in it, and it has
+     to read from the back of a gym, so it uses the platform UI face rather than
+     the default serif. */
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI Variable Display',
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
 }
 
 .layer {
@@ -41,4 +53,206 @@ body {
 
 .layer.fill {
   object-fit: cover;
+}
+
+/* ---------------------------------------------------------------------------
+ * The player takeover card.
+ *
+ * Sweeps in over whatever image is showing and out again, leaving the image
+ * layers untouched underneath. Everything animates with `transform` and
+ * `opacity` only, so the whole thing is composited on the GPU and a still image
+ * costs nothing once the sweep has finished.
+ *
+ * Sizes are in `vmin`/`vw` so one stylesheet reads correctly on a 1080p TV and
+ * on a 4K panel without measuring anything.
+ * ------------------------------------------------------------------------- */
+
+.takeover {
+  position: fixed;
+  inset: 0;
+  /* `visibility` rather than `display` so the sweep can be animated. */
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.takeover.active {
+  visibility: visible;
+}
+
+.takeover-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 5vw;
+  padding: 0 7vw;
+  box-sizing: border-box;
+  color: #fff;
+  background: linear-gradient(105deg, #0b1220 0%, #111c2e 55%, #0b1220 100%);
+  /* Off-screen right, with the leading edge cut on a diagonal. The clip makes
+     the panel itself the "sweep": no separate wiping element to keep in sync. */
+  transform: translate3d(105%, 0, 0);
+  clip-path: polygon(6% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.takeover.sweep-in .takeover-panel {
+  animation: takeover-sweep-in var(--sweep-ms, 480ms) cubic-bezier(0.16, 0.84, 0.24, 1) forwards;
+}
+
+.takeover.sweep-out .takeover-panel {
+  /* Leaving is quicker than arriving: the card has already been read. */
+  animation: takeover-sweep-out calc(var(--sweep-ms, 480ms) * 0.75) cubic-bezier(0.6, 0, 0.8, 0.2)
+    forwards;
+}
+
+@keyframes takeover-sweep-in {
+  from {
+    transform: translate3d(105%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes takeover-sweep-out {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-105%, 0, 0);
+  }
+}
+
+/* The jersey number: the thing that reads first from the back of a gym. */
+.takeover-jersey {
+  flex: 0 0 auto;
+  font-size: 38vmin;
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  /* Solid but dim: it reads as the player's number from across a gym without
+     competing with the name beside it. */
+  color: rgba(124, 196, 255, 0.16);
+}
+
+.takeover-jersey:empty {
+  display: none;
+}
+
+.takeover-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.takeover-position {
+  margin: 0 0 1.2vmin;
+  font-size: 3vmin;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #7cc4ff;
+}
+
+.takeover-position:empty {
+  display: none;
+}
+
+.takeover-name {
+  margin: 0;
+  font-size: 10.5vmin;
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+  /* Long names shrink rather than overflow the screen. */
+  overflow-wrap: anywhere;
+}
+
+.takeover-rule {
+  height: 0.6vmin;
+  width: 14vmin;
+  margin: 3vmin 0;
+  background: #7cc4ff;
+}
+
+.takeover-stats {
+  display: flex;
+  flex-wrap: wrap;
+  /* Grouped from the left rather than spread edge to edge: a card with four
+     figures on it should not stretch them across the whole screen, and one with
+     six should still fit. Wraps if a very wide set ever needs it. */
+  justify-content: flex-start;
+  gap: 3vmin 6.5vmin;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.takeover-stats li {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.takeover-stats .value {
+  font-size: 8.5vmin;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.takeover-stats .label {
+  margin-top: 1vmin;
+  font-size: 2.4vmin;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* Content follows the panel in, just behind the leading edge, so the card does
+   not read as one flat rectangle sliding across. */
+.takeover.sweep-in .takeover-jersey,
+.takeover.sweep-in .takeover-body > * {
+  animation: takeover-content 420ms cubic-bezier(0.16, 0.84, 0.24, 1) backwards;
+}
+
+.takeover.sweep-in .takeover-jersey {
+  animation-delay: 120ms;
+}
+.takeover.sweep-in .takeover-position {
+  animation-delay: 160ms;
+}
+.takeover.sweep-in .takeover-name {
+  animation-delay: 200ms;
+}
+.takeover.sweep-in .takeover-rule {
+  animation-delay: 250ms;
+}
+.takeover.sweep-in .takeover-stats {
+  animation-delay: 290ms;
+}
+
+@keyframes takeover-content {
+  from {
+    opacity: 0;
+    transform: translate3d(3vw, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* A panel this large sliding across a screen is exactly what someone with
+   vestibular sensitivity asks the system to stop doing. */
+@media (prefers-reduced-motion: reduce) {
+  .takeover.sweep-in .takeover-panel,
+  .takeover.sweep-out .takeover-panel {
+    animation-duration: 1ms;
+  }
+
+  .takeover.sweep-in .takeover-jersey,
+  .takeover.sweep-in .takeover-body > * {
+    animation: none;
+  }
 }

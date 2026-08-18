@@ -6,6 +6,8 @@
  * matching, playback ordering, timers) testable without real hardware.
  */
 
+import type { Player } from './stats.js';
+
 export type Transition = 'none' | 'crossfade';
 export type ImageSizing = 'fit' | 'fill';
 
@@ -41,6 +43,11 @@ export interface DocumentData {
   intervalSeconds: number;
   transition: Transition;
   imageSizing: ImageSizing;
+  /**
+   * Optional volleyball roster. Empty for an ordinary image show, which is
+   * what keeps Picta's core workflow unchanged by this feature.
+   */
+  roster: Player[];
 }
 
 export function defaultDocumentData(): DocumentData {
@@ -49,6 +56,7 @@ export function defaultDocumentData(): DocumentData {
     intervalSeconds: DEFAULT_INTERVAL_SECONDS,
     transition: DEFAULT_TRANSITION,
     imageSizing: DEFAULT_IMAGE_SIZING,
+    roster: [],
   };
 }
 

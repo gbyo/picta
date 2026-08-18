@@ -206,3 +206,140 @@ describe('serialisation', () => {
     ]);
   });
 });
+
+describe('the optional roster', () => {
+  it('is absent from an ordinary image show, keeping the file as small as before', () => {
+    const text = serializePicta(
+      {
+        images: [{ path: '/s/Images/a.png' }],
+        intervalSeconds: 10,
+        transition: 'crossfade',
+        imageSizing: 'fit',
+        roster: [],
+      },
+      '/s/S.picta',
+      'posix',
+    );
+    expect(JSON.parse(text)).not.toHaveProperty('roster');
+  });
+
+  it('opens files written before rosters existed', () => {
+    const result = parse(valid);
+    expect(result.ok && result.value.roster).toEqual([]);
+  });
+
+  it('reads players, positions and counters', () => {
+    const result = parse({
+      ...valid,
+      roster: [
+        { number: '7', name: 'Avery Chen', position: 'OH', stats: { kills: 12, digs: 6 } },
+        { number: '3', name: 'Jordan Ruiz', position: 'S' },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.roster).toHaveLength(2);
+    expect(result.value.roster[0]?.name).toBe('Avery Chen');
+    expect(result.value.roster[0]?.stats.kills).toBe(12);
+    expect(result.value.roster[0]?.stats.digs).toBe(6);
+    // Omitted counters read as zero, not as missing.
+    expect(result.value.roster[0]?.stats.aces).toBe(0);
+    expect(result.value.roster[1]?.stats.kills).toBe(0);
+  });
+
+  it('accepts a jersey number written as a JSON number', () => {
+    const result = parse({ ...valid, roster: [{ number: 7, name: 'Avery' }] });
+    expect(result.ok && result.value.roster[0]?.number).toBe('7');
+  });
+
+  it('gives every loaded player a distinct id', () => {
+    const result = parse({
+      ...valid,
+      roster: [{ name: 'A' }, { name: 'B' }, { name: 'C' }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(new Set(result.value.roster.map((p) => p.id)).size).toBe(3);
+  });
+
+  it('preserves roster order', () => {
+    const result = parse({
+      ...valid,
+      roster: [{ name: 'C' }, { name: 'A' }, { name: 'B' }],
+    });
+    expect(result.ok && result.value.roster.map((p) => p.name)).toEqual(['C', 'A', 'B']);
+  });
+
+  it('rejects a malformed roster rather than dropping players silently', () => {
+    expect(parse({ ...valid, roster: 'Avery' }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [{ number: '7' }] }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [{ name: '   ' }] }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [null] }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [{ name: 'A', position: 5 }] }).ok).toBe(false);
+  });
+
+  it('rejects impossible counters', () => {
+    expect(parse({ ...valid, roster: [{ name: 'A', stats: { kills: -1 } }] }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [{ name: 'A', stats: { kills: 1.5 } }] }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [{ name: 'A', stats: { kills: 'lots' } }] }).ok).toBe(false);
+    expect(parse({ ...valid, roster: [{ name: 'A', stats: 5 }] }).ok).toBe(false);
+  });
+
+  it('names the offending player', () => {
+    const result = parse({
+      ...valid,
+      roster: [{ name: 'A' }, { name: 'B', stats: { digs: -3 } }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain('Player 2');
+  });
+
+  it('round-trips a roster, omitting zero counters', () => {
+    const text = serializePicta(
+      {
+        images: [],
+        intervalSeconds: 10,
+        transition: 'crossfade',
+        imageSizing: 'fit',
+        roster: [
+          {
+            id: 'runtime-only',
+            number: '7',
+            name: 'Avery Chen',
+            position: 'OH',
+            stats: {
+              kills: 12,
+              attackErrors: 2,
+              attempts: 30,
+              assists: 0,
+              aces: 1,
+              serviceErrors: 0,
+              digs: 6,
+              blockSolos: 0,
+              blockAssists: 3,
+            },
+          },
+        ],
+      },
+      '/s/S.picta',
+      'posix',
+    );
+    const written = JSON.parse(text);
+    // Ids are runtime-only and zero counters are left out.
+    expect(written.roster[0]).toEqual({
+      number: '7',
+      name: 'Avery Chen',
+      position: 'OH',
+      stats: { kills: 12, attackErrors: 2, attempts: 30, aces: 1, digs: 6, blockAssists: 3 },
+    });
+
+    const back = parsePicta(text);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    const player = back.value.roster[0]!;
+    expect(player.name).toBe('Avery Chen');
+    expect(player.stats.kills).toBe(12);
+    expect(player.stats.assists).toBe(0);
+    expect(player.stats.blockAssists).toBe(3);
+  });
+});

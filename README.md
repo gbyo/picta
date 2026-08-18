@@ -30,10 +30,10 @@ screen you meant.
 
 ## Supported operating systems
 
-| Platform | Status                                                                  |
-| -------- | ----------------------------------------------------------------------- |
-| Windows  | First class. Windows 10 and 11, x64 (and ARM64). Portable `Picta.exe`.  |
-| macOS    | Supported, modern versions. `.dmg`.                                     |
+| Platform | Status                                                                           |
+| -------- | -------------------------------------------------------------------------------- |
+| Windows  | First class. Windows 10 and 11, x64 (and ARM64). Portable `Picta.exe`.           |
+| macOS    | Supported, modern versions. `.dmg`.                                              |
 | Linux    | Supported where the desktop allows a program to place its own windows. AppImage. |
 
 ## Portable Windows usage
@@ -101,7 +101,7 @@ seconds, changes no monitor settings, and leaves no windows behind.
 ### Picta will not guess which screen you meant
 
 This is the part worth trusting. Monitor numbering is not an identity: unplug a
-TV and everything after it is renumbered. So Picta remembers the *display*, not
+TV and everything after it is renumbered. So Picta remembers the _display_, not
 its position in a list, using the name, resolution and scale factor the system
 reports.
 
@@ -189,6 +189,50 @@ Opening a show whose images have moved gives you a short notice:
 if ten images moved together, one dialog fixes all ten. Nothing about a missing
 image is ever shown on the presentation display.
 
+## Volleyball stats and player takeovers
+
+Optional, and collapsed out of the way unless you use it. Picta's main job is
+still images on a screen; this is for the case where the screen is showing
+sponsor graphics at a volleyball match and you want to put a player up on it.
+
+Open **Volleyball Stats**, add players (jersey number, name, position), and keep
+the box score during the match:
+
+```
+7  Avery Chen                      OH   [ Show ]
+   12 K · 4 A · 6 D · 2 SA · .333
+```
+
+Tap a player to open their counters. **Kill**, **Error** and **Attempt** each
+record an attack attempt as well, so hitting percentage stays correct without you
+having to remember to press two buttons during a rally; every counter has a `−`
+to undo a mis-tap. Assists, aces, service errors, digs and blocks get plain
+`+`/`−` steppers.
+
+Picta stores only raw counts and derives the rest using the ordinary conventions
+— hitting percentage `(K − E) ÷ TA`, an assisted block as half a block, points as
+`K + SA + BS + BA/2`. A player who has not attacked has no hitting percentage
+rather than `.000`.
+
+### Show
+
+While a show is running, **Show** beside a player sweeps a card across the output
+display with their number, name and stats, holds it for about nine seconds, then
+sweeps away and carries on with the images.
+
+The image underneath is never disturbed and the rotation is paused for the
+duration, so the show comes back on the same image it left — with a fresh full
+interval, since you have just been looking at something else. **Back to Images**
+(or **Esc**) returns early. While a card is up, **Esc** means "back to the
+images", not "stop the show".
+
+**Reset Stats** clears every counter and keeps the roster, which is what starting
+a new match means.
+
+The roster is saved inside the `.picta` file, so a team's roster and a match's
+stats travel with the show. A `.picta` file with no roster is byte-for-byte what
+it was before this feature existed.
+
 ## Update notifications
 
 Picta tells you when a newer version has been released. It does **not** install
@@ -261,7 +305,13 @@ if you only want that file.
 
 - **One presentation output at a time.** Picta drives a single display.
 - **Still images only.** No video, audio, animated GIF, PDF, PowerPoint, web
-  pages or remote URLs.
+  pages or remote URLs. The player takeover card is the one thing Picta draws
+  itself.
+- **Volleyball only, for stats.** The stat set is the volleyball box score. There
+  is no other sport, and no scoreboard, clock or set score — Picta is not trying
+  to replace your stats package.
+- **Takeover needs a running show.** The card sweeps over the images in the
+  presentation window, so there has to be one. Start the show first.
 - **Linux window placement depends on the desktop.** X11 sessions behave as
   expected. Under Wayland, applications are not permitted to position their own
   windows, so Picta cannot reliably put the presentation on a chosen monitor;

@@ -85,8 +85,58 @@
           <button type="button" id="next" class="small-button grow">Next</button>
         </div>
 
+        <p id="takeover-status" class="takeover-status" role="status" hidden>
+          <span id="takeover-who"></span>
+          <button type="button" id="takeover-return" class="small-button">Back to Images</button>
+        </p>
+
         <button type="button" id="stop" class="primary">Stop</button>
       </div>
+
+      <!--
+        Volleyball stats. Collapsed and empty by default: an ordinary image
+        show never has to look at this, which is what keeps the add-images →
+        choose-display → Start path unchanged.
+      -->
+      <section class="block" aria-labelledby="stats-heading">
+        <details id="stats-details" class="stats-details">
+          <summary id="stats-heading">
+            <span class="block-title">Volleyball Stats</span>
+            <span class="stats-count" id="stats-count"></span>
+          </summary>
+
+          <ul id="roster" class="roster"></ul>
+
+          <form id="add-player" class="add-player">
+            <label class="visually-hidden" for="new-number">Jersey number</label>
+            <input
+              id="new-number"
+              class="field-number"
+              type="text"
+              placeholder="#"
+              autocomplete="off"
+              maxlength="3"
+            />
+            <label class="visually-hidden" for="new-name">Player name</label>
+            <input id="new-name" type="text" placeholder="Player name" autocomplete="off" />
+            <label class="visually-hidden" for="new-position">Position</label>
+            <input
+              id="new-position"
+              class="field-position"
+              type="text"
+              placeholder="Pos"
+              autocomplete="off"
+              maxlength="4"
+            />
+            <button type="submit" class="small-button">Add</button>
+          </form>
+
+          <div class="roster-footer">
+            <p id="team-totals"></p>
+            <button type="button" id="reset-stats" class="small-button">Reset Stats</button>
+          </div>
+        </details>
+      </section>
 
       <p id="message" class="message" role="status" hidden></p>
       <button type="button" id="resume" class="small-button" hidden>Resume</button>

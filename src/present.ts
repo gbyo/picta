@@ -9,14 +9,30 @@
  */
 
 import { emit, listen } from '@tauri-apps/api/event';
-import { EVENT_CLEAR, EVENT_KEY, EVENT_READY, EVENT_RESULT, EVENT_SHOW } from './app/events.js';
-import type { ShowRequest } from './app/events.js';
+import {
+  EVENT_CLEAR,
+  EVENT_KEY,
+  EVENT_READY,
+  EVENT_RESULT,
+  EVENT_SHOW,
+  EVENT_TAKEOVER,
+  EVENT_TAKEOVER_END,
+} from './app/events.js';
+import type { ShowRequest, TakeoverRequest } from './app/events.js';
 
 type Layer = 'a' | 'b';
 
 const layers: Record<Layer, HTMLImageElement> = {
   a: document.getElementById('layer-a') as HTMLImageElement,
   b: document.getElementById('layer-b') as HTMLImageElement,
+};
+
+const takeover = {
+  root: document.getElementById('takeover') as HTMLDivElement,
+  jersey: document.getElementById('takeover-jersey') as HTMLDivElement,
+  position: document.getElementById('takeover-position') as HTMLParagraphElement,
+  name: document.getElementById('takeover-name') as HTMLParagraphElement,
+  stats: document.getElementById('takeover-stats') as HTMLUListElement,
 };
 
 let visible: Layer = 'a';
@@ -93,6 +109,75 @@ async function show(request: ShowRequest): Promise<void> {
   await emit(EVENT_RESULT, { token, ok: true });
 }
 
+/**
+ * Sweep a player card over the images.
+ *
+ * The image layers are left exactly as they are underneath: the card is a
+ * sibling that covers them, so when it sweeps away the show is still on the same
+ * image with the same timer state. Nothing here computes a statistic — the
+ * controller sends finished strings, so there is one implementation of the
+ * box-score rules rather than two that can disagree.
+ */
+function showTakeover(request: TakeoverRequest): void {
+  takeover.jersey.textContent = request.number;
+  takeover.position.textContent = request.position;
+  takeover.name.textContent = request.name;
+
+  takeover.stats.replaceChildren();
+  for (const stat of request.stats) {
+    const item = document.createElement('li');
+    const value = document.createElement('span');
+    value.className = 'value';
+    value.textContent = stat.value;
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = stat.label;
+    // `column-reverse` puts the value on top; the label comes first in the DOM
+    // so a screen reader hears "Kills, 12".
+    item.append(label, value);
+    takeover.stats.append(item);
+  }
+
+  takeover.root.style.setProperty('--sweep-ms', `${request.sweepMs}ms`);
+  // Restart the animation even if a card is already showing, so clicking a
+  // second player swaps the card rather than doing nothing.
+  takeover.root.classList.remove('sweep-in', 'sweep-out');
+  void takeover.root.offsetWidth;
+  takeover.root.classList.add('active', 'sweep-in');
+}
+
+/** Sweep the card away, leaving the images exactly as they were. */
+function endTakeover(): void {
+  if (!takeover.root.classList.contains('active')) return;
+  takeover.root.classList.remove('sweep-in');
+  takeover.root.classList.add('sweep-out');
+
+  const done = () => {
+    takeover.root.classList.remove('active', 'sweep-out');
+    // Release the text so nothing lingers in the DOM between cards.
+    takeover.jersey.textContent = '';
+    takeover.position.textContent = '';
+    takeover.name.textContent = '';
+    takeover.stats.replaceChildren();
+  };
+
+  // `animationend` is the accurate signal; the timeout is the guarantee, since a
+  // dropped animation event must never leave a card stuck over the show.
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(guard);
+    takeover.root.removeEventListener('animationend', onEnd);
+    done();
+  };
+  const onEnd = (event: AnimationEvent) => {
+    if (event.target === takeover.root.firstElementChild) finish();
+  };
+  const guard = window.setTimeout(finish, 1200);
+  takeover.root.addEventListener('animationend', onEnd);
+}
+
 function clear(): void {
   latestToken += 1;
   if (retireHandle !== null) {
@@ -106,6 +191,13 @@ function clear(): void {
   }
   layers.a.classList.add('visible');
   visible = 'a';
+
+  // A stopped show must not leave a card on the screen.
+  takeover.root.classList.remove('active', 'sweep-in', 'sweep-out');
+  takeover.jersey.textContent = '';
+  takeover.position.textContent = '';
+  takeover.name.textContent = '';
+  takeover.stats.replaceChildren();
 }
 
 // The presentation window holds focus while a show is running, so these keys
@@ -130,6 +222,8 @@ async function main(): Promise<void> {
     showQueue = showQueue.then(() => show(event.payload)).catch(() => undefined);
   });
   await listen(EVENT_CLEAR, () => clear());
+  await listen<TakeoverRequest>(EVENT_TAKEOVER, (event) => showTakeover(event.payload));
+  await listen(EVENT_TAKEOVER_END, () => endTakeover());
   // Tells the controller the listeners are attached and it is safe to send the
   // first image.
   await emit(EVENT_READY, {});

@@ -18,6 +18,7 @@ import {
   type Transition,
 } from './types.js';
 import { resolveStoredPath, storedPathFor, type PathStyle } from './paths.js';
+import { emptyStats, STAT_KEYS, type Player, type PlayerStats } from './stats.js';
 
 /** The only format version this build of Picta writes. */
 export const PICTA_FORMAT_VERSION = 1;
@@ -31,6 +32,7 @@ export type ParseErrorKind =
   | 'missing-version'
   | 'unsupported-version'
   | 'invalid-images'
+  | 'invalid-roster'
   | 'invalid-field';
 
 export interface ParsedPicta {
@@ -40,6 +42,8 @@ export interface ParsedPicta {
   intervalSeconds: number;
   transition: Transition;
   imageSizing: ImageSizing;
+  /** Empty unless the file carries a roster. */
+  roster: Player[];
 }
 
 export type ParseResult =
@@ -47,6 +51,100 @@ export type ParseResult =
 
 function fail(kind: ParseErrorKind, message: string): ParseResult {
   return { ok: false, kind, message };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Internal helper so nested parsers can return either a value or an error. */
+type Attempt<T> = { ok: true; value: T } | { ok: false; error: ParseResult };
+
+function bad<T>(kind: ParseErrorKind, message: string): Attempt<T> {
+  return { ok: false, error: fail(kind, message) };
+}
+
+/**
+ * Read one player's counters.
+ *
+ * Missing counters default to zero so a roster written by a future Picta that
+ * tracks one more statistic still opens here. A present-but-invalid counter is
+ * an error, for the same reason a bad `intervalSeconds` is.
+ */
+function parseStats(raw: unknown, playerNumber: number): Attempt<PlayerStats> {
+  const stats = emptyStats();
+  if (raw === undefined) return { ok: true, value: stats };
+  if (!isPlainObject(raw)) {
+    return bad('invalid-roster', `Player ${playerNumber} in this Picta file has invalid stats.`);
+  }
+  for (const key of STAT_KEYS) {
+    const value = raw[key];
+    if (value === undefined) continue;
+    // Counters are whole, non-negative event counts. Anything else means the
+    // file was edited by something that did not understand it.
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      return bad(
+        'invalid-roster',
+        `Player ${playerNumber} in this Picta file has an invalid "${key}" value.`,
+      );
+    }
+    stats[key] = value;
+  }
+  return { ok: true, value: stats };
+}
+
+/**
+ * Read the optional roster.
+ *
+ * Ids are generated on load rather than stored: they only have to be unique
+ * within one running copy of Picta, and generating them means a hand-written
+ * roster does not need to invent them.
+ */
+function parseRoster(raw: unknown): Attempt<Player[]> {
+  if (raw === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) {
+    return bad('invalid-roster', 'This Picta file has an invalid "roster" value.');
+  }
+
+  const roster: Player[] = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    const entry = raw[i] as unknown;
+    if (!isPlainObject(entry)) {
+      return bad('invalid-roster', `Roster entry ${i + 1} in this Picta file is not valid.`);
+    }
+    const name = entry['name'];
+    if (typeof name !== 'string' || name.trim() === '') {
+      return bad('invalid-roster', `Roster entry ${i + 1} in this Picta file has no name.`);
+    }
+    const number = entry['number'];
+    if (number !== undefined && typeof number !== 'string' && typeof number !== 'number') {
+      return bad(
+        'invalid-roster',
+        `Roster entry ${i + 1} in this Picta file has an invalid number.`,
+      );
+    }
+    const position = entry['position'];
+    if (position !== undefined && typeof position !== 'string') {
+      return bad(
+        'invalid-roster',
+        `Roster entry ${i + 1} in this Picta file has an invalid position.`,
+      );
+    }
+
+    const stats = parseStats(entry['stats'], i + 1);
+    if (!stats.ok) return stats;
+
+    roster.push({
+      // Ids are runtime-only: unique within this copy of Picta is enough, and
+      // generating them means a hand-written roster need not invent any.
+      id: `p${i}_${Math.random().toString(36).slice(2, 8)}`,
+      number: number === undefined ? '' : String(number).trim(),
+      name: name.trim(),
+      position: position === undefined ? '' : position.trim(),
+      stats: stats.value,
+    });
+  }
+  return { ok: true, value: roster };
 }
 
 /**
@@ -127,25 +225,55 @@ export function parsePicta(text: string): ParseResult {
     imageSizing = sizingRaw;
   }
 
+  const roster = parseRoster(obj['roster']);
+  if (!roster.ok) return roster.error;
+
   // Unknown keys are ignored on purpose: a future minor addition stays readable.
-  return { ok: true, value: { version, storedPaths, intervalSeconds, transition, imageSizing } };
+  return {
+    ok: true,
+    value: {
+      version,
+      storedPaths,
+      intervalSeconds,
+      transition,
+      imageSizing,
+      roster: roster.value,
+    },
+  };
 }
 
 /** Serialize document state to `.picta` text, relative to `pictaFilePath`. */
 export function serializePicta(
   doc: Pick<DocumentData, 'intervalSeconds' | 'transition' | 'imageSizing'> & {
     images: readonly { path: string }[];
+    roster?: readonly Player[];
   },
   pictaFilePath: string,
   style: PathStyle,
 ): string {
-  const body = {
+  const body: Record<string, unknown> = {
     version: PICTA_FORMAT_VERSION,
     images: doc.images.map((image) => ({ path: storedPathFor(image.path, pictaFilePath, style) })),
     intervalSeconds: doc.intervalSeconds,
     transition: doc.transition,
     imageSizing: doc.imageSizing,
   };
+
+  // Written only when there is one, so a plain image show stays exactly as small
+  // and as readable as it was before rosters existed.
+  if (doc.roster && doc.roster.length > 0) {
+    body['roster'] = doc.roster.map((player) => ({
+      number: player.number,
+      name: player.name,
+      position: player.position,
+      // Ids are runtime-only, and zero counters are omitted to keep the file
+      // small and diff-friendly.
+      stats: Object.fromEntries(
+        STAT_KEYS.filter((key) => player.stats[key] !== 0).map((key) => [key, player.stats[key]]),
+      ),
+    }));
+  }
+
   return `${JSON.stringify(body, null, 2)}\n`;
 }
 

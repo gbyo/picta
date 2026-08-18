@@ -9,6 +9,23 @@
     <!-- Two layers, one visible at a time. Nothing else ever renders here. -->
     <img id="layer-a" class="layer visible" alt="" />
     <img id="layer-b" class="layer" alt="" />
+
+    <!--
+      The player takeover card. Sweeps over the images and away again; the image
+      layers underneath are never disturbed, so the show resumes exactly where it
+      was. Empty and inert until the controller sends a card.
+    -->
+    <div id="takeover" class="takeover" aria-hidden="true">
+      <div class="takeover-panel">
+        <div class="takeover-jersey" id="takeover-jersey"></div>
+        <div class="takeover-body">
+          <p class="takeover-position" id="takeover-position"></p>
+          <p class="takeover-name" id="takeover-name"></p>
+          <div class="takeover-rule"></div>
+          <ul class="takeover-stats" id="takeover-stats"></ul>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/present.ts"></script>
   </body>
 </html>

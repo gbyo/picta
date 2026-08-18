@@ -24,19 +24,97 @@ number.
 
 ## Schema
 
-| Field             | Type              | Required | Default      | Meaning                                      |
-| ----------------- | ----------------- | -------- | ------------ | -------------------------------------------- |
-| `version`         | integer           | yes      | —            | Format version. Currently `1`.               |
-| `images`          | array of objects  | yes      | —            | Ordered playlist. May be empty.              |
-| `images[].path`   | non-empty string  | yes      | —            | Path to one image (see **Paths**).           |
-| `intervalSeconds` | number, 1–86400   | no       | `10`         | Seconds each image stays on screen.          |
-| `transition`      | `"none"` \| `"crossfade"` | no | `"crossfade"` | How one image replaces the next.      |
-| `imageSizing`     | `"fit"` \| `"fill"` | no     | `"fit"`      | How each image fills the display.            |
+| Field             | Type                      | Required | Default       | Meaning                                       |
+| ----------------- | ------------------------- | -------- | ------------- | --------------------------------------------- |
+| `version`         | integer                   | yes      | —             | Format version. Currently `1`.                |
+| `images`          | array of objects          | yes      | —             | Ordered playlist. May be empty.               |
+| `images[].path`   | non-empty string          | yes      | —             | Path to one image (see **Paths**).            |
+| `intervalSeconds` | number, 1–86400           | no       | `10`          | Seconds each image stays on screen.           |
+| `transition`      | `"none"` \| `"crossfade"` | no       | `"crossfade"` | How one image replaces the next.              |
+| `imageSizing`     | `"fit"` \| `"fill"`       | no       | `"fit"`       | How each image fills the display.             |
+| `roster`          | array of objects          | no       | absent        | Volleyball roster and stats (see **Roster**). |
 
 The array order **is** the playback order.
 
 Supported image types are PNG, JPEG and WebP. A path naming anything else simply
 fails to load and is skipped at playback time.
+
+## Roster
+
+`roster` is optional and additive. It was introduced in Picta 1.1 without a
+format version bump, because a reader that ignores it still plays the show
+correctly — which is exactly the case the "ignore unknown fields" rule exists
+for. Picta omits the field entirely when the roster is empty, so an ordinary
+image show is byte-for-byte what it was before rosters existed.
+
+```json
+{
+  "version": 1,
+  "images": [{ "path": "Images/sponsor.png" }],
+  "intervalSeconds": 10,
+  "transition": "crossfade",
+  "imageSizing": "fit",
+  "roster": [
+    {
+      "number": "7",
+      "name": "Avery Chen",
+      "position": "OH",
+      "stats": { "kills": 12, "attackErrors": 2, "attempts": 30, "digs": 6 }
+    },
+    { "number": "3", "name": "Jordan Ruiz", "position": "S", "stats": { "assists": 21 } }
+  ]
+}
+```
+
+| Field      | Type             | Required | Default | Meaning                        |
+| ---------- | ---------------- | -------- | ------- | ------------------------------ |
+| `name`     | non-empty string | yes      | —       | Player name.                   |
+| `number`   | string or number | no       | `""`    | Jersey number. See below.      |
+| `position` | string           | no       | `""`    | Free text, e.g. `"OH"`, `"S"`. |
+| `stats`    | object           | no       | all `0` | Counters (see below).          |
+
+`number` is kept as **text**, because `"0"` and `"00"` are different players and
+a leading zero is part of a jersey number. A JSON number is accepted and
+converted, so `7` and `"7"` both work.
+
+### Stat counters
+
+Every counter is a non-negative integer and every one is optional; an omitted
+counter is zero. Picta writes only the non-zero ones.
+
+| Key             | Box score | Meaning                                            |
+| --------------- | --------- | -------------------------------------------------- |
+| `kills`         | K         | Attacks that ended the rally in this team's favour |
+| `attackErrors`  | E         | Attacks that ended the rally against this team     |
+| `attempts`      | TA        | Every attack attempted, kills and errors included  |
+| `assists`       | A         | Assists                                            |
+| `aces`          | SA        | Service aces                                       |
+| `serviceErrors` | SE        | Service errors                                     |
+| `digs`          | D         | Digs                                               |
+| `blockSolos`    | BS        | Blocks won alone                                   |
+| `blockAssists`  | BA        | Blocks shared with a teammate                      |
+
+**Only raw counts are stored.** Hitting percentage, total blocks and points are
+derived on read, using the ordinary conventions:
+
+```
+hitting %     = (kills − attackErrors) ÷ attempts     (no value when attempts = 0)
+total blocks  = blockSolos + blockAssists ÷ 2
+points        = kills + aces + blockSolos + blockAssists ÷ 2
+```
+
+Storing a derived figure is how a box score ends up contradicting itself, so a
+`.picta` file never contains one. Note that `attempts` must include kills and
+errors for the hitting percentage to mean anything; Picta maintains this
+automatically when stats are entered through its own interface.
+
+Player ids are **not** stored. They only need to be unique within one running
+copy of Picta, and generating them on read means a hand-written roster does not
+have to invent any.
+
+A malformed roster is an error with a message naming the entry, exactly like a
+malformed image list. It is never silently dropped — losing a match's stats
+quietly would be much worse than refusing to open the file.
 
 ### What is deliberately absent
 
@@ -91,9 +169,10 @@ An implementation should:
    the file was written by a newer Picta.
 4. Require `images` to be an array of objects each carrying a non-empty string
    `path`.
-5. Reject a present-but-invalid `intervalSeconds`, `transition` or `imageSizing`
-   rather than silently substituting the default. A wrong value usually means a
-   hand-edit went wrong, and silently ignoring it hides the mistake.
+5. Reject a present-but-invalid `intervalSeconds`, `transition`, `imageSizing`
+   or `roster` rather than silently substituting the default. A wrong value
+   usually means a hand-edit went wrong, and silently ignoring it hides the
+   mistake.
 6. Ignore unknown fields.
 7. Resolve each path against the `.picta` file's own folder.
 8. Report which images could not be found, without refusing to open the file.
@@ -103,6 +182,6 @@ could not find, and offers to relink or remove those entries.
 
 ## Writing a `.picta` file
 
-Write `version: 1`, all five fields, two-space indentation and a trailing
-newline. Keeping the output stable and readable means a `.picta` file diffs
+Write `version: 1`, the five core fields, `roster` only when it is non-empty,
+two-space indentation and a trailing newline. Keeping the output stable and readable means a `.picta` file diffs
 cleanly in version control.

@@ -16,6 +16,7 @@ import * as ipc from './app/ipc.js';
 import { Playback, type StopReason } from './app/playback.js';
 import { emptyPrefs, readPrefs, writePrefs, flushPrefs, type Prefs } from './app/prefs.js';
 import { renderThumbs } from './app/thumbs.js';
+import { renderRoster } from './app/roster.js';
 import {
   chooseFolder,
   chooseImages,
@@ -45,6 +46,18 @@ import {
 } from './core/monitors.js';
 import { moveItem } from './core/playlist.js';
 import { basename, type PathStyle } from './core/paths.js';
+import {
+  adjustStat,
+  findPlayer,
+  makePlayer,
+  playerLabel,
+  recordAttack,
+  removePlayer,
+  resetStats,
+  takeoverStats,
+  teamTotals,
+  undoAttack,
+} from './core/stats.js';
 import {
   UPDATE_CHECK_INTERVAL_MS,
   shouldCheckNow,
@@ -102,6 +115,18 @@ const ui = {
   updateText: need<HTMLParagraphElement>('update-text'),
   updateOpen: need<HTMLButtonElement>('update-open'),
   updateDismiss: need<HTMLButtonElement>('update-dismiss'),
+  statsDetails: need<HTMLDetailsElement>('stats-details'),
+  statsCount: need<HTMLSpanElement>('stats-count'),
+  roster: need<HTMLUListElement>('roster'),
+  addPlayer: need<HTMLFormElement>('add-player'),
+  newNumber: need<HTMLInputElement>('new-number'),
+  newName: need<HTMLInputElement>('new-name'),
+  newPosition: need<HTMLInputElement>('new-position'),
+  teamTotals: need<HTMLParagraphElement>('team-totals'),
+  resetStats: need<HTMLButtonElement>('reset-stats'),
+  takeoverStatus: need<HTMLParagraphElement>('takeover-status'),
+  takeoverWho: need<HTMLSpanElement>('takeover-who'),
+  takeoverReturn: need<HTMLButtonElement>('takeover-return'),
 };
 
 // --- state ------------------------------------------------------------------
@@ -118,6 +143,8 @@ let busy = false;
 /** The version currently named in the update notice, if one is showing. */
 let noticedVersion: string | null = null;
 let updateCheckHandle: number | null = null;
+/** Which player's counters are open in the roster list. */
+let expandedPlayerId: string | null = null;
 
 const appWindow = getCurrentWindow();
 
@@ -127,7 +154,14 @@ const playback = new Playback({
   },
   onStopped: (reason) => void handleStopped(reason),
   onKey: (key) => handleShortcut(key),
+  onTakeover: (active) => {
+    if (!active) ui.takeoverStatus.hidden = true;
+    renderRosterList();
+  },
 });
+
+/** How long a player card stays on the output display before the images return. */
+const TAKEOVER_HOLD_MS = 9000;
 
 // --- rendering --------------------------------------------------------------
 
@@ -249,6 +283,8 @@ function renderMode(): void {
   const running = playback.active;
   ui.setup.hidden = running;
   ui.running.hidden = !running;
+  // The Show buttons only work while there is a presentation window to sweep.
+  renderRosterList();
 }
 
 // --- images -----------------------------------------------------------------
@@ -385,10 +421,12 @@ async function saveAs(): Promise<boolean> {
 async function newShow(): Promise<void> {
   if (!(await ensureSaved())) return;
   doc = newDocument();
+  expandedPlayerId = null;
   markClean();
   setMessage(null);
   renderSettings();
   renderImages();
+  renderRosterList();
 }
 
 async function openShow(path?: string): Promise<void> {
@@ -403,11 +441,16 @@ async function openShow(path?: string): Promise<void> {
   }
 
   doc = { filePath: outcome.filePath, data: outcome.data, dirty: false };
+  expandedPlayerId = null;
   markClean();
   rememberDirectory(directoryOf(outcome.filePath, style));
   setMessage(null);
   renderSettings();
   renderImages();
+  renderRosterList();
+  // A show that carries a roster is being used for stats, so open the section
+  // rather than making the operator find it.
+  if (doc.data.roster.length > 0) ui.statsDetails.open = true;
 }
 
 // --- displays ---------------------------------------------------------------
@@ -566,6 +609,97 @@ async function resume(): Promise<void> {
   await start();
 }
 
+// --- roster and stats -------------------------------------------------------
+
+function renderRosterList(): void {
+  const roster = doc.data.roster;
+
+  ui.statsCount.textContent =
+    roster.length === 0 ? 'None' : `${roster.length} player${roster.length === 1 ? '' : 's'}`;
+
+  renderRoster(
+    ui.roster,
+    roster,
+    { expandedId: expandedPlayerId, canTakeover: playback.active },
+    {
+      onExpand: (id) => {
+        expandedPlayerId = id;
+        renderRosterList();
+      },
+      onAdjust: (id, key, delta) => changeRoster(adjustStat(doc.data.roster, id, key, delta)),
+      onAttack: (id, outcome, undo) =>
+        changeRoster(
+          undo
+            ? undoAttack(doc.data.roster, id, outcome)
+            : recordAttack(doc.data.roster, id, outcome),
+        ),
+      onRemove: (id) => {
+        if (expandedPlayerId === id) expandedPlayerId = null;
+        changeRoster(removePlayer(doc.data.roster, id));
+      },
+      onEdit: (id, field, value) => {
+        const trimmed = value.trim();
+        // A player with no name cannot be shown on a screen, so an empty name is
+        // simply not accepted; the list redraws with the previous value.
+        if (field === 'name' && trimmed === '') {
+          renderRosterList();
+          return;
+        }
+        changeRoster(
+          doc.data.roster.map((player) =>
+            player.id === id ? { ...player, [field]: trimmed } : player,
+          ),
+        );
+      },
+      onTakeover: (id) => startTakeover(id),
+    },
+  );
+
+  const totals = teamTotals(roster);
+  ui.teamTotals.textContent =
+    roster.length === 0
+      ? ''
+      : `Team: ${totals.kills} K · ${totals.assists} A · ${totals.digs} D · ${totals.aces} SA`;
+  ui.resetStats.hidden = roster.length === 0;
+}
+
+/** Roster and stat changes are document content, so they mark the file dirty. */
+function changeRoster(roster: DocumentState['data']['roster']): void {
+  doc.data.roster = roster;
+  markDirty();
+  renderRosterList();
+}
+
+/**
+ * Put a player on the output display.
+ *
+ * Only possible while a show is running: the card sweeps over the images in the
+ * presentation window, so there has to be a presentation window. The rotation
+ * pauses for the duration and resumes on the same image.
+ */
+function startTakeover(id: string): void {
+  if (!playback.active) {
+    setMessage('Start the show first, then Show puts a player on the display.');
+    return;
+  }
+  const player = findPlayer(doc.data.roster, id);
+  if (!player) return;
+
+  playback.takeover(
+    {
+      number: player.number,
+      name: player.name,
+      position: player.position,
+      stats: takeoverStats(player.stats),
+    },
+    TAKEOVER_HOLD_MS,
+  );
+
+  ui.takeoverWho.textContent = `Showing ${playerLabel(player)}`;
+  ui.takeoverStatus.hidden = false;
+  renderRosterList();
+}
+
 // --- updates ----------------------------------------------------------------
 
 /**
@@ -641,12 +775,21 @@ function isTypingTarget(target: EventTarget | null): boolean {
     tag === 'TEXTAREA' ||
     tag === 'SELECT' ||
     tag === 'BUTTON' ||
+    // A <summary> answers Space itself; letting it through would toggle the
+    // stats section and advance the show at the same time.
+    tag === 'SUMMARY' ||
     target.isContentEditable
   );
 }
 
 function handleShortcut(key: string): void {
   if (!playback.active) return;
+  // Escape means "get me back to the images" before it means "stop the show":
+  // an operator hitting it while a card is up has not asked to end the show.
+  if (key === 'Escape' && playback.takeoverActive) {
+    playback.endTakeover();
+    return;
+  }
   if (key === 'ArrowLeft') playback.previous();
   else if (key === 'ArrowRight' || key === ' ') playback.next();
   else if (key === 'Escape') playback.stop('user');
@@ -724,6 +867,31 @@ function wire(): void {
       setMessage('Could not open the browser. Visit github.com/gbyo/picta/releases.');
     });
   });
+
+  ui.addPlayer.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = ui.newName.value.trim();
+    if (name === '') {
+      ui.newName.focus();
+      return;
+    }
+    const player = makePlayer(ui.newNumber.value, name, ui.newPosition.value);
+    changeRoster([...doc.data.roster, player]);
+    ui.newNumber.value = '';
+    ui.newName.value = '';
+    ui.newPosition.value = '';
+    // Ready for the next player straight away; a roster is entered in one go.
+    ui.newNumber.focus();
+  });
+
+  ui.resetStats.addEventListener('click', () => {
+    if (doc.data.roster.length === 0) return;
+    // Clears the counters and keeps the roster, which is what "new match" means.
+    changeRoster(resetStats(doc.data.roster));
+    setMessage('Stats reset. The roster was kept.');
+  });
+
+  ui.takeoverReturn.addEventListener('click', () => playback.endTakeover());
 
   ui.updateDismiss.addEventListener('click', () => {
     if (noticedVersion !== null) {
@@ -857,6 +1025,7 @@ async function main(): Promise<void> {
   renderSettings();
   renderDisplays();
   renderImages();
+  renderRosterList();
   markClean();
   startWatching();
 

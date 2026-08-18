@@ -17,8 +17,16 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import { EVENT_CLEAR, EVENT_KEY, EVENT_READY, EVENT_RESULT, EVENT_SHOW } from './events.js';
-import type { KeyMessage, ShowResult } from './events.js';
+import {
+  EVENT_CLEAR,
+  EVENT_KEY,
+  EVENT_READY,
+  EVENT_RESULT,
+  EVENT_SHOW,
+  EVENT_TAKEOVER,
+  EVENT_TAKEOVER_END,
+} from './events.js';
+import type { KeyMessage, ShowResult, TakeoverRequest } from './events.js';
 import { DoubleBuffer } from '../core/transition.js';
 import { AdvanceTimer, realTimerHost } from '../core/scheduler.js';
 import { firstPlayable, playablePosition, stepIndex } from '../core/playlist.js';
@@ -27,6 +35,8 @@ import { CROSSFADE_MS, type ImageItem, type ImageSizing, type Transition } from 
 const PRESENTATION_LABEL = 'presentation';
 /** How long to wait for the presentation webview to attach its listeners. */
 const READY_TIMEOUT_MS = 5000;
+/** Sweep length for a player takeover. Not exposed in the interface. */
+export const TAKEOVER_SWEEP_MS = 480;
 
 export interface PlaybackSettings {
   intervalSeconds: number;
@@ -40,6 +50,8 @@ export interface PlaybackHandlers {
   onPosition(position: number, total: number): void;
   onStopped(reason: StopReason): void;
   onKey(key: string): void;
+  /** Called when a takeover starts and when it finishes. */
+  onTakeover(active: boolean): void;
 }
 
 export class Playback {
@@ -56,6 +68,9 @@ export class Playback {
   #skip = new Set<string>();
   #active = false;
   #unlisten: UnlistenFn[] = [];
+  /** Set while a player card is covering the images. */
+  #takeover = false;
+  #takeoverTimer: number | null = null;
   /** Set when the presentation webview reports its listeners are attached. */
   #ready = false;
   #readyWaiters: (() => void)[] = [];
@@ -67,6 +82,10 @@ export class Playback {
 
   get active(): boolean {
     return this.#active;
+  }
+
+  get takeoverActive(): boolean {
+    return this.#takeover;
   }
 
   /** Attach the listeners that live for the lifetime of the controller. */
@@ -98,6 +117,7 @@ export class Playback {
   }
 
   async dispose(): Promise<void> {
+    this.#clearTakeoverState();
     this.#timer.cancel();
     for (const off of this.#unlisten) off();
     this.#unlisten = [];
@@ -112,6 +132,7 @@ export class Playback {
     this.#settings = settings;
     this.#skip.clear();
     this.#buffer.reset();
+    this.#clearTakeoverState();
     this.#timer.setInterval(settings.intervalSeconds * 1000);
     this.#active = true;
 
@@ -129,6 +150,7 @@ export class Playback {
   stop(reason: StopReason = 'user'): void {
     if (!this.#active) return;
     this.#active = false;
+    this.#clearTakeoverState();
     this.#timer.cancel();
     this.#buffer.abandon();
     void emitTo(PRESENTATION_LABEL, EVENT_CLEAR, {}).catch(() => undefined);
@@ -146,12 +168,78 @@ export class Playback {
   /** The presentation was hidden out from under us; do not touch it again. */
   abandon(): void {
     this.#active = false;
+    this.#clearTakeoverState();
     this.#timer.cancel();
     this.#buffer.abandon();
   }
 
+  /** Drop takeover state without touching a presentation that may be gone. */
+  #clearTakeoverState(): void {
+    if (this.#takeoverTimer !== null) {
+      window.clearTimeout(this.#takeoverTimer);
+      this.#takeoverTimer = null;
+    }
+    if (this.#takeover) {
+      this.#takeover = false;
+      this.#handlers.onTakeover(false);
+    }
+  }
+
+  /**
+   * Sweep a player card over the images for `holdMs`, then return to the show.
+   *
+   * Image advancement is suspended for the duration rather than left running
+   * underneath: coming back to a different image than the one the card covered
+   * would look like a glitch. The image itself is never disturbed, so the show
+   * resumes exactly where it paused, and the interval restarts from the moment
+   * the card leaves.
+   */
+  takeover(request: Omit<TakeoverRequest, 'sweepMs'>, holdMs: number): void {
+    if (!this.#active) return;
+
+    this.#timer.cancel();
+    if (this.#takeoverTimer !== null) window.clearTimeout(this.#takeoverTimer);
+
+    const wasActive = this.#takeover;
+    this.#takeover = true;
+    if (!wasActive) this.#handlers.onTakeover(true);
+
+    void emitTo(PRESENTATION_LABEL, EVENT_TAKEOVER, {
+      ...request,
+      sweepMs: TAKEOVER_SWEEP_MS,
+    }).catch(() => this.stop('display-lost'));
+
+    this.#takeoverTimer = window.setTimeout(
+      () => {
+        this.#takeoverTimer = null;
+        this.endTakeover();
+      },
+      Math.max(holdMs, TAKEOVER_SWEEP_MS),
+    );
+  }
+
+  /** Sweep the card away and hand the screen back to the images. */
+  endTakeover(): void {
+    if (this.#takeoverTimer !== null) {
+      window.clearTimeout(this.#takeoverTimer);
+      this.#takeoverTimer = null;
+    }
+    if (!this.#takeover) return;
+    this.#takeover = false;
+
+    void emitTo(PRESENTATION_LABEL, EVENT_TAKEOVER_END, {}).catch(() => undefined);
+    this.#handlers.onTakeover(false);
+
+    // The image underneath never changed, so the show simply continues — with a
+    // full interval, since the operator has just been looking at something else.
+    if (this.#active) this.#timer.restart();
+  }
+
   #advance(direction: 1 | -1): void {
     if (!this.#active) return;
+    // Moving through the show implies leaving the card: the operator wants the
+    // images back.
+    if (this.#takeover) this.endTakeover();
     // A manual step supersedes any pending load, and always restarts the clock.
     this.#timer.cancel();
     const next = stepIndex(this.#images, this.#buffer.shownIndex, direction, this.#skip);
@@ -185,8 +273,9 @@ export class Playback {
       const outcome = this.#buffer.decoded(result.token);
       if (outcome.kind !== 'swap') return;
       // The clock starts when the image is actually on screen, not when it was
-      // requested, so a slow decode never shortens an interval.
-      this.#timer.restart();
+      // requested, so a slow decode never shortens an interval. While a card is
+      // up, the clock stays stopped until it leaves.
+      if (!this.#takeover) this.#timer.restart();
       const { position, total } = playablePosition(this.#images, outcome.request.index, this.#skip);
       this.#handlers.onPosition(position, total);
       return;
