@@ -42,15 +42,14 @@ fails to load and is skipped at playback time.
 ## Layout
 
 `full` shows one image filling the display. `split` divides it in half: the image
-rotation on the left, a live on-court stats panel on the right. It was added in
-Picta 1.2, additively — a reader that ignores it shows the images full screen,
-which is a correct way to play the show.
+rotation on the left, a live on-court stats panel on the right. It is additive —
+a reader that ignores it shows the images full screen, which is a correct way to
+play the show.
 
 ## Roster
 
-`roster` is optional and additive. It was introduced in Picta 1.1 without a
-format version bump, because a reader that ignores it still plays the show
-correctly — which is exactly the case the "ignore unknown fields" rule exists
+`roster` is optional and additive. It carries no format version bump, because a
+reader that ignores it still plays the show correctly — which is exactly the case the "ignore unknown fields" rule exists
 for. Picta omits the field entirely when the roster is empty, so an ordinary
 image show is byte-for-byte what it was before rosters existed.
 

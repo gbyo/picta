@@ -1,6 +1,6 @@
 [package]
 name = "picta"
-version = "1.0.0"
+version = "1.1.0"
 description = "Display and automatically rotate still images on a specific monitor."
 authors = ["Picta contributors"]
 license = "MIT"
