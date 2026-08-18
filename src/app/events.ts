@@ -1,6 +1,7 @@
 /** Event names exchanged between the controller and the presentation window. */
 
 import type { BoardData, Cue, LayoutNode } from '../core/domain.js';
+import type { ZoneRect } from '../core/layouts.js';
 import type { BoardRow as LegacyBoardRow } from '../core/lineup.js';
 import type { ImageSizing, Layout, Transition } from '../core/types.js';
 
@@ -19,6 +20,9 @@ export const EVENT_CUE = 'picta://present-cue';
 export const EVENT_CUE_END = 'picta://present-cue-end';
 export const EVENT_PLAYBACK = 'picta://present-playback';
 export const EVENT_THEME = 'picta://present-theme';
+export const EVENT_LAYOUT_EDIT_BEGIN = 'picta://present-layout-edit-begin';
+export const EVENT_LAYOUT_EDIT_UPDATE = 'picta://present-layout-edit-update';
+export const EVENT_LAYOUT_EDIT_END = 'picta://present-layout-edit-end';
 
 export interface ShowRequest {
   token: number;
@@ -50,6 +54,20 @@ export interface KeyMessage {
 /** Which way the output display is divided. */
 export interface LayoutMessage {
   layout: Layout | LayoutNode;
+}
+
+export interface LayoutEditZone extends ZoneRect {
+  number: number;
+  sharePercent: number;
+}
+
+export interface LayoutEditPreviewMessage {
+  layout: LayoutNode;
+  outputWidth: number;
+  outputHeight: number;
+  zones: LayoutEditZone[];
+  selectedZoneId: string | null;
+  showSafeAreas: boolean;
 }
 
 /**

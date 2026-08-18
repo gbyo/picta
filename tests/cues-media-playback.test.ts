@@ -76,4 +76,19 @@ describe('mixed media playback', () => {
     expect(machine.ready(request.token)).not.toBeNull();
     expect(machine.ready(request.token)).toBeNull();
   });
+
+  it('pauses and resumes the same current item for an edit preview', () => {
+    const set = defaultMediaSet('Set');
+    set.items = [{ id: 'image', type: 'image', path: '/a.png' }];
+    const machine = new MediaPlaybackMachine(set);
+    const request = machine.start();
+    expect(request?.type).toBe('request');
+    if (!request || request.type !== 'request') return;
+    machine.ready(request.token);
+    machine.pause();
+    expect(machine.state.active).toBe(false);
+    const resumed = machine.resume();
+    expect(resumed?.type).toBe('request');
+    if (resumed?.type === 'request') expect(resumed.index).toBe(0);
+  });
 });

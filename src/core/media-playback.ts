@@ -51,6 +51,20 @@ export class MediaPlaybackMachine {
     return this.request(1);
   }
 
+  /** Pause presentation while retaining the current item for an edit preview. */
+  pause(): void {
+    this.#token += 1;
+    this.#pendingToken = null;
+    this.#state = { ...this.#state, active: false, pendingIndex: null };
+  }
+
+  /** Resume the current item, or start from the first item if nothing was ready yet. */
+  resume(): MediaPlaybackEvent | null {
+    if (this.#state.active) return null;
+    this.#state = { ...this.#state, active: true };
+    return this.#state.currentIndex >= 0 ? this.replayCurrent() : this.request(1);
+  }
+
   stop(): MediaPlaybackEvent {
     this.#token += 1;
     this.#pendingToken = null;
