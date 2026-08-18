@@ -12,6 +12,9 @@ import {
   EVENT_CUE,
   EVENT_CUE_END,
   EVENT_LAYOUT,
+  EVENT_LAYOUT_EDIT_BEGIN,
+  EVENT_LAYOUT_EDIT_END,
+  EVENT_LAYOUT_EDIT_UPDATE,
   EVENT_PLAYBACK,
   EVENT_READY,
   EVENT_RESULT,
@@ -19,12 +22,13 @@ import {
   type BackgroundMediaMessage,
   type BoardMessage,
   type CueMessage,
+  type LayoutEditPreviewMessage,
   type PlaybackEvent,
   type ResultMessage,
   type ThemeMessage,
 } from './events.js';
 import type { BoardData, Cue, LayoutNode, MediaSet } from '../core/domain.js';
-import { layoutZones } from '../core/layouts.js';
+import { layoutZones, zoneIdForRole } from '../core/layouts.js';
 import { CueQueue, type CueQueueState } from '../core/cues.js';
 import { MediaPlaybackMachine, type MediaPlaybackEvent } from '../core/media-playback.js';
 import { CROSSFADE_MS } from '../core/types.js';
@@ -69,6 +73,9 @@ export class OutputController {
   #pendingCueResolve: ((played: boolean) => void) | null = null;
   #cueTimer: number | null = null;
   #mediaToken = 0;
+  #editing = false;
+  #editFrame: number | null = null;
+  #pendingEditMessage: LayoutEditPreviewMessage | null = null;
   #theme: ThemeMessage = {
     primary: '#111111',
     secondary: '#ffffff',
@@ -134,6 +141,7 @@ export class OutputController {
 
   async begin(set: MediaSet, settings: OutputSettings, board?: BoardData): Promise<boolean> {
     this.stop('user', false);
+    this.#editing = false;
     this.#set = {
       ...set,
       // Missing resources are controller state, not a renderer concern.
@@ -162,6 +170,8 @@ export class OutputController {
   stop(reason: OutputStopReason = 'user', notify = true): void {
     if (!this.#active && !this.#cueQueue.active) return;
     this.#cueQueue.cancel(false);
+    this.#editing = false;
+    this.#cancelEditFrame();
     this.#cancelCuePresentation();
     this.#clearTimer();
     this.#machine?.stop();
@@ -173,6 +183,8 @@ export class OutputController {
 
   abandon(): void {
     this.#cueQueue.cancel(false);
+    this.#editing = false;
+    this.#cancelEditFrame();
     this.#cancelCuePresentation();
     this.#clearTimer();
     this.#machine?.stop();
@@ -181,12 +193,57 @@ export class OutputController {
   }
 
   setLayout(layout: LayoutNode): void {
-    if (this.#settings) this.#settings = { ...this.#settings, layout };
+    const current = this.#cueQueue.state.current;
+    const preserveCue = current?.target === 'full-board';
+    if (this.#cueQueue.active && !preserveCue) this.#cueQueue.cancel();
+    this.#applyLayout(layout, preserveCue);
+  }
+
+  /** Apply a scene while preserving a full-board cue under the new layout. */
+  applyScene(scene: { layout: LayoutNode }, board?: BoardData): void {
+    if (this.#editing) return;
+    const current = this.#cueQueue.state.current;
+    const fullBoardCue = current?.target === 'full-board';
+    if (this.#cueQueue.active && !fullBoardCue) this.#cueQueue.cancel();
+    this.#applyLayout(scene.layout, fullBoardCue);
+    if (board) this.setBoard(board);
+  }
+
+  beginLayoutEdit(message: LayoutEditPreviewMessage): void {
     if (!this.#active) return;
     if (this.#cueQueue.active) this.#cueQueue.cancel();
-    void emitTo(PRESENTATION, EVENT_LAYOUT, { layout }).catch(() => undefined);
-    const current = this.#machine?.replayCurrent();
-    if (current?.type === 'request') this.#dispatchMedia(current);
+    this.#clearTimer();
+    this.#machine?.pause();
+    this.#editing = true;
+    void emitTo(PRESENTATION, EVENT_CLEAR, {}).catch(() => undefined);
+    void emitTo(PRESENTATION, EVENT_LAYOUT_EDIT_BEGIN, message).catch(() => undefined);
+  }
+
+  previewLayout(message: LayoutEditPreviewMessage): void {
+    if (!this.#editing) return;
+    this.#pendingEditMessage = message;
+    if (this.#editFrame !== null) return;
+    const flush = () => {
+      this.#editFrame = null;
+      const pending = this.#pendingEditMessage;
+      this.#pendingEditMessage = null;
+      if (pending && this.#editing)
+        void emitTo(PRESENTATION, EVENT_LAYOUT_EDIT_UPDATE, pending).catch(() => undefined);
+    };
+    if (typeof window.requestAnimationFrame === 'function')
+      this.#editFrame = window.requestAnimationFrame(flush);
+    else this.#editFrame = window.setTimeout(flush, 0);
+  }
+
+  endLayoutEdit(layout: LayoutNode, board?: BoardData): void {
+    if (!this.#editing) return;
+    this.#cancelEditFrame();
+    this.#editing = false;
+    this.#applyLayout(layout, true);
+    if (board) this.setBoard(board);
+    void emitTo(PRESENTATION, EVENT_LAYOUT_EDIT_END, {}).catch(() => undefined);
+    const resumed = this.#machine?.resume();
+    if (resumed?.type === 'request') this.#dispatchMedia(resumed);
   }
 
   setTheme(theme: ThemeMessage): void {
@@ -259,11 +316,13 @@ export class OutputController {
   }
 
   #dispatchMedia(event: MediaPlaybackEvent): void {
-    if (event.type !== 'request' || !this.#settings) return;
+    if (event.type !== 'request' || !this.#settings || this.#editing) return;
+    const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
+    if (!programZoneId) return;
     this.#mediaToken = event.token;
     const request: BackgroundMediaMessage = {
       token: event.token,
-      zoneId: 'program',
+      zoneId: programZoneId,
       src: convertFileSrc(event.item.path),
       type: event.item.type,
       sizing: this.#settings.imageSizing,
@@ -282,8 +341,9 @@ export class OutputController {
   }
 
   #onReady(token: number, ok: boolean, zoneId?: string): void {
-    if (!this.#active) return;
-    if (zoneId && zoneId !== 'program') return;
+    if (!this.#active || this.#editing || !this.#settings) return;
+    const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
+    if (zoneId && zoneId !== programZoneId) return;
     const machine = this.#machine;
     if (!machine) return;
     const event = ok ? machine.ready(token) : machine.failed(token);
@@ -309,8 +369,9 @@ export class OutputController {
   }
 
   #onPlayback(event: PlaybackEvent): void {
-    if (!this.#active || !this.#machine) return;
-    if (event.zoneId && event.zoneId !== 'program') return;
+    if (!this.#active || !this.#machine || this.#editing || !this.#settings) return;
+    const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
+    if (event.zoneId && event.zoneId !== programZoneId) return;
     if (
       this.#pendingCueResolve &&
       (event.event === 'ended' || event.event === 'failed') &&
@@ -395,13 +456,11 @@ export class OutputController {
 
   #cancelCuePresentation(): void {
     this.#clearTimer();
+    this.#cueToken += 1;
     const resolve = this.#pendingCueResolve;
     this.#pendingCueResolve = null;
     if (resolve) resolve(false);
-    else {
-      this.#cueToken += 1;
-      void emitTo(PRESENTATION, EVENT_CUE_END, {}).catch(() => undefined);
-    }
+    void emitTo(PRESENTATION, EVENT_CUE_END, {}).catch(() => undefined);
   }
 
   #clearTimer(): void {
@@ -413,6 +472,25 @@ export class OutputController {
       window.clearTimeout(this.#cueTimer);
       this.#cueTimer = null;
     }
+  }
+
+  #applyLayout(layout: LayoutNode, preserveCue = false): void {
+    if (this.#settings) this.#settings = { ...this.#settings, layout };
+    if (!this.#active || this.#editing) return;
+    void emitTo(PRESENTATION, EVENT_LAYOUT, { layout }).catch(() => undefined);
+    if (preserveCue) return;
+    const current = this.#machine?.replayCurrent();
+    if (current?.type === 'request') this.#dispatchMedia(current);
+  }
+
+  #cancelEditFrame(): void {
+    if (this.#editFrame !== null) {
+      if (typeof window.cancelAnimationFrame === 'function')
+        window.cancelAnimationFrame(this.#editFrame);
+      else window.clearTimeout(this.#editFrame);
+      this.#editFrame = null;
+    }
+    this.#pendingEditMessage = null;
   }
 
   #waitForPresentation(): Promise<void> {

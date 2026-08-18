@@ -48,6 +48,21 @@
         </button>
       </div>
 
+      <section id="scene-strip" class="scene-strip" aria-label="Scenes">
+        <div class="row scene-strip-heading">
+          <span class="block-title">Scenes</span>
+          <div class="scene-actions">
+            <button type="button" id="scene-new" class="text-button">New</button>
+            <button type="button" id="scene-duplicate" class="text-button">Duplicate</button>
+            <button type="button" id="scene-rename" class="text-button">Rename</button>
+            <button type="button" id="scene-delete" class="text-button">Delete</button>
+            <button type="button" id="scene-default" class="text-button">Make default</button>
+            <button type="button" id="scene-edit" class="small-button">Edit Zones</button>
+          </div>
+        </div>
+        <div id="scene-buttons" class="scene-buttons" role="toolbar" aria-label="Show scenes"></div>
+      </section>
+
       <section id="panel-media" class="tab-panel" role="tabpanel" aria-labelledby="tab-media">
         <div class="resource-header">
           <div>
@@ -156,6 +171,7 @@
               ></select>
             </div>
             <div id="group-editor" class="group-editor"></div>
+            <div id="manual-session" class="manual-session" hidden></div>
             <form id="add-player" class="add-player">
               <input
                 id="new-number"
@@ -223,22 +239,41 @@
           </div>
           <div id="layout-preview" class="layout-preview" aria-label="Output layout preview"></div>
           <p id="layout-detail" class="muted detail"></p>
-          <div id="custom-layout-tools" class="custom-layout-tools" hidden>
-            <select
-              id="custom-zone-select"
-              class="control"
-              aria-label="Selected layout zone"
-            ></select
-            ><button type="button" id="split-columns" class="small-button">
-              Split Left / Right</button
-            ><button type="button" id="split-rows" class="small-button">Split Top / Bottom</button>
-            ><select id="custom-role-select" class="control" aria-label="Zone role">
-              <option value="program">Program</option>
-              <option value="live-board">Live Board</option>
-              <option value="media">Media</option>
-              <option value="blank">Blank</option>
-            </select>
-            ><button type="button" id="merge-zone" class="small-button">Merge Selected</button>
+          <div id="zone-edit-panel" class="zone-edit-panel" hidden>
+            <div class="row">
+              <strong>Edit Zones</strong>
+              <label class="checkbox-label"
+                ><input type="checkbox" id="zone-edit-safe" checked /> Safe area</label
+              >
+            </div>
+            <div id="custom-layout-tools" class="custom-layout-tools" hidden>
+              <select
+                id="custom-zone-select"
+                class="control"
+                aria-label="Selected layout zone"
+              ></select
+              ><button type="button" id="split-columns" class="small-button">
+                Split Left / Right</button
+              ><button type="button" id="split-rows" class="small-button">
+                Split Top / Bottom
+              </button>
+              <select id="custom-role-select" class="control" aria-label="Zone role">
+                <option value="program">Program</option>
+                <option value="live-board">Live Board</option>
+                <option value="media">Media</option>
+                <option value="blank">Blank</option>
+              </select>
+              <button type="button" id="merge-zone" class="small-button">Merge Selected</button>
+            </div>
+            <p class="muted detail">
+              Drag a divider or select a zone to change its role. Changes stay in draft until Done.
+            </p>
+            <div class="row gap">
+              <button type="button" id="zone-edit-cancel" class="small-button grow">Cancel</button>
+              <button type="button" id="zone-edit-done" class="small-button primary-ish grow">
+                Done
+              </button>
+            </div>
           </div>
         </section>
         <section class="settings-grid">

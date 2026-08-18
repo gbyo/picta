@@ -11,6 +11,7 @@ import {
   validateShowEventReferences,
 } from '../core/show-file.js';
 import type { MediaResource, ShowDocument } from '../core/domain.js';
+import { validateScenes } from '../core/scenes.js';
 import { openMediaSet, openTeam } from './resource-io.js';
 import type { PathStyle } from '../core/paths.js';
 
@@ -174,13 +175,8 @@ export async function openShowDocument(
     data = await hydrateLinkedResources(data, style);
     const eventReferenceError = validateShowEventReferences(data.event, data.team?.data);
     if (eventReferenceError) return { ok: false, message: eventReferenceError };
-    if (
-      data.liveBoardGroupId !== undefined &&
-      data.team?.data &&
-      !data.team.data.groups.some((group) => group.id === data.liveBoardGroupId)
-    ) {
-      return { ok: false, message: 'The show references a missing live-board group.' };
-    }
+    const sceneReferenceCheck = validateScenes(data.scenes, data.defaultSceneId, data.team?.data);
+    if (!sceneReferenceCheck.ok) return { ok: false, message: sceneReferenceCheck.message };
     data = { ...data, media: await refreshMedia(data.media) };
     const missing =
       data.media.kind === 'inline'

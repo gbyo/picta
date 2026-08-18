@@ -15,6 +15,9 @@ import {
   EVENT_CUE_END,
   EVENT_KEY,
   EVENT_LAYOUT,
+  EVENT_LAYOUT_EDIT_BEGIN,
+  EVENT_LAYOUT_EDIT_END,
+  EVENT_LAYOUT_EDIT_UPDATE,
   EVENT_PLAYBACK,
   EVENT_READY,
   EVENT_RESULT,
@@ -26,6 +29,7 @@ import {
   type BoardMessage,
   type CueMessage,
   type LayoutMessage,
+  type LayoutEditPreviewMessage,
   type PlaybackEvent,
   type ShowRequest,
   type ThemeMessage,
@@ -50,6 +54,7 @@ interface ZoneRenderer {
 
 const layoutRoot = document.getElementById('layout-root') as HTMLDivElement;
 const fullCue = document.getElementById('full-cue') as HTMLDivElement;
+const editPreview = document.getElementById('edit-preview') as HTMLDivElement;
 let zones = new Map<string, ZoneRenderer>();
 let latestToken = 0;
 let retiredTimer: number | null = null;
@@ -151,6 +156,47 @@ function setLayout(message: LayoutMessage): void {
   layoutRoot.replaceChildren(createNode(incoming));
 }
 
+function programRenderer(): ZoneRenderer | undefined {
+  return [...zones.values()].find((renderer) => renderer.role === 'program');
+}
+
+function boardRenderer(): ZoneRenderer | undefined {
+  return [...zones.values()].find((renderer) => renderer.role === 'live-board');
+}
+
+function rendererForZone(zoneId?: string): ZoneRenderer | undefined {
+  return (zoneId ? zones.get(zoneId) : undefined) ?? programRenderer();
+}
+
+function renderEditPreview(message: LayoutEditPreviewMessage): void {
+  editPreview.replaceChildren();
+  editPreview.hidden = false;
+  for (const zone of message.zones) {
+    const element = document.createElement('div');
+    element.className = `edit-zone edit-role-${zone.role}`;
+    if (zone.id === message.selectedZoneId) element.classList.add('selected');
+    element.style.left = `${(zone.x / Math.max(1, message.outputWidth)) * 100}%`;
+    element.style.top = `${(zone.y / Math.max(1, message.outputHeight)) * 100}%`;
+    element.style.width = `${(zone.width / Math.max(1, message.outputWidth)) * 100}%`;
+    element.style.height = `${(zone.height / Math.max(1, message.outputHeight)) * 100}%`;
+    const label = document.createElement('span');
+    label.className = 'edit-zone-label';
+    label.textContent = `Zone ${zone.number} · ${zone.role}\n${zone.id}\n${zone.width} × ${zone.height} · ${zone.sharePercent}%`;
+    element.append(label);
+    editPreview.append(element);
+  }
+  if (message.showSafeAreas) {
+    const safe = document.createElement('div');
+    safe.className = 'edit-safe-area';
+    editPreview.append(safe);
+  }
+}
+
+function endEditPreview(): void {
+  editPreview.hidden = true;
+  editPreview.replaceChildren();
+}
+
 function setTheme(message: ThemeMessage): void {
   const background =
     message.background === 'primary'
@@ -194,7 +240,7 @@ function sendPlayback(event: PlaybackEvent): void {
 }
 
 async function showImage(request: BackgroundMediaMessage): Promise<void> {
-  const renderer = zones.get(request.zoneId ?? 'program') ?? zones.get('program');
+  const renderer = rendererForZone(request.zoneId);
   if (!renderer) return;
   stopVideo(renderer);
   if (request.token < latestToken) return;
@@ -245,9 +291,7 @@ async function showImage(request: BackgroundMediaMessage): Promise<void> {
 }
 
 function showVideo(request: BackgroundMediaMessage, fullTarget: HTMLElement | null = null): void {
-  const renderer = fullTarget
-    ? null
-    : (zones.get(request.zoneId ?? 'program') ?? zones.get('program'));
+  const renderer = fullTarget ? null : rendererForZone(request.zoneId);
   const host = fullTarget ?? renderer?.root;
   if (!host) return;
   if (renderer) {
@@ -450,21 +494,21 @@ function renderCue(message: CueMessage): void {
   if (cue.target === 'full-board') {
     for (const renderer of zones.values()) stopVideo(renderer);
   } else {
-    const renderer = zones.get('program');
+    const renderer = programRenderer();
     if (renderer) stopVideo(renderer);
   }
   if (cue.type === 'player-card') {
     const card = makeCard(cue, message.photoSrc);
     applyCardMode(
       card,
-      cue.target === 'full-board' ? fullCue : (zones.get('program')?.root ?? layoutRoot),
+      cue.target === 'full-board' ? fullCue : (programRenderer()?.root ?? layoutRoot),
     );
     if (cue.target === 'full-board') {
       clearElementMedia(fullCue);
       fullCue.replaceChildren(card);
       fullCue.hidden = false;
     } else {
-      const renderer = zones.get('program');
+      const renderer = programRenderer();
       if (!renderer) return;
       renderer.cueCard?.remove();
       renderer.cueCard = card;
@@ -483,7 +527,7 @@ function renderCue(message: CueMessage): void {
       fullCue.replaceChildren(image);
       fullCue.hidden = false;
     } else {
-      const renderer = zones.get('program');
+      const renderer = programRenderer();
       if (!renderer) return;
       renderer.cueCard?.remove();
       renderer.cueCard = image;
@@ -544,6 +588,7 @@ function clear(): void {
     renderer.board?.replaceChildren();
   }
   endCue();
+  endEditPreview();
 }
 
 let mediaQueue: Promise<void> = Promise.resolve();
@@ -570,10 +615,17 @@ async function main(): Promise<void> {
   await listen<BackgroundMediaMessage>(EVENT_BACKGROUND, (event) => queueMedia(event.payload));
   await listen(EVENT_CLEAR, () => clear());
   await listen<LayoutMessage>(EVENT_LAYOUT, (event) => setLayout(event.payload));
+  await listen<LayoutEditPreviewMessage>(EVENT_LAYOUT_EDIT_BEGIN, (event) =>
+    renderEditPreview(event.payload),
+  );
+  await listen<LayoutEditPreviewMessage>(EVENT_LAYOUT_EDIT_UPDATE, (event) =>
+    renderEditPreview(event.payload),
+  );
+  await listen(EVENT_LAYOUT_EDIT_END, () => endEditPreview());
   await listen<ThemeMessage>(EVENT_THEME, (event) => setTheme(event.payload));
   await listen<BoardMessage>(EVENT_BOARD, (event) => {
     const data = event.payload.data ?? legacyBoard(event.payload.rows ?? []);
-    const board = zones.get('live-board');
+    const board = boardRenderer();
     if (board) renderBoard(board, data);
   });
   await listen<CueMessage>(EVENT_CUE, (event) => renderCue(event.payload));

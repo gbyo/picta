@@ -14,7 +14,8 @@ operator-triggered player cue beside or over the normal program.
 
 1. Open Picta and drop PNG, JPEG, WebP, MP4 or WebM files into **Media**.
 2. Choose a physical output in **Output**.
-3. Pick **Full**, **Half + Half**, or another layout and press **Start Output**.
+3. Choose a scene, pick **Full**, **Half + Half**, or another layout, and press
+   **Start Output**.
 
 The controller stays usable while the output window is live. Previous, Next,
 Show Now and Stop affect only the selected Picta output. The presentation window
@@ -68,11 +69,23 @@ hitting percentage, total blocks and points are derived. Recording a kill or
 attack error also records an attempt. Other sports intentionally expose useful
 starter counters rather than attempting to be complete scorebooks.
 
-Groups can be edited and reordered. **Play Group** queues each player's intro
-video when available and falls back to a player card. A missing or unsupported
+Groups can be edited and reordered. **Play in Order** queues each player's
+intro video when available and falls back to the same canonical player card
+builder used by individual and manual presentation. **Present Manually** opens
+a runtime-only lineup session: each player row can be presented once, shown
+players get a checkmark, and the operator can undo, end or replay the session.
+A manual session never dirties the show or team file. A missing or unsupported
 video never creates an output-side error.
 
-## Output layouts and cues
+## Scenes, layouts and cues
+
+Scenes are reusable show configurations. Each scene has a stable id, unique
+case-insensitive name, recursive layout, optional live-board group and
+background. New, duplicate, rename, delete and default-scene actions change the
+saved show; clicking a scene while output is live switches the running output
+without changing the `.picta` file's dirty state. Scene changes preserve a
+full-board cue, while a Program cue is ended cleanly before the new scene is
+shown.
 
 Layouts are recursive proportional split trees, not saved pixel rectangles. They
 always contain exactly one **Program** zone and at most four zones. Other roles
@@ -87,6 +100,15 @@ Built-in layouts are:
 - Board 1/3 + Program 2/3
 - Custom tiled splits with role assignment and merge controls
 
+The controller preview has an explicit **Edit Zones** mode. Normal Output
+stays compact; only the edit mode exposes split, merge, role and divider
+controls. It edits a draft session, shows exact output dimensions and a safe
+area, and sends a read-only physical-display diagnostic preview with solid
+role colors, zone number/id, dimensions and area share. **Cancel** leaves the
+scene and output untouched. **Done** commits the scene once and resumes the
+same background item with a fresh interval. The saved layout remains recursive
+and ratio-based; no pixel rectangles are persisted.
+
 For example, Half + Half resolves to 1920 × 1080 zones on a 3840 × 1080 board.
 The same saved layout scales to another resolution without gaps or overlaps.
 
@@ -99,8 +121,8 @@ Program path produces audio.
 ## Files
 
 - [`.picta` format](docs/picta-format.md): v1 remains readable forever; v2 is
-  the generalized show format with media/team resources, event state, layouts
-  and background behavior.
+  the generalized show format with media/team resources, event state, scenes,
+  layouts and background behavior.
 - [`.pictateam` format](docs/pictateam-format.md): reusable portable teams.
 - [`.pictaset` format](docs/pictaset-format.md): reusable ordered media.
 - [Layout model](docs/layouts.md): recursive zones and exact geometry rules.

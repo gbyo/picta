@@ -59,8 +59,17 @@ tests.
 
 ## Custom layouts
 
-The Output tab supports tiled editing: select a zone, split it left/right or
-top/bottom, assign a role, adjust a divider, or merge a selected leaf with its
-sibling. It does not provide free-position boxes, arbitrary overlaps, pixel
-coordinates or an unlimited compositor. The preview uses the selected display's
-actual aspect ratio and reports each zone's resolved pixel size.
+The Output tab keeps normal playback controls separate from the explicit
+**Edit Zones** mode. Inside the draft editor, select a zone, split it
+left/right or top/bottom, assign a role, adjust a divider, or merge a selected
+leaf with its sibling. The controller and physical display show the draft as a
+diagnostic preview with solid role colors, zone number/id, exact dimensions,
+area share and an optional roughly 4.5% safe-area overlay. The physical preview
+has no controls or pointer handling and normal media/cue audio is stopped while
+it is visible.
+
+Cancel discards the draft without dirtying the show. Done commits once and
+resumes the same background item. It does not provide free-position boxes,
+arbitrary overlaps, pixel coordinates or an unlimited compositor. Role routing
+uses the zone's `role`, not legacy ids such as `program` or `live-board`, so
+custom ids remain safe.
