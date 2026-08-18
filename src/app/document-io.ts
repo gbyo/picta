@@ -120,6 +120,7 @@ export async function openDocument(filePath: string, style: PathStyle): Promise<
       intervalSeconds: parsed.value.intervalSeconds,
       transition: parsed.value.transition,
       imageSizing: parsed.value.imageSizing,
+      layout: parsed.value.layout,
       roster: parsed.value.roster,
     },
     missingCount: images.filter((image) => image.missing).length,

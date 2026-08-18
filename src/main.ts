@@ -47,16 +47,22 @@ import {
 import { moveItem } from './core/playlist.js';
 import { basename, type PathStyle } from './core/paths.js';
 import {
-  adjustStat,
+  boardRows,
+  LINEUP_SIZE,
+  lineupIsFull,
+  onCourtCount,
+  setOnCourt,
+  tickIsSubstitution,
+} from './core/lineup.js';
+import {
   findPlayer,
   makePlayer,
   playerLabel,
-  recordAttack,
   removePlayer,
   resetStats,
+  setStat,
   takeoverStats,
   teamTotals,
-  undoAttack,
 } from './core/stats.js';
 import {
   UPDATE_CHECK_INTERVAL_MS,
@@ -69,6 +75,7 @@ import { applyRelink, planRelink } from './core/relink.js';
 import {
   INTERVAL_CHOICES,
   isImageSizing,
+  isLayout,
   isSupportedImagePath,
   isTransition,
   isValidInterval,
@@ -100,6 +107,9 @@ const ui = {
   intervalSelect: need<HTMLSelectElement>('interval-select'),
   transitionSelect: need<HTMLSelectElement>('transition-select'),
   sizingSelect: need<HTMLSelectElement>('sizing-select'),
+  layoutSelect: need<HTMLSelectElement>('layout-select'),
+  layoutDetail: need<HTMLParagraphElement>('layout-detail'),
+  lineupLine: need<HTMLParagraphElement>('lineup-line'),
   start: need<HTMLButtonElement>('start'),
   runningDisplay: need<HTMLSpanElement>('running-display'),
   runningDetail: need<HTMLParagraphElement>('running-detail'),
@@ -115,9 +125,11 @@ const ui = {
   updateText: need<HTMLParagraphElement>('update-text'),
   updateOpen: need<HTMLButtonElement>('update-open'),
   updateDismiss: need<HTMLButtonElement>('update-dismiss'),
-  statsDetails: need<HTMLDetailsElement>('stats-details'),
-  statsCount: need<HTMLSpanElement>('stats-count'),
-  roster: need<HTMLUListElement>('roster'),
+  roster: need<HTMLTableElement>('roster'),
+  tabImages: need<HTMLButtonElement>('tab-images'),
+  tabPlayers: need<HTMLButtonElement>('tab-players'),
+  panelImages: need<HTMLDivElement>('panel-images'),
+  panelPlayers: need<HTMLDivElement>('panel-players'),
   addPlayer: need<HTMLFormElement>('add-player'),
   newNumber: need<HTMLInputElement>('new-number'),
   newName: need<HTMLInputElement>('new-name'),
@@ -143,8 +155,11 @@ let busy = false;
 /** The version currently named in the update notice, if one is showing. */
 let noticedVersion: string | null = null;
 let updateCheckHandle: number | null = null;
-/** Which player's counters are open in the roster list. */
-let expandedPlayerId: string | null = null;
+/**
+ * Whether a starting six has ever been set. Runtime only: it decides whether
+ * ticking a player on counts as a substitution worth putting on the display.
+ */
+let lineupEstablished = false;
 
 const appWindow = getCurrentWindow();
 
@@ -277,6 +292,24 @@ function renderSettings(): void {
   ui.intervalSelect.value = String(doc.data.intervalSeconds);
   ui.transitionSelect.value = doc.data.transition;
   ui.sizingSelect.value = doc.data.imageSizing;
+  ui.layoutSelect.value = doc.data.layout;
+  renderLayoutDetail();
+}
+
+function renderLayoutDetail(): void {
+  if (doc.data.layout !== 'split') {
+    ui.layoutDetail.textContent = '';
+    return;
+  }
+  const display = findById(displays, selectedDisplayId);
+  if (!display) {
+    ui.layoutDetail.textContent = `Images left, ${LINEUP_SIZE} on-court players right.`;
+    return;
+  }
+  // Naming the halves in real pixels is the quickest way for an operator to see
+  // whether the split suits the screen they have.
+  const half = Math.floor(display.width / 2);
+  ui.layoutDetail.textContent = `Images ${half} × ${display.height}, stats ${display.width - half} × ${display.height}.`;
 }
 
 function renderMode(): void {
@@ -421,7 +454,7 @@ async function saveAs(): Promise<boolean> {
 async function newShow(): Promise<void> {
   if (!(await ensureSaved())) return;
   doc = newDocument();
-  expandedPlayerId = null;
+  lineupEstablished = false;
   markClean();
   setMessage(null);
   renderSettings();
@@ -441,16 +474,17 @@ async function openShow(path?: string): Promise<void> {
   }
 
   doc = { filePath: outcome.filePath, data: outcome.data, dirty: false };
-  expandedPlayerId = null;
+  // A file that already has six on court starts out established.
+  lineupEstablished = onCourtCount(outcome.data.roster) >= LINEUP_SIZE;
   markClean();
   rememberDirectory(directoryOf(outcome.filePath, style));
   setMessage(null);
   renderSettings();
   renderImages();
   renderRosterList();
-  // A show that carries a roster is being used for stats, so open the section
+  // A show that carries a roster is being used for stats, so start on that tab
   // rather than making the operator find it.
-  if (doc.data.roster.length > 0) ui.statsDetails.open = true;
+  if (doc.data.roster.length > 0) selectTab('players');
 }
 
 // --- displays ---------------------------------------------------------------
@@ -568,11 +602,16 @@ async function start(): Promise<void> {
     setMessage(null);
     renderMode();
 
-    const began = await playback.begin(doc.data.images, {
-      intervalSeconds: doc.data.intervalSeconds,
-      transition: doc.data.transition,
-      imageSizing: doc.data.imageSizing,
-    });
+    const began = await playback.begin(
+      doc.data.images,
+      {
+        intervalSeconds: doc.data.intervalSeconds,
+        transition: doc.data.transition,
+        imageSizing: doc.data.imageSizing,
+        layout: doc.data.layout,
+      },
+      boardRows(doc.data.roster),
+    );
     if (!began) return;
     startWatching();
   } finally {
@@ -609,38 +648,61 @@ async function resume(): Promise<void> {
   await start();
 }
 
+// --- tabs -------------------------------------------------------------------
+
+type TabName = 'images' | 'players';
+
+/**
+ * Two tabs: the show, and the players. Plain ARIA tabs — the selected state is
+ * on the buttons, so nothing has to be kept in a variable as well.
+ */
+function selectTab(name: TabName): void {
+  const pairs: [TabName, HTMLButtonElement, HTMLElement][] = [
+    ['images', ui.tabImages, ui.panelImages],
+    ['players', ui.tabPlayers, ui.panelPlayers],
+  ];
+  for (const [candidate, tab, panel] of pairs) {
+    const selected = candidate === name;
+    tab.setAttribute('aria-selected', String(selected));
+    // Only the selected tab is in the tab order; the arrow keys move between
+    // them, which is how a tab strip is expected to behave.
+    tab.tabIndex = selected ? 0 : -1;
+    panel.hidden = !selected;
+  }
+}
+
+function currentTab(): TabName {
+  return ui.tabPlayers.getAttribute('aria-selected') === 'true' ? 'players' : 'images';
+}
+
 // --- roster and stats -------------------------------------------------------
 
 function renderRosterList(): void {
   const roster = doc.data.roster;
+  const count = onCourtCount(roster);
 
-  ui.statsCount.textContent =
-    roster.length === 0 ? 'None' : `${roster.length} player${roster.length === 1 ? '' : 's'}`;
+  // Remember once six have been on at the same time; from then on ticking
+  // someone on is a substitution rather than setup.
+  if (count >= LINEUP_SIZE) lineupEstablished = true;
+
+  ui.lineupLine.textContent =
+    roster.length === 0
+      ? 'No players yet. Add one below.'
+      : count === 0
+        ? `No lineup set. Tick ${LINEUP_SIZE} players On.`
+        : `${count} of ${LINEUP_SIZE} on court${lineupIsFull(roster) ? ' — full' : ''}`;
 
   renderRoster(
     ui.roster,
     roster,
-    { expandedId: expandedPlayerId, canTakeover: playback.active },
+    { canTakeover: playback.active },
     {
-      onExpand: (id) => {
-        expandedPlayerId = id;
-        renderRosterList();
-      },
-      onAdjust: (id, key, delta) => changeRoster(adjustStat(doc.data.roster, id, key, delta)),
-      onAttack: (id, outcome, undo) =>
-        changeRoster(
-          undo
-            ? undoAttack(doc.data.roster, id, outcome)
-            : recordAttack(doc.data.roster, id, outcome),
-        ),
-      onRemove: (id) => {
-        if (expandedPlayerId === id) expandedPlayerId = null;
-        changeRoster(removePlayer(doc.data.roster, id));
-      },
+      onSetStat: (id, key, value) => changeRoster(setStat(doc.data.roster, id, key, value)),
+      onRemove: (id) => changeRoster(removePlayer(doc.data.roster, id)),
       onEdit: (id, field, value) => {
         const trimmed = value.trim();
         // A player with no name cannot be shown on a screen, so an empty name is
-        // simply not accepted; the list redraws with the previous value.
+        // not accepted; the table redraws with the previous value.
         if (field === 'name' && trimmed === '') {
           renderRosterList();
           return;
@@ -652,6 +714,20 @@ function renderRosterList(): void {
         );
       },
       onTakeover: (id) => startTakeover(id),
+      onSetOnCourt: (id, on) => {
+        const result = setOnCourt(doc.data.roster, id, on);
+        if (!result.changed) {
+          setMessage(`${LINEUP_SIZE} players are already on court. Tick one off first.`);
+          renderRosterList();
+          return;
+        }
+        setMessage(null);
+        changeRoster(result.roster);
+        // A tick-on after the starting six is a substitution: put them up.
+        if (on && playback.active && tickIsSubstitution(lineupEstablished)) {
+          startTakeover(id);
+        }
+      },
     },
   );
 
@@ -659,7 +735,7 @@ function renderRosterList(): void {
   ui.teamTotals.textContent =
     roster.length === 0
       ? ''
-      : `Team: ${totals.kills} K · ${totals.assists} A · ${totals.digs} D · ${totals.aces} SA`;
+      : `Team: ${totals.kills} K · ${totals.assists} A · ${totals.digs} D · ${totals.blocks} B`;
   ui.resetStats.hidden = roster.length === 0;
 }
 
@@ -668,6 +744,8 @@ function changeRoster(roster: DocumentState['data']['roster']): void {
   doc.data.roster = roster;
   markDirty();
   renderRosterList();
+  // Keep the panel on the output display in step with the counters.
+  playback.setBoard(boardRows(doc.data.roster));
 }
 
 /**
@@ -818,6 +896,7 @@ function wire(): void {
     selectedDisplayId = ui.displaySelect.value === '' ? null : ui.displaySelect.value;
     const display = findById(displays, selectedDisplayId);
     ui.displayDetail.textContent = display ? describeDisplay(display) : '';
+    renderLayoutDetail();
     if (display) {
       // Selecting a display is a machine preference, not a document change.
       prefs = { ...prefs, displayHint: hintFor(display) };
@@ -849,6 +928,18 @@ function wire(): void {
     markDirty();
   });
 
+  ui.layoutSelect.addEventListener('change', () => {
+    const value = ui.layoutSelect.value;
+    if (!isLayout(value)) return;
+    doc.data.layout = value;
+    markDirty();
+    renderLayoutDetail();
+    // Takes effect immediately on a running show; there is no reason to make
+    // the operator stop and start to see it.
+    playback.setLayout(value);
+    if (value === 'split') playback.setBoard(boardRows(doc.data.roster));
+  });
+
   ui.sizingSelect.addEventListener('change', () => {
     const value = ui.sizingSelect.value;
     if (!isImageSizing(value)) return;
@@ -867,6 +958,23 @@ function wire(): void {
       setMessage('Could not open the browser. Visit github.com/gbyo/picta/releases.');
     });
   });
+
+  for (const [name, tab] of [
+    ['images', ui.tabImages],
+    ['players', ui.tabPlayers],
+  ] as [TabName, HTMLButtonElement][]) {
+    tab.addEventListener('click', () => selectTab(name));
+  }
+
+  for (const tab of [ui.tabImages, ui.tabPlayers]) {
+    tab.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      const next = currentTab() === 'images' ? 'players' : 'images';
+      selectTab(next);
+      (next === 'images' ? ui.tabImages : ui.tabPlayers).focus();
+    });
+  }
 
   ui.addPlayer.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1022,6 +1130,7 @@ async function main(): Promise<void> {
   displays = await ipc.listDisplays().catch(() => [] as DisplayInfo[]);
   await restoreWindow(displays);
 
+  selectTab('images');
   renderSettings();
   renderDisplays();
   renderImages();

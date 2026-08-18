@@ -10,15 +10,17 @@
 
 import { emit, listen } from '@tauri-apps/api/event';
 import {
+  EVENT_BOARD,
   EVENT_CLEAR,
   EVENT_KEY,
+  EVENT_LAYOUT,
   EVENT_READY,
   EVENT_RESULT,
   EVENT_SHOW,
   EVENT_TAKEOVER,
   EVENT_TAKEOVER_END,
 } from './app/events.js';
-import type { ShowRequest, TakeoverRequest } from './app/events.js';
+import type { BoardMessage, LayoutMessage, ShowRequest, TakeoverRequest } from './app/events.js';
 
 type Layer = 'a' | 'b';
 
@@ -34,6 +36,8 @@ const takeover = {
   name: document.getElementById('takeover-name') as HTMLParagraphElement,
   stats: document.getElementById('takeover-stats') as HTMLUListElement,
 };
+
+const board = document.getElementById('board') as HTMLTableElement;
 
 let visible: Layer = 'a';
 /** Highest token seen. Anything older is a superseded request and is dropped. */
@@ -107,6 +111,85 @@ async function show(request: ShowRequest): Promise<void> {
   }, duration + 60);
 
   await emit(EVENT_RESULT, { token, ok: true });
+}
+
+/**
+ * Switch between the full-screen and split layouts.
+ *
+ * Only a class on `<body>`; the image layers are positioned inside their pane
+ * either way, so nothing about decoding or the crossfade changes.
+ */
+function setLayout(message: LayoutMessage): void {
+  document.body.classList.toggle('split', message.layout === 'split');
+}
+
+/**
+ * Redraw the on-court board.
+ *
+ * A full redraw of six rows costs nothing and cannot drift out of step with the
+ * roster, which a partial update could.
+ */
+function setBoard(message: BoardMessage): void {
+  board.replaceChildren();
+
+  if (message.rows.length === 0) {
+    // Something calm, never an error: this screen only ever carries content.
+    const body = document.createElement('tbody');
+    const row = document.createElement('tr');
+    row.className = 'board-empty-row';
+    const cell = document.createElement('td');
+    cell.className = 'board-empty';
+    cell.colSpan = 6;
+    cell.textContent = 'No lineup set';
+    row.append(cell);
+    body.append(row);
+    board.append(body);
+    return;
+  }
+
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  // The two identity columns need no visible heading; the four figures do, and
+  // the full word rides along in a title for anyone reading it up close.
+  const headings: [string, string, string][] = [
+    ['number', '', ''],
+    ['name', '', ''],
+    ['figure', 'K', 'Kills'],
+    ['figure', 'A', 'Assists'],
+    ['figure', 'D', 'Digs'],
+    ['figure', 'B', 'Blocks'],
+  ];
+  for (const [kind, label, full] of headings) {
+    const cell = document.createElement('th');
+    cell.scope = 'col';
+    cell.className = `board-head ${kind}`;
+    cell.textContent = label;
+    if (full !== '') cell.title = full;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  board.append(head);
+
+  const body = document.createElement('tbody');
+  for (const row of message.rows) {
+    const tr = document.createElement('tr');
+    const cells: [string, string][] = [
+      ['number', row.number],
+      ['name', row.name],
+      ['figure', row.kills],
+      ['figure', row.assists],
+      ['figure', row.digs],
+      ['figure', row.blocks],
+    ];
+    for (const [kind, text] of cells) {
+      const td = document.createElement('td');
+      td.className = `board-cell ${kind}`;
+      td.textContent = text;
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  board.append(body);
 }
 
 /**
@@ -222,6 +305,8 @@ async function main(): Promise<void> {
     showQueue = showQueue.then(() => show(event.payload)).catch(() => undefined);
   });
   await listen(EVENT_CLEAR, () => clear());
+  await listen<LayoutMessage>(EVENT_LAYOUT, (event) => setLayout(event.payload));
+  await listen<BoardMessage>(EVENT_BOARD, (event) => setBoard(event.payload));
   await listen<TakeoverRequest>(EVENT_TAKEOVER, (event) => showTakeover(event.payload));
   await listen(EVENT_TAKEOVER_END, () => endTakeover());
   // Tells the controller the listeners are attached and it is safe to send the

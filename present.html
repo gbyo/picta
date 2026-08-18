@@ -6,9 +6,25 @@
     <link rel="stylesheet" href="/src/present.css" />
   </head>
   <body>
-    <!-- Two layers, one visible at a time. Nothing else ever renders here. -->
-    <img id="layer-a" class="layer visible" alt="" />
-    <img id="layer-b" class="layer" alt="" />
+    <!--
+      Two panes. In `full` layout the image pane is the whole screen and the
+      board is not rendered at all; in `split` they take half each, which is what
+      an ultrawide screen at a match is for. One window either way: two windows
+      would be two things to place correctly on the right monitor.
+    -->
+    <div class="panes">
+      <div class="pane pane-images">
+        <!-- Two layers, one visible at a time. Nothing else renders here. -->
+        <img id="layer-a" class="layer visible" alt="" />
+        <img id="layer-b" class="layer" alt="" />
+      </div>
+
+      <aside class="pane pane-board" id="board-pane">
+        <p class="board-title">On Court</p>
+        <!-- A real table: proper column headers, and free row striping. -->
+        <table class="board" id="board"></table>
+      </aside>
+    </div>
 
     <!--
       The player takeover card. Sweeps over the images and away again; the image

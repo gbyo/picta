@@ -10,133 +10,163 @@
     <main class="app">
       <h1 class="wordmark">Picta</h1>
 
-      <!-- Idle: build the show -------------------------------------------- -->
-      <div id="setup">
-        <section class="block" aria-labelledby="images-heading">
-          <h2 class="block-title" id="images-heading">Images</h2>
-
-          <button type="button" id="dropzone" class="dropzone">
-            <span class="dropzone-line">Drop images here</span>
-            <span class="dropzone-sub">or <span class="link-ish">Choose Images</span></span>
-          </button>
-
-          <ul id="thumbs" class="thumbs" aria-label="Images, in playback order"></ul>
-
-          <div class="row">
-            <p id="image-count" class="muted" aria-live="polite">No images</p>
-            <button type="button" id="clear-images" class="text-button" hidden>Clear</button>
-          </div>
-
-          <div id="missing-notice" class="notice" role="status" hidden>
-            <p id="missing-text"></p>
-            <div class="notice-actions">
-              <button type="button" id="locate-images" class="small-button">Locate Images</button>
-              <button type="button" id="remove-missing" class="small-button">Remove Missing</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="block" aria-labelledby="display-heading">
-          <h2 class="block-title" id="display-heading">Display</h2>
-          <label class="visually-hidden" for="display-select">Output display</label>
-          <select id="display-select" class="control"></select>
-          <p id="display-detail" class="muted detail"></p>
-          <button type="button" id="identify" class="small-button">Identify Displays</button>
-        </section>
-
-        <section class="block" aria-labelledby="interval-heading">
-          <h2 class="block-title" id="interval-heading">Change every</h2>
-          <label class="visually-hidden" for="interval-select">Seconds between images</label>
-          <select id="interval-select" class="control"></select>
-        </section>
-
-        <section class="block" aria-labelledby="transition-heading">
-          <h2 class="block-title" id="transition-heading">Transition</h2>
-          <label class="visually-hidden" for="transition-select">Transition style</label>
-          <select id="transition-select" class="control">
-            <option value="crossfade">Crossfade</option>
-            <option value="none">None</option>
-          </select>
-        </section>
-
-        <section class="block" aria-labelledby="sizing-heading">
-          <h2 class="block-title" id="sizing-heading">Image sizing</h2>
-          <label class="visually-hidden" for="sizing-select">How images fill the display</label>
-          <select id="sizing-select" class="control">
-            <option value="fit">Fit</option>
-            <option value="fill">Fill</option>
-          </select>
-        </section>
-
-        <button type="button" id="start" class="primary">Start</button>
+      <div class="tabs" role="tablist" aria-label="Picta sections">
+        <button
+          type="button"
+          class="tab"
+          id="tab-images"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panel-images"
+        >
+          Images
+        </button>
+        <button
+          type="button"
+          class="tab"
+          id="tab-players"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panel-players"
+          tabindex="-1"
+        >
+          Players
+        </button>
       </div>
 
-      <!-- Running: control the show ---------------------------------------- -->
-      <div id="running" hidden>
-        <p class="running-line">
-          <span class="dot" aria-hidden="true"></span>
-          <span id="running-display">Running</span>
-        </p>
-        <p id="running-detail" class="muted detail"></p>
-        <p id="running-position" class="position" aria-live="polite">Image 1 of 1</p>
+      <div id="panel-images" role="tabpanel" aria-labelledby="tab-images">
+        <!-- Idle: build the show -------------------------------------------- -->
+        <div id="setup">
+          <section class="block" aria-labelledby="images-heading">
+            <h2 class="block-title" id="images-heading">Images</h2>
 
-        <div class="row gap">
-          <button type="button" id="previous" class="small-button grow">Previous</button>
-          <button type="button" id="next" class="small-button grow">Next</button>
+            <button type="button" id="dropzone" class="dropzone">
+              <span class="dropzone-line">Drop images here</span>
+              <span class="dropzone-sub">or <span class="link-ish">Choose Images</span></span>
+            </button>
+
+            <ul id="thumbs" class="thumbs" aria-label="Images, in playback order"></ul>
+
+            <div class="row">
+              <p id="image-count" class="muted" aria-live="polite">No images</p>
+              <button type="button" id="clear-images" class="text-button" hidden>Clear</button>
+            </div>
+
+            <div id="missing-notice" class="notice" role="status" hidden>
+              <p id="missing-text"></p>
+              <div class="notice-actions">
+                <button type="button" id="locate-images" class="small-button">Locate Images</button>
+                <button type="button" id="remove-missing" class="small-button">
+                  Remove Missing
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="block" aria-labelledby="display-heading">
+            <h2 class="block-title" id="display-heading">Display</h2>
+            <label class="visually-hidden" for="display-select">Output display</label>
+            <select id="display-select" class="control"></select>
+            <p id="display-detail" class="muted detail"></p>
+            <button type="button" id="identify" class="small-button">Identify Displays</button>
+          </section>
+
+          <section class="block" aria-labelledby="interval-heading">
+            <h2 class="block-title" id="interval-heading">Change every</h2>
+            <label class="visually-hidden" for="interval-select">Seconds between images</label>
+            <select id="interval-select" class="control"></select>
+          </section>
+
+          <section class="block" aria-labelledby="transition-heading">
+            <h2 class="block-title" id="transition-heading">Transition</h2>
+            <label class="visually-hidden" for="transition-select">Transition style</label>
+            <select id="transition-select" class="control">
+              <option value="crossfade">Crossfade</option>
+              <option value="none">None</option>
+            </select>
+          </section>
+
+          <section class="block" aria-labelledby="layout-heading">
+            <h2 class="block-title" id="layout-heading">Screen Layout</h2>
+            <label class="visually-hidden" for="layout-select">Screen layout</label>
+            <select id="layout-select" class="control">
+              <option value="full">Full screen — images only</option>
+              <option value="split">Split — images left, on-court stats right</option>
+            </select>
+            <p id="layout-detail" class="muted detail"></p>
+          </section>
+
+          <section class="block" aria-labelledby="sizing-heading">
+            <h2 class="block-title" id="sizing-heading">Image sizing</h2>
+            <label class="visually-hidden" for="sizing-select">How images fill the display</label>
+            <select id="sizing-select" class="control">
+              <option value="fit">Fit</option>
+              <option value="fill">Fill</option>
+            </select>
+          </section>
+
+          <button type="button" id="start" class="primary">Start</button>
         </div>
 
-        <p id="takeover-status" class="takeover-status" role="status" hidden>
-          <span id="takeover-who"></span>
-          <button type="button" id="takeover-return" class="small-button">Back to Images</button>
-        </p>
+        <!-- Running: control the show ---------------------------------------- -->
+        <div id="running" hidden>
+          <p class="running-line">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="running-display">Running</span>
+          </p>
+          <p id="running-detail" class="muted detail"></p>
+          <p id="running-position" class="position" aria-live="polite">Image 1 of 1</p>
 
-        <button type="button" id="stop" class="primary">Stop</button>
+          <div class="row gap">
+            <button type="button" id="previous" class="small-button grow">Previous</button>
+            <button type="button" id="next" class="small-button grow">Next</button>
+          </div>
+
+          <p id="takeover-status" class="takeover-status" role="status" hidden>
+            <span id="takeover-who"></span>
+            <button type="button" id="takeover-return" class="small-button">Back to Images</button>
+          </p>
+
+          <button type="button" id="stop" class="primary">Stop</button>
+        </div>
       </div>
 
-      <!--
-        Volleyball stats. Collapsed and empty by default: an ordinary image
-        show never has to look at this, which is what keeps the add-images →
-        choose-display → Start path unchanged.
-      -->
-      <section class="block" aria-labelledby="stats-heading">
-        <details id="stats-details" class="stats-details">
-          <summary id="stats-heading">
-            <span class="block-title">Volleyball Stats</span>
-            <span class="stats-count" id="stats-count"></span>
-          </summary>
+      <div id="panel-players" role="tabpanel" aria-labelledby="tab-players" hidden>
+        <p id="lineup-line" class="muted detail" aria-live="polite"></p>
 
-          <ul id="roster" class="roster"></ul>
+        <div class="table-scroll">
+          <table id="roster" class="roster"></table>
+        </div>
 
-          <form id="add-player" class="add-player">
-            <label class="visually-hidden" for="new-number">Jersey number</label>
-            <input
-              id="new-number"
-              class="field-number"
-              type="text"
-              placeholder="#"
-              autocomplete="off"
-              maxlength="3"
-            />
-            <label class="visually-hidden" for="new-name">Player name</label>
-            <input id="new-name" type="text" placeholder="Player name" autocomplete="off" />
-            <label class="visually-hidden" for="new-position">Position</label>
-            <input
-              id="new-position"
-              class="field-position"
-              type="text"
-              placeholder="Pos"
-              autocomplete="off"
-              maxlength="4"
-            />
-            <button type="submit" class="small-button">Add</button>
-          </form>
+        <form id="add-player" class="add-player">
+          <label class="visually-hidden" for="new-number">Jersey number</label>
+          <input
+            id="new-number"
+            class="field-number"
+            type="text"
+            placeholder="#"
+            autocomplete="off"
+            maxlength="3"
+          />
+          <label class="visually-hidden" for="new-name">Player name</label>
+          <input id="new-name" type="text" placeholder="Player name" autocomplete="off" />
+          <label class="visually-hidden" for="new-position">Position</label>
+          <input
+            id="new-position"
+            class="field-position"
+            type="text"
+            placeholder="Pos"
+            autocomplete="off"
+            maxlength="4"
+          />
+          <button type="submit" class="small-button">Add</button>
+        </form>
 
-          <div class="roster-footer">
-            <p id="team-totals"></p>
-            <button type="button" id="reset-stats" class="small-button">Reset Stats</button>
-          </div>
-        </details>
-      </section>
+        <div class="roster-footer">
+          <p id="team-totals"></p>
+          <button type="button" id="reset-stats" class="small-button">Reset Stats</button>
+        </div>
+      </div>
 
       <p id="message" class="message" role="status" hidden></p>
       <button type="button" id="resume" class="small-button" hidden>Resume</button>

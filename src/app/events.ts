@@ -1,6 +1,7 @@
 /** Event names exchanged between the controller and the presentation window. */
 
-import type { ImageSizing, Transition } from '../core/types.js';
+import type { BoardRow } from '../core/lineup.js';
+import type { ImageSizing, Layout, Transition } from '../core/types.js';
 
 export const EVENT_SHOW = 'picta://present-show';
 export const EVENT_CLEAR = 'picta://present-clear';
@@ -10,6 +11,8 @@ export const EVENT_KEY = 'picta://present-key';
 export const EVENT_MENU = 'picta://menu';
 export const EVENT_TAKEOVER = 'picta://present-takeover';
 export const EVENT_TAKEOVER_END = 'picta://present-takeover-end';
+export const EVENT_LAYOUT = 'picta://present-layout';
+export const EVENT_BOARD = 'picta://present-board';
 
 export interface ShowRequest {
   token: number;
@@ -26,6 +29,19 @@ export interface ShowResult {
 
 export interface KeyMessage {
   key: string;
+}
+
+/** Which way the output display is divided. */
+export interface LayoutMessage {
+  layout: Layout;
+}
+
+/**
+ * The on-court board. Rows arrive pre-formatted for the same reason takeover
+ * stats do: one implementation of the box-score rules, in the controller.
+ */
+export interface BoardMessage {
+  rows: BoardRow[];
 }
 
 /**

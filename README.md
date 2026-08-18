@@ -233,6 +233,49 @@ The roster is saved inside the `.picta` file, so a team's roster and a match's
 stats travel with the show. A `.picta` file with no roster is byte-for-byte what
 it was before this feature existed.
 
+## Split screen for an ultrawide display
+
+**Screen Layout → Split** divides the output display in half: the image rotation
+on the left, a live on-court panel on the right. On a 3840 × 1080 ultrawide that
+is two 1920 × 1080 halves, and Picta tells you the exact pixel split under the
+selector once you have chosen a display.
+
+```
+┌──────────────────────┬──────────────────────────────────┐
+│                      │  ON COURT                        │
+│                      │              K     A     D     B │
+│      SPONSOR         │   7  Avery Chen   12   4    6  1.5│
+│       IMAGE          │   3  Jordan Ruiz   0  21    8  1.5│
+│    (rotating)        │  00  Sam Okonkwo   7   0    1    5│
+│                      │  12  Riley Novak   9   2   11    0│
+│                      │   5  Priya Raman   3   1   14  2.5│
+│                      │  21  Dana Whitfield 6  0    4    3│
+└──────────────────────┴──────────────────────────────────┘
+```
+
+The panel lists the six players currently on the court with kills, assists, digs
+and blocks, jersey number to the left of the name. It updates as you tap
+counters — there is nothing to refresh.
+
+It is one window, not two, so there is still only one thing to place correctly on
+the right monitor. Switching layout takes effect on a running show immediately.
+
+### Who is on the court
+
+Each player row has an **On** / **Off** button. Mark six and the lineup is full.
+
+Once it is full, putting someone else on has to be a substitution: Picta asks who
+comes off rather than guessing, because a wrong guess corrupts the panel the
+bench is reading. Open the incoming player and pick the outgoing jersey number.
+
+**A substitution puts the incoming player's card on the display automatically.**
+Filling the starting six from empty does not — otherwise entering a lineup before
+the match would fire six cards one after another.
+
+In split mode the card covers the whole display, ads and panel both, then sweeps
+away and everything returns. On an ultrawide it lays itself out across the width
+rather than leaving two thirds of the screen empty.
+
 ## Update notifications
 
 Picta tells you when a newer version has been released. It does **not** install
@@ -310,6 +353,8 @@ if you only want that file.
 - **Volleyball only, for stats.** The stat set is the volleyball box score. There
   is no other sport, and no scoreboard, clock or set score — Picta is not trying
   to replace your stats package.
+- **Split is two halves, always.** No adjustable divider, no stats-on-the-left,
+  no third pane. Six on-court players, four figures each.
 - **Takeover needs a running show.** The card sweeps over the images in the
   presentation window, so there has to be one. Start the show first.
 - **Linux window placement depends on the desktop.** X11 sessions behave as

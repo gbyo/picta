@@ -29,8 +29,47 @@ body {
     sans-serif;
 }
 
+.panes {
+  display: flex;
+  height: 100%;
+}
+
+.pane {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+}
+
+.pane-images {
+  flex: 1 1 auto;
+}
+
+/* Not rendered at all in `full` layout, so an ordinary image show is exactly
+   what it was before split existed. */
+.pane-board {
+  display: none;
+}
+
+body.split .pane-images,
+body.split .pane-board {
+  flex: 0 0 50%;
+}
+
+body.split .pane-board {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4vh 3.2vw;
+  box-sizing: border-box;
+  color: #fff;
+  background: #0b1220;
+  /* A hairline seam so the two halves read as deliberate rather than as one
+     image that failed to fill the screen. */
+  border-left: 2px solid rgba(124, 196, 255, 0.28);
+}
+
 .layer {
-  position: fixed;
+  position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -254,5 +293,201 @@ body {
   .takeover.sweep-in .takeover-jersey,
   .takeover.sweep-in .takeover-body > * {
     animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The always-on on-court board (split layout).
+ *
+ * Six rows of four figures, read from across a gym. Sizes are relative to the
+ * *pane*, not the window: on a 3840×1080 ultrawide each half is 1920×1080, so
+ * `vh` is the honest unit here — `vmin` would be governed by the full-window
+ * height and `vw` by the full 3840 width.
+ * ------------------------------------------------------------------------- */
+
+.board-title {
+  margin: 0 0 2.2vh;
+  font-size: 3vh;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #7cc4ff;
+}
+
+.board {
+  width: 100%;
+  border-collapse: collapse;
+  /* Fixed, with explicit column widths: the figures must not shift sideways as
+     counts grow from one digit to two, because this is a board people glance at
+     rather than read. A very long name gives way instead. */
+  table-layout: fixed;
+}
+
+/* K A D B. Large and bright: these label the only numbers on the screen, and a
+   whispered header on a board read from across a gym is a header nobody reads. */
+.board-head {
+  padding: 0 0 1.2vh;
+  font-size: 4.8vh;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #7cc4ff;
+  border-bottom: 3px solid rgba(124, 196, 255, 0.4);
+}
+
+.board-head.figure,
+.board-cell.figure {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-head.number,
+.board-head.name {
+  border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Striping instead of rules: on a pane this wide a banded row carries the eye
+   from a name across to its figures far better than a hairline does. */
+.board tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* The placeholder is one line of text, not a row of figures, so it takes no
+   band. */
+.board tbody tr.board-empty-row {
+  background: none;
+}
+
+.board-cell {
+  padding: 1.5vh 0;
+  font-size: 5.4vh;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/* Breathing room at the band edges, and rounded ends so the stripe reads as a
+   row rather than as a full-bleed block. */
+.board-cell.number,
+.board-head.number {
+  width: 9%;
+}
+
+.board-cell.name,
+.board-head.name {
+  width: 43%;
+}
+
+.board-cell.figure,
+.board-head.figure {
+  width: 12%;
+}
+
+.board-cell.number {
+  padding-left: 1.6vw;
+  padding-right: 1.2vw;
+  border-radius: 0.8vh 0 0 0.8vh;
+  color: #7cc4ff;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.board-head.number {
+  padding-left: 1.6vw;
+  padding-right: 1.2vw;
+}
+
+.board-cell.name {
+  padding-right: 2vw;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-cell.figure {
+  padding-left: 1.2vw;
+  font-weight: 700;
+}
+
+.board-head.figure {
+  padding-left: 1.2vw;
+}
+
+.board-cell.figure:last-child,
+.board-head.figure:last-child {
+  padding-right: 1.6vw;
+}
+
+.board-cell.figure:last-child {
+  border-radius: 0 0.8vh 0.8vh 0;
+}
+
+/* Shown instead of the rows until a lineup has been chosen. Never an error,
+   never a file path — the output display only ever carries content. */
+.board-empty {
+  padding: 2vh 0;
+  font-size: 3vh;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ---------------------------------------------------------------------------
+ * The takeover card on a very wide screen.
+ *
+ * Card sizes are driven by `vmin`, which on a 3840×1080 ultrawide is governed by
+ * the 1080 height — so the default stacked layout occupies only the left third
+ * and leaves most of the panel empty. Past 2:1 the card lays out across the
+ * width instead: jersey, then name, then the figures in their own column.
+ * ------------------------------------------------------------------------- */
+
+@media (min-aspect-ratio: 2 / 1) {
+  .takeover-panel {
+    gap: 4vw;
+    padding: 0 5vw;
+  }
+
+  .takeover-jersey {
+    font-size: 52vmin;
+  }
+
+  .takeover-body {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'position stats'
+      'name     stats'
+      'rule     stats';
+    align-items: center;
+    column-gap: 5vw;
+  }
+
+  .takeover-position {
+    grid-area: position;
+    align-self: end;
+  }
+
+  .takeover-name {
+    grid-area: name;
+    font-size: 13vmin;
+  }
+
+  .takeover-rule {
+    grid-area: rule;
+    align-self: start;
+    margin: 2vmin 0 0;
+  }
+
+  .takeover-stats {
+    grid-area: stats;
+    /* Room to breathe here, unlike the stacked layout, so the figures spread. */
+    justify-content: space-between;
+    gap: 3vmin 4vmin;
+  }
+
+  .takeover-stats .value {
+    font-size: 11vmin;
+  }
+
+  .takeover-stats .label {
+    font-size: 3vmin;
   }
 }

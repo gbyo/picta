@@ -12,6 +12,7 @@ const valid = {
   intervalSeconds: 10,
   transition: 'crossfade',
   imageSizing: 'fit',
+  layout: 'full',
 };
 
 function parse(value: unknown) {
@@ -145,6 +146,7 @@ describe('serialisation', () => {
     intervalSeconds: 15,
     transition: 'none' as const,
     imageSizing: 'fill' as const,
+    layout: 'full' as const,
   };
 
   it('writes relative paths where possible and absolute otherwise', () => {
@@ -156,6 +158,7 @@ describe('serialisation', () => {
       intervalSeconds: 15,
       transition: 'none',
       imageSizing: 'fill',
+      layout: 'full',
     });
   });
 
@@ -173,6 +176,7 @@ describe('serialisation', () => {
         intervalSeconds: 30,
         transition: 'crossfade',
         imageSizing: 'fit',
+        layout: 'full',
       },
       file,
       'posix',
@@ -194,6 +198,7 @@ describe('serialisation', () => {
         intervalSeconds: 10,
         transition: 'crossfade',
         imageSizing: 'fit',
+        layout: 'full',
       },
       'E:\\Basketball\\Basketball.picta',
       'win32',
@@ -215,6 +220,7 @@ describe('the optional roster', () => {
         intervalSeconds: 10,
         transition: 'crossfade',
         imageSizing: 'fit',
+        layout: 'full',
         roster: [],
       },
       '/s/S.picta',
@@ -243,7 +249,7 @@ describe('the optional roster', () => {
     expect(result.value.roster[0]?.stats.kills).toBe(12);
     expect(result.value.roster[0]?.stats.digs).toBe(6);
     // Omitted counters read as zero, not as missing.
-    expect(result.value.roster[0]?.stats.aces).toBe(0);
+    expect(result.value.roster[0]?.stats.blocks).toBe(0);
     expect(result.value.roster[1]?.stats.kills).toBe(0);
   });
 
@@ -301,23 +307,15 @@ describe('the optional roster', () => {
         intervalSeconds: 10,
         transition: 'crossfade',
         imageSizing: 'fit',
+        layout: 'full',
         roster: [
           {
             id: 'runtime-only',
             number: '7',
             name: 'Avery Chen',
             position: 'OH',
-            stats: {
-              kills: 12,
-              attackErrors: 2,
-              attempts: 30,
-              assists: 0,
-              aces: 1,
-              serviceErrors: 0,
-              digs: 6,
-              blockSolos: 0,
-              blockAssists: 3,
-            },
+            onCourt: false,
+            stats: { kills: 12, assists: 0, digs: 6, blocks: 3 },
           },
         ],
       },
@@ -325,12 +323,12 @@ describe('the optional roster', () => {
       'posix',
     );
     const written = JSON.parse(text);
-    // Ids are runtime-only and zero counters are left out.
+    // Ids are runtime-only; zero counters and bench players are left out.
     expect(written.roster[0]).toEqual({
       number: '7',
       name: 'Avery Chen',
       position: 'OH',
-      stats: { kills: 12, attackErrors: 2, attempts: 30, aces: 1, digs: 6, blockAssists: 3 },
+      stats: { kills: 12, digs: 6, blocks: 3 },
     });
 
     const back = parsePicta(text);
@@ -340,6 +338,6 @@ describe('the optional roster', () => {
     expect(player.name).toBe('Avery Chen');
     expect(player.stats.kills).toBe(12);
     expect(player.stats.assists).toBe(0);
-    expect(player.stats.blockAssists).toBe(3);
+    expect(player.stats.blocks).toBe(3);
   });
 });

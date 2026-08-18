@@ -18,8 +18,10 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import {
+  EVENT_BOARD,
   EVENT_CLEAR,
   EVENT_KEY,
+  EVENT_LAYOUT,
   EVENT_READY,
   EVENT_RESULT,
   EVENT_SHOW,
@@ -27,10 +29,17 @@ import {
   EVENT_TAKEOVER_END,
 } from './events.js';
 import type { KeyMessage, ShowResult, TakeoverRequest } from './events.js';
+import type { BoardRow } from '../core/lineup.js';
 import { DoubleBuffer } from '../core/transition.js';
 import { AdvanceTimer, realTimerHost } from '../core/scheduler.js';
 import { firstPlayable, playablePosition, stepIndex } from '../core/playlist.js';
-import { CROSSFADE_MS, type ImageItem, type ImageSizing, type Transition } from '../core/types.js';
+import {
+  CROSSFADE_MS,
+  type ImageItem,
+  type ImageSizing,
+  type Layout,
+  type Transition,
+} from '../core/types.js';
 
 const PRESENTATION_LABEL = 'presentation';
 /** How long to wait for the presentation webview to attach its listeners. */
@@ -42,6 +51,7 @@ export interface PlaybackSettings {
   intervalSeconds: number;
   transition: Transition;
   imageSizing: ImageSizing;
+  layout: Layout;
 }
 
 export type StopReason = 'user' | 'exhausted' | 'display-lost';
@@ -63,6 +73,7 @@ export class Playback {
     intervalSeconds: 10,
     transition: 'crossfade',
     imageSizing: 'fit',
+    layout: 'full',
   };
   /** Paths that failed to decode during this run. */
   #skip = new Set<string>();
@@ -127,7 +138,11 @@ export class Playback {
    * Begin playback. The presentation window must already be open and confirmed
    * to be on the chosen display.
    */
-  async begin(images: readonly ImageItem[], settings: PlaybackSettings): Promise<boolean> {
+  async begin(
+    images: readonly ImageItem[],
+    settings: PlaybackSettings,
+    board: readonly BoardRow[] = [],
+  ): Promise<boolean> {
     this.#images = images;
     this.#settings = settings;
     this.#skip.clear();
@@ -137,6 +152,11 @@ export class Playback {
     this.#active = true;
 
     await this.#waitForPresentation();
+
+    // Layout and board before the first image, so a split screen is already
+    // divided when something appears in it rather than reflowing afterwards.
+    this.setLayout(settings.layout);
+    this.setBoard(board);
 
     const start = firstPlayable(this.#images, 0, this.#skip);
     if (start === null) {
@@ -183,6 +203,30 @@ export class Playback {
       this.#takeover = false;
       this.#handlers.onTakeover(false);
     }
+  }
+
+  /** Divide the output display, or stop dividing it. */
+  setLayout(layout: Layout): void {
+    this.#settings = { ...this.#settings, layout };
+    if (!this.#active) return;
+    void emitTo(PRESENTATION_LABEL, EVENT_LAYOUT, { layout }).catch(() => undefined);
+  }
+
+  /**
+   * Push the on-court board.
+   *
+   * Called on every counter change while a show is running. The payload is six
+   * short rows, so there is no reason to be clever about batching; a failure is
+   * ignored because a stale board is much better than a stopped show.
+   */
+  setBoard(rows: readonly BoardRow[]): void {
+    if (!this.#active) return;
+    if (this.#settings.layout !== 'split') return;
+    void emitTo(PRESENTATION_LABEL, EVENT_BOARD, { rows: [...rows] }).catch(() => undefined);
+  }
+
+  get layout(): Layout {
+    return this.#settings.layout;
   }
 
   /**

@@ -39,6 +39,13 @@ The array order **is** the playback order.
 Supported image types are PNG, JPEG and WebP. A path naming anything else simply
 fails to load and is skipped at playback time.
 
+## Layout
+
+`full` shows one image filling the display. `split` divides it in half: the image
+rotation on the left, a live on-court stats panel on the right. It was added in
+Picta 1.2, additively — a reader that ignores it shows the images full screen,
+which is a correct way to play the show.
+
 ## Roster
 
 `roster` is optional and additive. It was introduced in Picta 1.1 without a
@@ -169,8 +176,8 @@ An implementation should:
    the file was written by a newer Picta.
 4. Require `images` to be an array of objects each carrying a non-empty string
    `path`.
-5. Reject a present-but-invalid `intervalSeconds`, `transition`, `imageSizing`
-   or `roster` rather than silently substituting the default. A wrong value
+5. Reject a present-but-invalid `intervalSeconds`, `transition`, `imageSizing`,
+   `layout` or `roster` rather than silently substituting the default. A wrong value
    usually means a hand-edit went wrong, and silently ignoring it hides the
    mistake.
 6. Ignore unknown fields.
@@ -182,6 +189,6 @@ could not find, and offers to relink or remove those entries.
 
 ## Writing a `.picta` file
 
-Write `version: 1`, the five core fields, `roster` only when it is non-empty,
+Write `version: 1`, the six core fields, `roster` only when it is non-empty,
 two-space indentation and a trailing newline. Keeping the output stable and readable means a `.picta` file diffs
 cleanly in version control.

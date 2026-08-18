@@ -10,11 +10,14 @@ import {
   DEFAULT_IMAGE_SIZING,
   DEFAULT_TRANSITION,
   DEFAULT_INTERVAL_SECONDS,
+  DEFAULT_LAYOUT,
   isImageSizing,
+  isLayout,
   isTransition,
   isValidInterval,
   type DocumentData,
   type ImageSizing,
+  type Layout,
   type Transition,
 } from './types.js';
 import { resolveStoredPath, storedPathFor, type PathStyle } from './paths.js';
@@ -42,6 +45,7 @@ export interface ParsedPicta {
   intervalSeconds: number;
   transition: Transition;
   imageSizing: ImageSizing;
+  layout: Layout;
   /** Empty unless the file carries a roster. */
   roster: Player[];
 }
@@ -142,6 +146,8 @@ function parseRoster(raw: unknown): Attempt<Player[]> {
       name: name.trim(),
       position: position === undefined ? '' : position.trim(),
       stats: stats.value,
+      // Anything other than an explicit `true` leaves the player on the bench.
+      onCourt: entry['onCourt'] === true,
     });
   }
   return { ok: true, value: roster };
@@ -225,6 +231,15 @@ export function parsePicta(text: string): ParseResult {
     imageSizing = sizingRaw;
   }
 
+  const layoutRaw = obj['layout'];
+  let layout: Layout = DEFAULT_LAYOUT;
+  if (layoutRaw !== undefined) {
+    if (!isLayout(layoutRaw)) {
+      return fail('invalid-field', 'This Picta file has an invalid "layout" value.');
+    }
+    layout = layoutRaw;
+  }
+
   const roster = parseRoster(obj['roster']);
   if (!roster.ok) return roster.error;
 
@@ -237,6 +252,7 @@ export function parsePicta(text: string): ParseResult {
       intervalSeconds,
       transition,
       imageSizing,
+      layout,
       roster: roster.value,
     },
   };
@@ -244,7 +260,7 @@ export function parsePicta(text: string): ParseResult {
 
 /** Serialize document state to `.picta` text, relative to `pictaFilePath`. */
 export function serializePicta(
-  doc: Pick<DocumentData, 'intervalSeconds' | 'transition' | 'imageSizing'> & {
+  doc: Pick<DocumentData, 'intervalSeconds' | 'transition' | 'imageSizing' | 'layout'> & {
     images: readonly { path: string }[];
     roster?: readonly Player[];
   },
@@ -257,6 +273,7 @@ export function serializePicta(
     intervalSeconds: doc.intervalSeconds,
     transition: doc.transition,
     imageSizing: doc.imageSizing,
+    layout: doc.layout,
   };
 
   // Written only when there is one, so a plain image show stays exactly as small
@@ -266,8 +283,9 @@ export function serializePicta(
       number: player.number,
       name: player.name,
       position: player.position,
-      // Ids are runtime-only, and zero counters are omitted to keep the file
-      // small and diff-friendly.
+      // Ids are runtime-only. Zero counters and bench players are omitted, both
+      // being the default, which keeps the file small and diff-friendly.
+      ...(player.onCourt ? { onCourt: true } : {}),
       stats: Object.fromEntries(
         STAT_KEYS.filter((key) => player.stats[key] !== 0).map((key) => [key, player.stats[key]]),
       ),

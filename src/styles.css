@@ -18,6 +18,7 @@
      forward in dark, so a button reads as a button in both. */
   --control: #fbfbfc;
   --hover: #ececef;
+  --stripe: rgba(0, 0, 0, 0.035);
   --radius: 5px;
 
   color-scheme: light dark;
@@ -37,6 +38,7 @@
     --running: #56c47f;
     --control: #2e3036;
     --hover: #34363d;
+    --stripe: rgba(255, 255, 255, 0.04);
   }
 }
 
@@ -438,158 +440,167 @@ button {
 }
 
 /* ---------------------------------------------------------------------------
- * Volleyball stats.
- *
- * Sized for the 460px controller window and for being aimed at quickly while
- * watching a court: one player's counters open at a time, generous hit targets,
- * and no colour used as the only way to tell anything apart.
+ * Tabs.
  * ------------------------------------------------------------------------- */
 
-.stats-details > summary {
+.tabs {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: default;
-  /* The default triangle is replaced by the caret below so it can be aligned. */
-  list-style: none;
+  gap: 2px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid var(--border);
 }
 
-.stats-details > summary::-webkit-details-marker {
-  display: none;
-}
-
-.stats-details > summary::after {
-  content: '';
-  width: 6px;
-  height: 6px;
-  margin-left: auto;
-  border-right: 1.5px solid var(--text-muted);
-  border-bottom: 1.5px solid var(--text-muted);
-  transform: rotate(-45deg);
-  transition: transform 120ms ease;
-}
-
-.stats-details[open] > summary::after {
-  transform: rotate(45deg);
-}
-
-.stats-details > summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.stats-count {
+.tab {
+  padding: 7px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
   color: var(--text-muted);
-  font-size: 12px;
+  cursor: default;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The player table.
+ *
+ * Sized to fit the controller window without scrolling sideways in the ordinary
+ * case: tick box, number, name, four counters, Show. The name column gives way
+ * first, because a truncated name is recoverable and a hidden counter is not.
+ * ------------------------------------------------------------------------- */
+
+.table-scroll {
+  overflow-x: auto;
 }
 
 .roster {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  /* Below this the counters would start to crowd; the container scrolls instead. */
+  min-width: 400px;
 }
 
-.player {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.roster th {
+  padding: 0 2px 5px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.roster td {
+  padding: 3px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Alternating bands: this table is read across, from a name to its counters. */
+.roster tbody tr:nth-child(odd) {
+  background: var(--stripe);
+}
+
+/* On-court players are marked by a left rule as well as the tick, so the lineup
+   is legible without relying on the checkbox alone. */
+.roster tbody tr.on-court {
+  box-shadow: inset 3px 0 0 var(--running);
+}
+
+.roster .col-court {
+  width: 30px;
+  text-align: center;
+}
+
+.roster .col-court input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--running);
+}
+
+.roster .col-number {
+  width: 38px;
+}
+
+.roster .col-name {
+  width: auto;
+}
+
+.roster .col-stat {
+  width: 46px;
+  text-align: right;
+}
+
+.roster th.col-stat {
+  text-align: right;
+  padding-right: 4px;
+}
+
+.roster .col-actions {
+  width: 66px;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.roster input[type='text'],
+.roster input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.roster input[type='number'] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.roster input:hover {
+  border-color: var(--border);
+}
+
+.roster input:focus {
+  outline: none;
+  border-color: var(--accent);
   background: var(--surface);
 }
 
-.player.expanded {
-  border-color: var(--border-strong);
-}
-
-.player-row {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  padding: 4px 6px 4px 4px;
-}
-
-.player-toggle {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  text-align: left;
-  background: none;
-  border: 0;
-  border-radius: calc(var(--radius) - 1px);
-  padding: 4px;
-  font: inherit;
-  color: inherit;
-  cursor: default;
-}
-
-.player-toggle:hover {
-  background: var(--hover);
-}
-
-.player-identity {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  width: 100%;
-}
-
-.player-number {
-  flex: 0 0 auto;
-  min-width: 26px;
+.roster .col-number input {
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
-  font-size: 15px;
-}
-
-.player-names {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.player-name {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.player-summary {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.player-position {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .show-button {
-  flex: 0 0 auto;
-  align-self: center;
-  padding: 5px 10px;
+  padding: 4px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--control);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 550;
   color: inherit;
   cursor: default;
@@ -603,159 +614,28 @@ button {
   opacity: 0.4;
 }
 
-.player-panel {
-  border-top: 1px solid var(--border);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.player-fields {
-  display: flex;
-  gap: 6px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1 1 auto;
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.field input {
-  font: inherit;
-  font-size: 13px;
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--text);
-  padding: 4px 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--control);
-  min-width: 0;
-}
-
-.field-number,
-.field-position {
-  flex: 0 0 52px;
-}
-
-/* Attacks get their own row because each one also counts an attempt. */
-.attack-row {
-  display: flex;
-  gap: 6px;
-}
-
-.attack-group {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.attack-button {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 7px 4px;
-  border: 1px solid var(--border-strong);
-  border-right: 0;
-  border-radius: var(--radius) 0 0 var(--radius);
-  background: var(--control);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 550;
-  color: inherit;
-  cursor: default;
-}
-
-.attack-undo {
-  flex: 0 0 24px;
-  border: 1px solid var(--border-strong);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  background: var(--surface);
-  font: inherit;
-  color: var(--text-muted);
-  cursor: default;
-}
-
-.attack-button:hover,
-.attack-undo:hover {
-  background: var(--hover);
-}
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.stat-cell {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.stat-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 4px 6px 2px;
-}
-
-.stat-abbr {
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.stat-value {
-  font-size: 15px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-controls {
-  display: flex;
-}
-
-.stat-step {
-  flex: 1 1 0;
-  padding: 5px 0;
+.remove-button {
+  margin-left: 2px;
+  padding: 3px 5px;
   border: 0;
-  border-top: 1px solid var(--border);
-  background: var(--control);
+  border-radius: 4px;
+  background: none;
   font: inherit;
-  font-size: 13px;
-  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
   cursor: default;
 }
 
-.stat-step:first-child {
-  border-right: 1px solid var(--border);
-}
-
-.stat-step:hover {
+.remove-button:hover {
   background: var(--hover);
-}
-
-.derived {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  color: var(--danger);
 }
 
 .add-player {
   display: flex;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .add-player input {
@@ -783,7 +663,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .roster-footer p {
