@@ -67,15 +67,22 @@ V2 generalizes the show around reusable media and teams:
     "stats": { "player-7": { "kills": 12, "digs": 6 } },
     "liveGroups": { "on-court": ["player-7"] }
   },
-  "layout": {
-    "type": "split",
-    "direction": "columns",
-    "ratio": 0.5,
-    "first": { "type": "zone", "id": "program", "role": "program" },
-    "second": { "type": "zone", "id": "live-board", "role": "live-board" }
-  },
-  "liveBoardGroupId": "on-court",
-  "background": { "kind": "black" }
+  "scenes": [
+    {
+      "id": "game",
+      "name": "Game",
+      "layout": {
+        "type": "split",
+        "direction": "columns",
+        "ratio": 0.5,
+        "first": { "type": "zone", "id": "main-screen", "role": "program" },
+        "second": { "type": "zone", "id": "stats-screen", "role": "live-board" }
+      },
+      "liveBoardGroupId": "on-court",
+      "background": { "kind": "black" }
+    }
+  ],
+  "defaultSceneId": "game"
 }
 ```
 
@@ -83,9 +90,16 @@ V2 generalizes the show around reusable media and teams:
 resource may carry already-loaded `data` in memory, but the serializer writes
 only its path. Linked `.pictaset` and `.pictateam` paths must use those
 extensions. Event statistics are generic raw counters keyed by persistent
-player ID; live groups are keyed by persistent group ID. A v2 parser validates
-references when the team is inline and rejects invalid layouts, resources,
-stats, colors and background values.
+player ID; live groups are keyed by persistent group ID. `scenes` must contain
+at least one scene, scene ids must be unique, names must be unique without
+regard to case, and `defaultSceneId` must name one of them. Each scene validates
+its layout, background and optional live-board group reference. A v2 parser
+validates references when the team is inline and rejects invalid layouts,
+resources, stats, colors and scene values.
+
+Picta reads the short-lived PR #1 v2 shape with top-level `layout`,
+`liveBoardGroupId` and `background` as one `Default` scene. Saving always writes
+the final v2 `scenes` shape; there is no v3 format.
 
 The v2 show layout is documented in [layouts.md](layouts.md). Team and media
 resource schemas are documented in [pictateam-format.md](pictateam-format.md)
