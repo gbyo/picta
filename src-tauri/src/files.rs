@@ -34,14 +34,6 @@ pub fn is_picta_path(path: &Path) -> bool {
     extension_is(path, &["picta"])
 }
 
-pub fn is_team_path(path: &Path) -> bool {
-    extension_is(path, &["pictateam"])
-}
-
-pub fn is_media_set_path(path: &Path) -> bool {
-    extension_is(path, &["pictaset"])
-}
-
 pub fn is_image_path(path: &Path) -> bool {
     extension_is(path, &IMAGE_EXTENSIONS)
 }
@@ -83,7 +75,8 @@ pub fn read_document(path: &str) -> Result<String, String> {
     if !is_document_path(&path) {
         return Err("Picta can only open .picta, .pictateam or .pictaset files.".to_string());
     }
-    let metadata = std::fs::metadata(&path).map_err(|e| format!("Could not open this file: {e}"))?;
+    let metadata =
+        std::fs::metadata(&path).map_err(|e| format!("Could not open this file: {e}"))?;
     if !metadata.is_file() {
         return Err("That path is not a file.".to_string());
     }
@@ -141,7 +134,10 @@ pub fn reveal_path(path: &str) -> Result<(), String> {
         .arg(format!("/select,{}", path.display()))
         .status();
     #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open").arg("-R").arg(&path).status();
+    let result = std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .status();
     #[cfg(all(unix, not(target_os = "macos")))]
     let result = std::process::Command::new("xdg-open")
         .arg(path.parent().unwrap_or_else(|| Path::new(".")))
