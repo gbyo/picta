@@ -77,15 +77,44 @@ describe('picta v2 and v1 migration', () => {
       version: 2 as const,
       media: { kind: 'inline' as const, data: media },
       event: { stats: { p1: { points: 3 } }, liveGroups: { starters: ['p1'] } },
-      layout: HALF_HALF_LAYOUT,
-      liveBoardGroupId: 'starters',
-      background: { kind: 'black' as const },
+      scenes: [
+        {
+          id: 'game',
+          name: 'Game',
+          layout: HALF_HALF_LAYOUT,
+          liveBoardGroupId: 'starters',
+          background: { kind: 'black' as const },
+        },
+      ],
+      defaultSceneId: 'game',
     };
-    const parsed = parsePictaV2(serializePictaV2(show, '/shows/Game.picta', 'posix'));
+    const serialized = serializePictaV2(show, '/shows/Game.picta', 'posix');
+    const serializedBody = JSON.parse(serialized) as Record<string, unknown>;
+    expect(serializedBody['scenes']).toBeDefined();
+    expect(serializedBody['defaultSceneId']).toBe('game');
+    expect(serializedBody['layout']).toBeUndefined();
+    const parsed = parsePictaV2(serialized);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.value.event.stats.p1?.points).toBe(3);
-    expect(parsed.value.layout.type).toBe('split');
+    expect(parsed.value.scenes[0]?.layout.type).toBe('split');
+  });
+
+  it('reads PR1 single-layout v2 files as one scene', () => {
+    const raw = {
+      version: 2,
+      media: { kind: 'inline', data: defaultMediaSet('Inline') },
+      event: { stats: {}, liveGroups: {} },
+      layout: HALF_HALF_LAYOUT,
+      liveBoardGroupId: 'starters',
+      background: { kind: 'black' },
+    };
+    const parsed = parsePictaV2(JSON.stringify(raw));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.scenes).toHaveLength(1);
+    expect(parsed.value.defaultSceneId).toBe('scene-1');
+    expect(parsed.value.scenes[0]?.liveBoardGroupId).toBe('starters');
   });
 
   it('validates inline event references against the team', () => {
@@ -95,8 +124,15 @@ describe('picta v2 and v1 migration', () => {
       media: { kind: 'inline' as const, data: defaultMediaSet('Inline') },
       team: { kind: 'inline' as const, data: team },
       event: { stats: { missing: { kills: 1 } }, liveGroups: {} },
-      layout: HALF_HALF_LAYOUT,
-      background: { kind: 'black' as const },
+      scenes: [
+        {
+          id: 'game',
+          name: 'Game',
+          layout: HALF_HALF_LAYOUT,
+          background: { kind: 'black' as const },
+        },
+      ],
+      defaultSceneId: 'game',
     };
     const parsed = parsePictaV2(serializePictaV2(show, '/shows/Game.picta', 'posix'));
     expect(parsed.ok).toBe(false);
@@ -129,6 +165,6 @@ describe('picta v2 and v1 migration', () => {
     expect(migrated.team?.kind).toBe('inline');
     expect(migrated.event.liveGroups['on-court']).toHaveLength(1);
     expect(migrated.event.stats['player-v1-1']?.blockSolos).toBe(0);
-    expect(migrated.layout.type).toBe('split');
+    expect(migrated.scenes[0]?.layout.type).toBe('split');
   });
 });

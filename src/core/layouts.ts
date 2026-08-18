@@ -298,6 +298,10 @@ export function layoutZones(layout: LayoutNode): ZoneNode[] {
   return [...layoutZones(layout.first), ...layoutZones(layout.second)];
 }
 
+export function zoneIdForRole(layout: LayoutNode, role: ZoneRole): string | null {
+  return layoutZones(layout).find((zone) => zone.role === role)?.id ?? null;
+}
+
 export function updateFirstMatchingSplitRatio(
   layout: LayoutNode,
   zoneId: string,

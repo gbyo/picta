@@ -2,9 +2,10 @@
 
 import type { MediaItem, MediaResource, ShowDocument, Team, TeamResource } from './domain.js';
 import { defaultMediaSet } from './media.js';
-import { legacyLayoutToTree, validateLayout } from './layouts.js';
+import { legacyLayoutToTree } from './layouts.js';
 import { parseMediaSet, resolveMediaSetPaths, serializeMediaSet } from './media-set-file.js';
 import { resolveStoredPath, storedPathFor, type PathStyle } from './paths.js';
+import { validateScenes } from './scenes.js';
 import { parseTeam, resolveTeamPaths, serializeTeam, TEAM_FORMAT_VERSION } from './team-file.js';
 import type { ParsedPicta } from './picta-file.js';
 
@@ -19,7 +20,7 @@ export type ShowParseErrorKind =
   | 'invalid-media'
   | 'invalid-team'
   | 'invalid-event'
-  | 'invalid-layout'
+  | 'invalid-scenes'
   | 'invalid-field';
 
 export type ShowParseResult =
@@ -159,24 +160,27 @@ export function parsePictaV2(text: string): ShowParseResult {
   if (typeof event === 'string') return fail('invalid-event', event);
   const referenceError = validateShowEventReferences(event, team?.data);
   if (referenceError) return fail('invalid-event', referenceError);
-  const layoutCheck = validateLayout(raw['layout']);
-  if (!layoutCheck.ok) return fail('invalid-layout', layoutCheck.message);
-  const layout = raw['layout'];
-  const background = raw['background'] ?? { kind: 'black' };
-  if (
-    !isObject(background) ||
-    !['black', 'primary', 'secondary'].includes(String(background['kind']))
-  )
-    return fail('invalid-field', 'The show has an invalid background.');
-  const groupId = raw['liveBoardGroupId'];
-  if (groupId !== undefined && !validPath(groupId))
-    return fail('invalid-field', 'The show has an invalid live-board group id.');
-  if (
-    groupId !== undefined &&
-    team?.data &&
-    !team.data.groups.some((group) => group.id === groupId)
-  )
-    return fail('invalid-field', 'The show references a missing live-board group.');
+  let scenesValue: unknown = raw['scenes'];
+  let defaultSceneId: unknown = raw['defaultSceneId'];
+  // PR #1 briefly used a single layout at the top level. Read that shape as
+  // one scene, but always return the final v2 scenes schema to callers.
+  if (scenesValue === undefined) {
+    const layout = raw['layout'];
+    const background = raw['background'] ?? { kind: 'black' };
+    const groupId = raw['liveBoardGroupId'];
+    scenesValue = [
+      {
+        id: 'scene-1',
+        name: 'Default',
+        layout,
+        ...(groupId === undefined ? {} : { liveBoardGroupId: groupId }),
+        background,
+      },
+    ];
+    defaultSceneId = 'scene-1';
+  }
+  const sceneCheck = validateScenes(scenesValue, defaultSceneId, team?.data);
+  if (!sceneCheck.ok) return fail('invalid-scenes', sceneCheck.message);
   return {
     ok: true,
     value: {
@@ -184,9 +188,8 @@ export function parsePictaV2(text: string): ShowParseResult {
       media,
       ...(team === undefined ? {} : { team }),
       event,
-      layout: layout as ShowDocument['layout'],
-      ...(groupId === undefined ? {} : { liveBoardGroupId: groupId }),
-      background: { kind: background['kind'] as 'black' | 'primary' | 'secondary' },
+      scenes: sceneCheck.scenes,
+      defaultSceneId: sceneCheck.defaultSceneId,
     },
   };
 }
@@ -231,9 +234,8 @@ export function serializePictaV2(show: ShowDocument, filePath: string, style: Pa
       stats: show.event.stats,
       liveGroups: show.event.liveGroups,
     },
-    layout: show.layout,
-    ...(show.liveBoardGroupId === undefined ? {} : { liveBoardGroupId: show.liveBoardGroupId }),
-    background: show.background,
+    scenes: show.scenes,
+    defaultSceneId: show.defaultSceneId,
   };
   return `${JSON.stringify(body, null, 2)}\n`;
 }
@@ -320,8 +322,15 @@ export function migratePictaV1(parsed: ParsedPicta): ShowDocument {
     media: { kind: 'inline', data: media },
     ...(team === undefined ? {} : { team: { kind: 'inline', data: team } }),
     event: { stats, liveGroups: liveIds.length > 0 ? { 'on-court': liveIds } : {} },
-    layout: legacyLayoutToTree(parsed.layout),
-    ...(team === undefined ? {} : { liveBoardGroupId: 'on-court' }),
-    background: { kind: 'black' },
+    scenes: [
+      {
+        id: 'scene-1',
+        name: 'Default',
+        layout: legacyLayoutToTree(parsed.layout),
+        ...(team === undefined ? {} : { liveBoardGroupId: 'on-court' }),
+        background: { kind: 'black' },
+      },
+    ],
+    defaultSceneId: 'scene-1',
   };
 }

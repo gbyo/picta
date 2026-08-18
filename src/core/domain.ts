@@ -113,14 +113,22 @@ export interface ShowBackground {
   kind: 'black' | 'primary' | 'secondary';
 }
 
+/** A reusable output composition and its live-board/background choices. */
+export interface Scene {
+  id: string;
+  name: string;
+  layout: LayoutNode;
+  liveBoardGroupId?: string;
+  background: ShowBackground;
+}
+
 export interface ShowDocument {
   version: 2;
   media: MediaResource;
   team?: TeamResource;
   event: EventState;
-  layout: LayoutNode;
-  liveBoardGroupId?: string;
-  background: ShowBackground;
+  scenes: Scene[];
+  defaultSceneId: string;
 }
 
 export interface BoardColumn {

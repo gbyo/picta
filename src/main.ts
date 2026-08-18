@@ -7,7 +7,12 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { message as messageDialog } from '@tauri-apps/plugin-dialog';
 import * as ipc from './app/ipc.js';
-import { EVENT_KEY, EVENT_MENU, type ThemeMessage } from './app/events.js';
+import {
+  EVENT_KEY,
+  EVENT_MENU,
+  type LayoutEditPreviewMessage,
+  type ThemeMessage,
+} from './app/events.js';
 import { OutputController } from './app/output-controller.js';
 import { emptyPrefs, flushPrefs, readPrefs, writePrefs, type Prefs } from './app/prefs.js';
 import {
@@ -39,9 +44,11 @@ import {
 import type {
   BoardData,
   Cue,
+  LayoutNode,
   MediaItem,
   MediaSet,
   Player,
+  Scene,
   ShowDocument,
   Team,
 } from './core/domain.js';
@@ -89,6 +96,41 @@ import {
   updateSplitRatioAtPath,
   validateLayout,
 } from './core/layouts.js';
+import { cuesForPlayers, cueForPlayer } from './core/player-cues.js';
+import {
+  addScene,
+  cloneScene,
+  defaultSceneSet,
+  nextSceneId,
+  renameScene,
+  removeScene,
+  replaceScene,
+  sceneById,
+  sceneNameTaken,
+  setDefaultScene,
+  type SceneSet,
+} from './core/scenes.js';
+import {
+  beginManualGroup,
+  cancelManualPlayer,
+  completeManualPlayer,
+  endManualGroup,
+  manualPlayerShown,
+  manualRemainingCount,
+  replayManualGroup,
+  startManualPlayer,
+  undoManualPlayer,
+  type ManualGroupSession,
+} from './core/manual-group.js';
+import {
+  beginZoneEdit,
+  cancelZoneEdit,
+  commitZoneEdit,
+  selectEditZone,
+  setDraftLayout,
+  setEditSafeAreas,
+  type ZoneEditSession,
+} from './core/zone-edit.js';
 import { INTERVAL_CHOICES } from './core/types.js';
 import { shouldCheckNow, shouldNotify, updateNoticeText } from './core/update.js';
 
@@ -100,6 +142,14 @@ function need<T extends HTMLElement>(id: string): T {
 
 const ui = {
   globalStatus: need<HTMLParagraphElement>('global-status'),
+  sceneStrip: need<HTMLElement>('scene-strip'),
+  sceneButtons: need<HTMLDivElement>('scene-buttons'),
+  sceneNew: need<HTMLButtonElement>('scene-new'),
+  sceneDuplicate: need<HTMLButtonElement>('scene-duplicate'),
+  sceneRename: need<HTMLButtonElement>('scene-rename'),
+  sceneDelete: need<HTMLButtonElement>('scene-delete'),
+  sceneDefault: need<HTMLButtonElement>('scene-default'),
+  sceneEdit: need<HTMLButtonElement>('scene-edit'),
   tabs: [
     need<HTMLButtonElement>('tab-media'),
     need<HTMLButtonElement>('tab-players'),
@@ -136,6 +186,7 @@ const ui = {
   liveView: need<HTMLDivElement>('live-view'),
   groupSelect: need<HTMLSelectElement>('group-select'),
   groupEditor: need<HTMLDivElement>('group-editor'),
+  manualSession: need<HTMLDivElement>('manual-session'),
   rosterList: need<HTMLDivElement>('roster-list'),
   addPlayer: need<HTMLFormElement>('add-player'),
   newNumber: need<HTMLInputElement>('new-number'),
@@ -156,6 +207,10 @@ const ui = {
   splitColumns: need<HTMLButtonElement>('split-columns'),
   splitRows: need<HTMLButtonElement>('split-rows'),
   mergeZone: need<HTMLButtonElement>('merge-zone'),
+  zoneEditPanel: need<HTMLDivElement>('zone-edit-panel'),
+  zoneEditCancel: need<HTMLButtonElement>('zone-edit-cancel'),
+  zoneEditDone: need<HTMLButtonElement>('zone-edit-done'),
+  zoneEditSafe: need<HTMLInputElement>('zone-edit-safe'),
   outputGroup: need<HTMLSelectElement>('output-group'),
   outputBackground: need<HTMLSelectElement>('output-background'),
   outputStart: need<HTMLButtonElement>('output-start'),
@@ -183,12 +238,12 @@ interface ShowState {
 }
 
 function newShowData(): ShowDocument {
+  const scenes = defaultSceneSet();
   return {
     version: 2,
     media: { kind: 'inline', data: defaultMediaSet('Inline Media') },
     event: { stats: {}, liveGroups: {} },
-    layout: layoutPreset('full'),
-    background: { kind: 'black' },
+    ...scenes,
   };
 }
 
@@ -204,6 +259,10 @@ let playerView: PlayerView = 'roster';
 let selectedPlayerId: string | null = null;
 let selectedRosterGroupId: string | null = null;
 let selectedLiveGroupId: string | null = null;
+let selectedSceneId: string | null = show.data.defaultSceneId;
+let activeSceneId: string | null = null;
+let zoneEditSession: ZoneEditSession | null = null;
+let manualSession: ManualGroupSession | null = null;
 let displays: DisplayInfo[] = [];
 let selectedDisplayId: string | null = null;
 let lostDisplayHint: Prefs['displayHint'] = null;
@@ -224,6 +283,45 @@ function team(): Team | undefined {
   return show.data.team?.data;
 }
 
+function sceneSet(): SceneSet {
+  return { scenes: show.data.scenes, defaultSceneId: show.data.defaultSceneId };
+}
+
+function selectedScene(): Scene {
+  return (
+    sceneById(show.data.scenes, selectedSceneId ?? show.data.defaultSceneId) ??
+    show.data.scenes[0] ??
+    defaultSceneSet().scenes[0]!
+  );
+}
+
+function activeScene(): Scene {
+  return (
+    sceneById(show.data.scenes, activeSceneId ?? selectedSceneId ?? show.data.defaultSceneId) ??
+    selectedScene()
+  );
+}
+
+function editorScene(): Scene {
+  return zoneEditSession?.draft ?? selectedScene();
+}
+
+function replaceShowScene(scene: Scene, dirty = true): void {
+  const next = replaceScene(sceneSet(), scene);
+  show.data = { ...show.data, ...next };
+  if (dirty) markShowDirty();
+}
+
+function updateSelectedScene(update: (scene: Scene) => Scene, dirty = true): Scene {
+  const next = update(cloneScene(selectedScene()));
+  if (zoneEditSession) {
+    zoneEditSession = { ...zoneEditSession, draft: cloneScene(next) };
+    return next;
+  }
+  replaceShowScene(next, dirty);
+  return next;
+}
+
 function contrastColor(color: string): string {
   const match = /^#([0-9a-f]{6})$/i.exec(color);
   if (!match) return '#ffffff';
@@ -234,9 +332,9 @@ function contrastColor(color: string): string {
   return red * 0.299 + green * 0.587 + blue * 0.114 > 150 ? '#111111' : '#ffffff';
 }
 
-function outputTheme(): ThemeMessage {
+function outputTheme(scene: Scene = activeScene()): ThemeMessage {
   const colors = team()?.colors ?? { primary: '#111111', secondary: '#ffffff' };
-  const background = show.data.background.kind;
+  const background = scene.background.kind;
   return {
     primary: colors.primary,
     secondary: colors.secondary,
@@ -308,19 +406,28 @@ function updateTeam(data: Team, dirty = true): void {
   if (!resource) show.data = { ...show.data, team: { kind: 'inline', data } };
   else show.data = { ...show.data, team: { ...resource, data } };
   show.data = { ...show.data, event: reconcileEventForTeam(show.data.event, data) };
-  if (
-    show.data.liveBoardGroupId !== undefined &&
-    !data.groups.some((group) => group.id === show.data.liveBoardGroupId)
-  ) {
-    const { liveBoardGroupId: _removedGroup, ...withoutGroup } = show.data;
-    show.data = withoutGroup;
-  }
+  show.data = {
+    ...show.data,
+    scenes: show.data.scenes.map((scene) => {
+      if (
+        scene.liveBoardGroupId !== undefined &&
+        !data.groups.some((group) => group.id === scene.liveBoardGroupId)
+      ) {
+        const { liveBoardGroupId: _removedGroup, ...withoutGroup } = scene;
+        return withoutGroup;
+      }
+      return scene;
+    }),
+  };
   if (dirty) markResourceDirty('team');
   if (!selectedRosterGroupId) selectedRosterGroupId = data.groups[0]?.id ?? null;
   if (!selectedLiveGroupId) selectedLiveGroupId = data.groups[0]?.id ?? null;
   renderPlayers();
   renderOutput();
-  if (output.active) output.setTheme(outputTheme());
+  if (output.active) {
+    output.setTheme(outputTheme(zoneEditSession?.draft ?? activeScene()));
+    updateOutputBoard();
+  }
 }
 
 function currentDefinition(): ReturnType<typeof getSportDefinition> | null {
@@ -328,27 +435,127 @@ function currentDefinition(): ReturnType<typeof getSportDefinition> | null {
   return current ? getSportDefinition(current.sport, current.customSport) : null;
 }
 
-function liveGroupId(): string | null {
+function liveGroupId(scene: Scene = activeScene()): string | null {
   const current = team();
   if (!current) return null;
-  const requested = show.data.liveBoardGroupId ?? selectedLiveGroupId;
+  const requested = scene.liveBoardGroupId ?? selectedLiveGroupId;
   return current.groups.some((group) => group.id === requested)
     ? (requested ?? null)
     : (current.groups[0]?.id ?? null);
 }
 
 function setLiveBoardGroupId(groupId: string | null): void {
-  if (groupId) show.data = { ...show.data, liveBoardGroupId: groupId };
-  else {
-    const { liveBoardGroupId: _ignored, ...rest } = show.data;
-    show.data = rest;
-  }
+  updateSelectedScene((scene) => {
+    if (groupId) return { ...scene, liveBoardGroupId: groupId };
+    const { liveBoardGroupId: _ignored, ...rest } = scene;
+    return rest;
+  });
 }
 
-function liveBoardData(): BoardData {
+function activateScene(sceneId: string): void {
+  const scene = sceneById(show.data.scenes, sceneId);
+  if (!scene || zoneEditSession) return;
+  if (manualSession?.currentPlayerId) manualSession = cancelManualPlayer(manualSession);
+  selectedSceneId = scene.id;
+  activeSceneId = output.active ? scene.id : activeSceneId;
+  if (output.active) {
+    output.applyScene(scene, liveBoardData(scene));
+    output.setTheme(outputTheme(scene));
+  }
+  renderScenes();
+  renderOutput();
+  updateGlobalStatus();
+}
+
+function renderScenes(): void {
+  ui.sceneButtons.replaceChildren();
+  for (const scene of show.data.scenes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'scene-button';
+    button.textContent = scene.name;
+    button.dataset['sceneId'] = scene.id;
+    button.setAttribute('aria-pressed', String(scene.id === (activeSceneId ?? selectedSceneId)));
+    button.setAttribute('aria-current', scene.id === selectedSceneId ? 'true' : 'false');
+    button.addEventListener('click', () => activateScene(scene.id));
+    ui.sceneButtons.append(button);
+  }
+  const scene = selectedScene();
+  ui.sceneDuplicate.disabled = show.data.scenes.length === 0;
+  ui.sceneRename.disabled = show.data.scenes.length === 0;
+  ui.sceneDelete.disabled = show.data.scenes.length <= 1;
+  ui.sceneDefault.disabled = scene.id === show.data.defaultSceneId;
+  ui.sceneEdit.disabled = zoneEditSession !== null;
+}
+
+function layoutEditMessage(scene: Scene, width: number, height: number): LayoutEditPreviewMessage {
+  const rects = resolveZoneRects(scene.layout, width, height);
+  const area = Math.max(1, width * height);
+  return {
+    layout: scene.layout,
+    outputWidth: width,
+    outputHeight: height,
+    selectedZoneId: zoneEditSession?.selectedZoneId ?? null,
+    showSafeAreas: zoneEditSession?.showSafeAreas ?? true,
+    zones: rects.map((rect, index) => ({
+      ...rect,
+      number: index + 1,
+      sharePercent: Math.round((rect.width * rect.height * 10000) / area) / 100,
+    })),
+  };
+}
+
+function currentOutputDimensions(): { width: number; height: number } {
+  const display = findById(displays, selectedDisplayId);
+  return { width: display?.width ?? 1920, height: display?.height ?? 1080 };
+}
+
+function sendLayoutEditPreview(): void {
+  if (!zoneEditSession || !output.active) return;
+  const { width, height } = currentOutputDimensions();
+  output.previewLayout(layoutEditMessage(zoneEditSession.draft, width, height));
+}
+
+function beginZonesEdit(): void {
+  if (zoneEditSession) return;
+  zoneEditSession = beginZoneEdit(selectedScene());
+  if (output.active) {
+    const { width, height } = currentOutputDimensions();
+    output.beginLayoutEdit(layoutEditMessage(zoneEditSession.draft, width, height));
+  }
+  renderScenes();
+  renderOutput();
+}
+
+function cancelZonesEdit(): void {
+  if (!zoneEditSession) return;
+  const original = cancelZoneEdit(zoneEditSession);
+  zoneEditSession = null;
+  if (output.active) {
+    output.endLayoutEdit(original.layout, liveBoardData(original));
+    output.setTheme(outputTheme(original));
+  }
+  renderScenes();
+  renderOutput();
+}
+
+function doneZonesEdit(): void {
+  if (!zoneEditSession) return;
+  const next = commitZoneEdit(zoneEditSession);
+  zoneEditSession = null;
+  replaceShowScene(next);
+  if (output.active) {
+    output.endLayoutEdit(next.layout, liveBoardData(next));
+    output.setTheme(outputTheme(next));
+  }
+  renderScenes();
+  renderOutput();
+}
+
+function liveBoardData(scene: Scene = activeScene()): BoardData {
   const current = team();
   const definition = currentDefinition();
-  const groupId = liveGroupId();
+  const groupId = liveGroupId(scene);
   if (!current || !definition || !groupId) return { columns: [], rows: [] };
   const group = current.groups.find((item) => item.id === groupId);
   if (!group) return { columns: [], rows: [] };
@@ -376,6 +583,7 @@ const output = new OutputController({
         ? `Playing ${current.type.replace('-', ' ')} · ${state.index + 1} of ${state.total}`
         : '';
     }
+    if (manualSession && team()) renderPlayers();
     updateGlobalStatus();
   },
   onWarning: (message) => setMessage(message),
@@ -383,14 +591,21 @@ const output = new OutputController({
 
 function updateGlobalStatus(): void {
   if (!output.active) {
-    ui.globalStatus.textContent = 'Ready';
+    ui.globalStatus.textContent = `Ready · ${selectedScene().name}`;
     ui.globalStatus.classList.remove('live');
     return;
   }
   const display = findById(displays, selectedDisplayId);
+  const manual = manualSession;
+  const manualGroupName = manual
+    ? (team()?.groups.find((group) => group.id === manual.groupId)?.name ?? manual.groupId)
+    : '';
+  const manualStatus = manual
+    ? ` · ${manualGroupName} · ${manual.shownPlayerIds.length}/${manual.playerIds.length}`
+    : '';
   ui.globalStatus.textContent = output.cueActive
-    ? `● LIVE · Cue active`
-    : `● LIVE · ${display ? displayLabel(display) : 'Output'}`;
+    ? `● LIVE · ${activeScene().name} · Cue active${manualStatus}`
+    : `● LIVE · ${activeScene().name} · ${display ? displayLabel(display) : 'Output'}${manualStatus}`;
   ui.globalStatus.classList.add('live');
 }
 
@@ -711,9 +926,20 @@ function renderGroupEditor(current: Team): void {
   const play = document.createElement('button');
   play.type = 'button';
   play.className = 'small-button grow';
-  play.textContent = 'Play Group';
-  play.disabled = !output.active || !group;
+  play.textContent = 'Play in Order';
+  play.disabled = !output.active || output.cueActive || !group;
   if (group) play.addEventListener('click', () => void playGroup(group));
+  const manual = document.createElement('button');
+  manual.type = 'button';
+  manual.className = 'small-button grow';
+  manual.textContent = 'Present Manually';
+  manual.disabled = !output.active || output.cueActive || !group;
+  if (group)
+    manual.addEventListener('click', () => {
+      manualSession = beginManualGroup(group.id, group.playerIds);
+      renderGroupEditor(current);
+      updateGlobalStatus();
+    });
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'small-button';
@@ -737,9 +963,13 @@ function renderGroupEditor(current: Team): void {
       selectedRosterGroupId = next.groups[0]?.id ?? null;
       updateTeam(next);
     });
-  groupActions.append(play, add, remove);
+  groupActions.append(play, manual, add, remove);
   ui.groupEditor.append(groupActions);
-  if (!group) return;
+  if (!group) {
+    ui.manualSession.hidden = true;
+    return;
+  }
+  renderManualSession(current, group);
   for (let index = 0; index < group.playerIds.length; index += 1) {
     const player = current.players.find((item) => item.id === group.playerIds[index]);
     if (!player) continue;
@@ -801,6 +1031,114 @@ function renderGroupEditor(current: Team): void {
   }
 }
 
+function renderManualSession(current: Team, group: import('./core/domain.js').PlayerGroup): void {
+  const session = manualSession?.groupId === group.id ? manualSession : null;
+  ui.manualSession.replaceChildren();
+  ui.manualSession.hidden = session === null;
+  if (!session) return;
+  const heading = document.createElement('div');
+  heading.className = 'row';
+  const title = document.createElement('strong');
+  title.textContent = `Manual lineup · ${group.name}`;
+  const count = document.createElement('span');
+  count.className = 'muted';
+  count.textContent = `${manualRemainingCount(session)} remaining`;
+  heading.append(title, count);
+  ui.manualSession.append(heading);
+  const rows = document.createElement('div');
+  rows.className = 'manual-rows';
+  for (const playerId of group.playerIds) {
+    const player = current.players.find((item) => item.id === playerId);
+    if (!player) continue;
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'manual-row';
+    const shown = manualPlayerShown(session, player.id);
+    const currentPlayer = session.currentPlayerId === player.id;
+    row.disabled =
+      session.ended ||
+      shown ||
+      session.currentPlayerId !== null ||
+      output.cueActive ||
+      !output.active;
+    const check = document.createElement('span');
+    check.className = shown ? 'manual-check shown' : 'manual-check';
+    check.textContent = shown ? '✓' : '○';
+    const label = document.createElement('span');
+    label.textContent = `${player.number ? `#${player.number} ` : ''}${player.name}`;
+    const state = document.createElement('span');
+    state.className = 'muted';
+    state.textContent = currentPlayer ? 'Playing…' : shown ? 'Shown' : 'Present';
+    row.append(check, label, state);
+    row.addEventListener('click', () => void presentManualPlayer(player.id));
+    rows.append(row);
+  }
+  ui.manualSession.append(rows);
+  const actions = document.createElement('div');
+  actions.className = 'row gap';
+  const undo = document.createElement('button');
+  undo.type = 'button';
+  undo.className = 'small-button grow';
+  undo.textContent = 'Undo last';
+  undo.disabled = session.history.length === 0 || session.currentPlayerId !== null;
+  undo.addEventListener('click', () => {
+    if (manualSession) manualSession = undoManualPlayer(manualSession);
+    renderGroupEditor(current);
+    updateGlobalStatus();
+  });
+  const end = document.createElement('button');
+  end.type = 'button';
+  end.className = 'small-button grow';
+  end.textContent = session.ended ? 'Ended' : 'End';
+  end.disabled = session.ended;
+  end.addEventListener('click', () => {
+    if (manualSession) manualSession = endManualGroup(manualSession);
+    renderGroupEditor(current);
+    updateGlobalStatus();
+  });
+  const replay = document.createElement('button');
+  replay.type = 'button';
+  replay.className = 'small-button grow';
+  replay.textContent = 'Replay';
+  replay.disabled = !session.ended || output.cueActive;
+  replay.addEventListener('click', () => {
+    if (manualSession) manualSession = replayManualGroup(manualSession);
+    renderGroupEditor(current);
+    updateGlobalStatus();
+  });
+  actions.append(undo, end, replay);
+  ui.manualSession.append(actions);
+}
+
+async function presentManualPlayer(playerId: string): Promise<void> {
+  if (!manualSession || !output.active || output.cueActive) return;
+  const current = team();
+  const player = current?.players.find((item) => item.id === playerId);
+  if (!current || !player) return;
+  const next = startManualPlayer(manualSession, playerId);
+  if (next === manualSession) return;
+  const cue = cueForPlayer(player, current, show.data.event);
+  if (!cue) return;
+  manualSession = next;
+  renderPlayers();
+  updateGlobalStatus();
+  await output.playCues([cue]);
+  if (manualSession?.currentPlayerId === playerId) {
+    manualSession = completeManualPlayer(manualSession);
+    renderPlayers();
+    updateGlobalStatus();
+  }
+}
+
+function cancelActiveCue(): void {
+  if (manualSession?.currentPlayerId !== null && manualSession?.currentPlayerId !== undefined) {
+    manualSession = cancelManualPlayer(manualSession);
+    renderPlayers();
+    updateGlobalStatus();
+  }
+  output.cancelCue();
+}
+
 function renderRosterList(current: Team): void {
   ui.rosterList.replaceChildren();
   for (const player of current.players) {
@@ -846,23 +1184,8 @@ function renderRosterList(current: Team): void {
 }
 
 function playerCardCue(player: Player): Cue | null {
-  const definition = currentDefinition();
-  if (!definition) return null;
-  const stats = show.data.event.stats[player.id] ?? emptyRawStats(definition);
-  return {
-    type: 'player-card',
-    target: 'program',
-    playerId: player.id,
-    holdMs: 9000,
-    number: player.number,
-    name: player.name,
-    position: player.position ?? '',
-    ...(player.media.photo === undefined ? {} : { photo: player.media.photo }),
-    stats: boardStatDefinitions(definition, player).map((item) => ({
-      label: item.label,
-      value: String(stats[item.id] ?? 0),
-    })),
-  };
+  const current = team();
+  return current ? cueForPlayer(player, current, show.data.event) : null;
 }
 
 async function showPlayerCard(player: Player): Promise<void> {
@@ -871,42 +1194,20 @@ async function showPlayerCard(player: Player): Promise<void> {
 }
 
 async function showPlayerVideo(player: Player): Promise<void> {
-  if (!player.media.introVideo || player.media.introVideo.missing) {
+  const current = team();
+  const cue = current ? cueForPlayer(player, current, show.data.event) : null;
+  if (!cue || cue.type !== 'video') {
     setMessage(`${player.name} has no usable intro video.`);
     return;
   }
-  await output.playCues([
-    {
-      type: 'video',
-      target: 'program',
-      path: player.media.introVideo.path,
-      playerId: player.id,
-      label: player.name,
-    },
-  ]);
+  await output.playCues([cue]);
 }
 
 async function playGroup(group: import('./core/domain.js').PlayerGroup): Promise<void> {
   if (!output.active) return;
   const current = team();
   if (!current) return;
-  const cues: Cue[] = [];
-  for (const playerId of group.playerIds) {
-    const player = current.players.find((item) => item.id === playerId);
-    if (!player) continue;
-    if (player.media.introVideo && !player.media.introVideo.missing) {
-      cues.push({
-        type: 'video',
-        target: 'program',
-        path: player.media.introVideo.path,
-        playerId: player.id,
-        label: player.name,
-      });
-    } else {
-      const card = playerCardCue(player);
-      if (card) cues.push(card);
-    }
-  }
+  const cues = cuesForPlayers(group.playerIds, current, show.data.event);
   if (cues.length === 0) setMessage('This group has no usable players.');
   else await output.playCues(cues);
 }
@@ -1173,7 +1474,7 @@ function renderPlayers(): void {
 }
 
 function updateOutputBoard(): void {
-  if (output.active) output.setBoard(liveBoardData());
+  if (output.active) output.setBoard(liveBoardData(zoneEditSession?.draft ?? activeScene()));
 }
 
 function renderDisplays(): void {
@@ -1212,26 +1513,28 @@ function renderDisplays(): void {
 }
 
 function commitDividerRatio(path: readonly ('first' | 'second')[], ratio: number): void {
-  const next = updateSplitRatioAtPath(show.data.layout, path, ratio);
+  if (!zoneEditSession) return;
+  const next = updateSplitRatioAtPath(editorScene().layout, path, ratio);
   if (!validateLayout(next).ok) return;
-  show.data = { ...show.data, layout: next };
-  markShowDirty();
-  if (output.active) output.setLayout(next);
+  zoneEditSession = setDraftLayout(zoneEditSession, next);
   renderOutput();
+  sendLayoutEditPreview();
 }
 
 function renderPreviewNode(
-  node: import('./core/domain.js').LayoutNode,
+  node: LayoutNode,
   x: number,
   y: number,
   width: number,
   height: number,
   path: readonly ('first' | 'second')[],
   rects: Map<string, { width: number; height: number }>,
+  editing = zoneEditSession !== null,
 ): void {
   if (node.type === 'zone') {
     const element = document.createElement('div');
     element.className = `preview-zone ${node.role}`;
+    if (zoneEditSession?.selectedZoneId === node.id) element.classList.add('selected');
     element.style.left = `${x * 100}%`;
     element.style.top = `${y * 100}%`;
     element.style.width = `${width * 100}%`;
@@ -1239,12 +1542,38 @@ function renderPreviewNode(
     const dimensions = rects.get(node.id);
     element.textContent = `${node.role === 'live-board' ? 'LIVE BOARD' : node.role.toUpperCase()}\n${dimensions?.width ?? 0} × ${dimensions?.height ?? 0}`;
     element.style.whiteSpace = 'pre-line';
+    if (editing) {
+      element.tabIndex = 0;
+      element.addEventListener('click', () => {
+        if (!zoneEditSession) return;
+        zoneEditSession = selectEditZone(zoneEditSession, node.id);
+        renderOutput();
+        sendLayoutEditPreview();
+      });
+    }
     ui.layoutPreview.append(element);
     return;
   }
   const ratio = Math.max(0.1, Math.min(0.9, node.ratio));
   const firstWidth = node.direction === 'columns' ? width * ratio : width;
   const firstHeight = node.direction === 'rows' ? height * ratio : height;
+  if (!editing) {
+    const ratio = Math.max(0.1, Math.min(0.9, node.ratio));
+    const firstWidth = node.direction === 'columns' ? width * ratio : width;
+    const firstHeight = node.direction === 'rows' ? height * ratio : height;
+    renderPreviewNode(node.first, x, y, firstWidth, firstHeight, [...path, 'first'], rects, false);
+    renderPreviewNode(
+      node.second,
+      node.direction === 'columns' ? x + firstWidth : x,
+      node.direction === 'rows' ? y + firstHeight : y,
+      node.direction === 'columns' ? width - firstWidth : width,
+      node.direction === 'rows' ? height - firstHeight : height,
+      [...path, 'second'],
+      rects,
+      false,
+    );
+    return;
+  }
   const divider = document.createElement('button');
   divider.type = 'button';
   divider.className = `preview-divider ${node.direction}`;
@@ -1274,6 +1603,13 @@ function renderPreviewNode(
     divider.setAttribute('aria-valuenow', String(Math.round(draftRatio * 100)));
     if (node.direction === 'columns') divider.style.left = `${(x + width * draftRatio) * 100}%`;
     else divider.style.top = `${(y + height * draftRatio) * 100}%`;
+    if (zoneEditSession) {
+      const next = updateSplitRatioAtPath(editorScene().layout, path, draftRatio);
+      if (validateLayout(next).ok) {
+        zoneEditSession = setDraftLayout(zoneEditSession, next);
+        sendLayoutEditPreview();
+      }
+    }
   };
   divider.addEventListener('pointerdown', (event) => {
     event.preventDefault();
@@ -1302,7 +1638,7 @@ function renderPreviewNode(
     commitDividerRatio(path, ratio + (decrease ? -0.05 : 0.05));
   });
   ui.layoutPreview.append(divider);
-  renderPreviewNode(node.first, x, y, firstWidth, firstHeight, [...path, 'first'], rects);
+  renderPreviewNode(node.first, x, y, firstWidth, firstHeight, [...path, 'first'], rects, true);
   renderPreviewNode(
     node.second,
     node.direction === 'columns' ? x + firstWidth : x,
@@ -1311,6 +1647,7 @@ function renderPreviewNode(
     node.direction === 'rows' ? height - firstHeight : height,
     [...path, 'second'],
     rects,
+    true,
   );
 }
 
@@ -1318,7 +1655,8 @@ function renderOutput(): void {
   const display = findById(displays, selectedDisplayId);
   const width = display?.width ?? 1920;
   const height = display?.height ?? 1080;
-  const rects = resolveZoneRects(show.data.layout, width, height);
+  const scene = editorScene();
+  const rects = resolveZoneRects(scene.layout, width, height);
   const previewWidth = 640;
   const previewHeight = Math.max(120, Math.round((previewWidth * height) / Math.max(1, width)));
   ui.layoutPreview.style.height = `${Math.min(240, previewHeight)}px`;
@@ -1326,23 +1664,34 @@ function renderOutput(): void {
   const rectsById = new Map(
     rects.map((rect) => [rect.id, { width: rect.width, height: rect.height }]),
   );
-  renderPreviewNode(show.data.layout, 0, 0, 1, 1, [], rectsById);
-  const preset = layoutPresetId(show.data.layout);
+  renderPreviewNode(scene.layout, 0, 0, 1, 1, [], rectsById);
+  if (zoneEditSession?.showSafeAreas) {
+    const safe = document.createElement('div');
+    safe.className = 'preview-safe-area';
+    safe.setAttribute('aria-hidden', 'true');
+    ui.layoutPreview.append(safe);
+  }
+  const preset = layoutPresetId(scene.layout);
   for (const button of ui.layoutPresets.querySelectorAll<HTMLButtonElement>('button[data-layout]'))
     button.classList.toggle('active', button.dataset['layout'] === preset);
   ui.layoutDetail.textContent = `${width} × ${height} · ${rects.map((rect) => `${rect.role} ${rect.width}×${rect.height}`).join(' · ')}`;
-  ui.customTools.hidden = preset !== 'custom';
+  ui.customTools.hidden = zoneEditSession === null;
+  ui.zoneEditPanel.hidden = zoneEditSession === null;
   ui.customZoneSelect.replaceChildren();
-  for (const zone of layoutZones(show.data.layout)) {
+  for (const zone of layoutZones(scene.layout)) {
     const option = document.createElement('option');
     option.value = zone.id;
     option.textContent = `${zone.id} · ${zone.role}`;
     ui.customZoneSelect.append(option);
   }
-  const customZone = ui.customZoneSelect.value || layoutZones(show.data.layout)[0]?.id;
+  const customZone =
+    zoneEditSession?.selectedZoneId ||
+    ui.customZoneSelect.value ||
+    layoutZones(scene.layout)[0]?.id;
   if (customZone) ui.customZoneSelect.value = customZone;
-  const selectedRole = layoutZones(show.data.layout).find((zone) => zone.id === customZone)?.role;
+  const selectedRole = layoutZones(scene.layout).find((zone) => zone.id === customZone)?.role;
   if (selectedRole) ui.customRoleSelect.value = selectedRole;
+  ui.zoneEditSafe.checked = zoneEditSession?.showSafeAreas ?? true;
   const current = team();
   ui.outputGroup.replaceChildren();
   if (current) {
@@ -1352,7 +1701,7 @@ function renderOutput(): void {
       option.textContent = group.name;
       ui.outputGroup.append(option);
     }
-    const groupId = liveGroupId();
+    const groupId = liveGroupId(scene);
     if (groupId) ui.outputGroup.value = groupId;
   } else {
     const option = document.createElement('option');
@@ -1360,7 +1709,7 @@ function renderOutput(): void {
     option.textContent = 'No team loaded';
     ui.outputGroup.append(option);
   }
-  ui.outputBackground.value = show.data.background.kind;
+  ui.outputBackground.value = scene.background.kind;
   ui.outputStart.hidden = output.active;
   ui.outputStop.hidden = !output.active;
   ui.outputStart.disabled = selectedDisplayId === null || output.active;
@@ -1423,7 +1772,8 @@ async function startOutput(): Promise<void> {
       setMessage('That display is no longer connected.');
       return;
     }
-    const valid = validateLayout(show.data.layout);
+    const scene = selectedScene();
+    const valid = validateLayout(scene.layout);
     if (!valid.ok) {
       setMessage(valid.message);
       return;
@@ -1437,11 +1787,14 @@ async function startOutput(): Promise<void> {
       intervalSeconds: mediaSet().imageDurationSeconds,
       transition: mediaSet().transition,
       imageSizing: mediaSet().imageSizing,
-      layout: show.data.layout,
+      layout: scene.layout,
     };
-    output.setTheme(outputTheme());
-    const started = await output.begin(mediaSet(), settings, liveBoardData());
+    selectedSceneId = scene.id;
+    activeSceneId = scene.id;
+    output.setTheme(outputTheme(scene));
+    const started = await output.begin(mediaSet(), settings, liveBoardData(scene));
     if (!started) {
+      activeSceneId = null;
       setMessage('No usable media could be started.');
       return;
     }
@@ -1455,6 +1808,9 @@ async function startOutput(): Promise<void> {
 }
 
 function stopOutput(): void {
+  zoneEditSession = null;
+  manualSession = null;
+  activeSceneId = null;
   output.stop('user');
   void ipc.closePresentation().catch(() => undefined);
   renderOutput();
@@ -1671,6 +2027,10 @@ async function newShow(): Promise<void> {
   teamFilePath = null;
   teamDirty = false;
   selectedPlayerId = null;
+  selectedSceneId = show.data.defaultSceneId;
+  activeSceneId = null;
+  zoneEditSession = null;
+  manualSession = null;
   syncTitle();
   renderAll();
 }
@@ -1692,6 +2052,10 @@ async function openShowFile(path?: string): Promise<void> {
   teamDirty = false;
   selectedRosterGroupId = result.data.team?.data?.groups[0]?.id ?? null;
   selectedLiveGroupId = result.data.team?.data?.groups[0]?.id ?? null;
+  selectedSceneId = result.data.defaultSceneId;
+  activeSceneId = null;
+  zoneEditSession = null;
+  manualSession = null;
   syncTitle();
   renderAll();
   prefs = { ...prefs, lastDirectory: dirname(target, style) };
@@ -1716,6 +2080,7 @@ function renderAll(): void {
   renderMedia();
   renderPlayers();
   renderDisplays();
+  renderScenes();
   renderOutput();
   updateGlobalStatus();
 }
@@ -1847,59 +2212,141 @@ function wire(): void {
     'click',
     () => void ipc.identifyDisplays().catch((error) => setMessage(String(error))),
   );
+  ui.sceneNew.addEventListener('click', () => {
+    const name = window.prompt('Scene name:', 'New Scene')?.trim();
+    if (!name || sceneNameTaken(show.data.scenes, name)) {
+      if (name) setMessage('Scene names must be unique.');
+      return;
+    }
+    const scene: Scene = {
+      id: nextSceneId(show.data.scenes, name),
+      name,
+      layout: layoutPreset('full'),
+      background: { kind: 'black' },
+    };
+    show.data = { ...show.data, ...addScene(sceneSet(), scene) };
+    selectedSceneId = scene.id;
+    markShowDirty();
+    renderScenes();
+    renderOutput();
+  });
+  ui.sceneDuplicate.addEventListener('click', () => {
+    const source = selectedScene();
+    const name = window.prompt('Name for the duplicate:', `${source.name} Copy`)?.trim();
+    if (!name || sceneNameTaken(show.data.scenes, name)) {
+      if (name) setMessage('Scene names must be unique.');
+      return;
+    }
+    const scene = { ...cloneScene(source), id: nextSceneId(show.data.scenes, name), name };
+    show.data = { ...show.data, ...addScene(sceneSet(), scene) };
+    selectedSceneId = scene.id;
+    markShowDirty();
+    renderScenes();
+    renderOutput();
+  });
+  ui.sceneRename.addEventListener('click', () => {
+    const current = selectedScene();
+    const name = window.prompt('Scene name:', current.name)?.trim();
+    if (!name || (sceneNameTaken(show.data.scenes, name, current.id) && name !== current.name)) {
+      if (name) setMessage('Scene names must be unique.');
+      return;
+    }
+    show.data = { ...show.data, ...renameScene(sceneSet(), current.id, name) };
+    markShowDirty();
+    renderScenes();
+    renderOutput();
+  });
+  ui.sceneDelete.addEventListener('click', () => {
+    const current = selectedScene();
+    if (output.active && current.id === activeSceneId) {
+      setMessage('Stop output before deleting the live scene.');
+      return;
+    }
+    if (!window.confirm(`Delete the scene “${current.name}”?`)) return;
+    const next = removeScene(sceneSet(), current.id);
+    if (!next) return;
+    show.data = { ...show.data, ...next };
+    selectedSceneId = next.scenes[0]?.id ?? null;
+    markShowDirty();
+    renderScenes();
+    renderOutput();
+  });
+  ui.sceneDefault.addEventListener('click', () => {
+    const current = selectedScene();
+    show.data = { ...show.data, ...setDefaultScene(sceneSet(), current.id) };
+    markShowDirty();
+    renderScenes();
+  });
+  ui.sceneEdit.addEventListener('click', () => beginZonesEdit());
+  ui.zoneEditCancel.addEventListener('click', () => cancelZonesEdit());
+  ui.zoneEditDone.addEventListener('click', () => doneZonesEdit());
+  ui.zoneEditSafe.addEventListener('change', () => {
+    if (!zoneEditSession) return;
+    zoneEditSession = setEditSafeAreas(zoneEditSession, ui.zoneEditSafe.checked);
+    renderOutput();
+    sendLayoutEditPreview();
+  });
   ui.layoutPresets.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-layout]');
     if (!button) return;
     const id = button.dataset['layout'];
+    if (zoneEditSession) return;
+    let next: LayoutNode | null = null;
     if (id === 'custom') {
-      if (layoutPresetId(show.data.layout) !== 'custom') {
-        show.data = {
-          ...show.data,
-          layout: splitZone(layoutPreset('full'), 'program', 'columns', 'blank'),
-        };
-        markShowDirty();
-      }
+      if (layoutPresetId(selectedScene().layout) !== 'custom')
+        next = splitZone(layoutPreset('full'), 'program', 'columns', 'blank');
     } else if (id === 'full' || id === 'half-half' || id === 'program-2-3' || id === 'board-1-3') {
-      show.data = { ...show.data, layout: layoutPreset(id) };
-      markShowDirty();
-      if (output.active) output.setLayout(show.data.layout);
+      next = layoutPreset(id);
+    }
+    if (next && validateLayout(next).ok) {
+      const scene = updateSelectedScene((current) => ({ ...current, layout: next! }));
+      if (output.active && scene.id === activeSceneId) {
+        output.applyScene(scene, liveBoardData(scene));
+        output.setTheme(outputTheme(scene));
+      }
     }
     renderOutput();
   });
-  ui.customZoneSelect.addEventListener('change', () => renderOutput());
+  ui.customZoneSelect.addEventListener('change', () => {
+    if (zoneEditSession)
+      zoneEditSession = selectEditZone(zoneEditSession, ui.customZoneSelect.value);
+    renderOutput();
+    sendLayoutEditPreview();
+  });
   ui.splitColumns.addEventListener('click', () => {
+    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
     if (!id) return;
     const next = splitZone(
-      show.data.layout,
+      editorScene().layout,
       id,
       'columns',
       id === 'program' ? 'live-board' : 'blank',
     );
     if (validateLayout(next).ok) {
-      show.data = { ...show.data, layout: next };
-      markShowDirty();
-      if (output.active) output.setLayout(next);
+      zoneEditSession = setDraftLayout(zoneEditSession, next);
       renderOutput();
+      sendLayoutEditPreview();
     }
   });
   ui.splitRows.addEventListener('click', () => {
+    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
     if (!id) return;
-    const next = splitZone(show.data.layout, id, 'rows', 'blank');
+    const next = splitZone(editorScene().layout, id, 'rows', 'blank');
     if (validateLayout(next).ok) {
-      show.data = { ...show.data, layout: next };
-      markShowDirty();
-      if (output.active) output.setLayout(next);
+      zoneEditSession = setDraftLayout(zoneEditSession, next);
       renderOutput();
+      sendLayoutEditPreview();
     }
   });
   ui.customRoleSelect.addEventListener('change', () => {
+    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
     const role = ui.customRoleSelect.value;
     if (!id || !['program', 'live-board', 'media', 'blank'].includes(role)) return;
     const next = setZoneRole(
-      show.data.layout,
+      editorScene().layout,
       id,
       role as 'program' | 'live-board' | 'media' | 'blank',
     );
@@ -1908,23 +2355,22 @@ function wire(): void {
       setMessage('A layout must keep exactly one Program zone.');
       return;
     }
-    show.data = { ...show.data, layout: next };
-    markShowDirty();
-    if (output.active) output.setLayout(next);
+    zoneEditSession = setDraftLayout(zoneEditSession, next);
     renderOutput();
+    sendLayoutEditPreview();
   });
   ui.mergeZone.addEventListener('click', () => {
+    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
     if (!id) return;
-    const next = mergeZone(show.data.layout, id);
+    const next = mergeZone(editorScene().layout, id);
     if (!validateLayout(next).ok) {
       setMessage('That merge would remove the only Program zone.');
       return;
     }
-    show.data = { ...show.data, layout: next };
-    markShowDirty();
-    if (output.active) output.setLayout(next);
+    zoneEditSession = setDraftLayout(zoneEditSession, next);
     renderOutput();
+    sendLayoutEditPreview();
   });
   ui.outputGroup.addEventListener('change', () => {
     setLiveBoardGroupId(ui.outputGroup.value || null);
@@ -1936,16 +2382,16 @@ function wire(): void {
   ui.outputBackground.addEventListener('change', () => {
     const value = ui.outputBackground.value;
     if (value === 'black' || value === 'primary' || value === 'secondary') {
-      show.data = { ...show.data, background: { kind: value } };
-      markShowDirty();
-      if (output.active) output.setTheme(outputTheme());
+      const scene = updateSelectedScene((current) => ({ ...current, background: { kind: value } }));
+      if (output.active && scene.id === activeSceneId) output.setTheme(outputTheme(scene));
+      renderOutput();
     }
   });
   ui.outputStart.addEventListener('click', () => void startOutput());
   ui.outputStop.addEventListener('click', () => stopOutput());
   ui.cuePrevious.addEventListener('click', () => output.previousCue());
   ui.cueNext.addEventListener('click', () => output.nextCue());
-  ui.cueEnd.addEventListener('click', () => output.cancelCue());
+  ui.cueEnd.addEventListener('click', () => cancelActiveCue());
   ui.updateOpen.addEventListener(
     'click',
     () => void ipc.openReleasesPage().catch(() => setMessage('Could not open the browser.')),
@@ -1953,7 +2399,7 @@ function wire(): void {
   void listen<{ key: string }>(EVENT_KEY, (event) => {
     if (!output.active) return;
     if (event.payload.key === 'Escape') {
-      if (output.cueActive) output.cancelCue();
+      if (output.cueActive) cancelActiveCue();
       else stopOutput();
     } else if (event.payload.key === 'ArrowLeft') output.previous();
     else if (event.payload.key === 'ArrowRight' || event.payload.key === ' ') output.next();
@@ -1979,7 +2425,7 @@ function wire(): void {
     if (!output.active) return;
     if (event.key === 'Escape') {
       event.preventDefault();
-      if (output.cueActive) output.cancelCue();
+      if (output.cueActive) cancelActiveCue();
       else stopOutput();
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === ' ') {
       event.preventDefault();
