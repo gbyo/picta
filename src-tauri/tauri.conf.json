@@ -15,10 +15,10 @@
       {
         "label": "main",
         "title": "Picta",
-        "width": 460,
-        "height": 780,
-        "minWidth": 380,
-        "minHeight": 520,
+        "width": 720,
+        "height": 800,
+        "minWidth": 520,
+        "minHeight": 620,
         "resizable": true,
         "center": true,
         "visible": false,
@@ -26,7 +26,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'",
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; media-src asset: http://asset.localhost; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'",
       "assetProtocol": {
         "enable": true,
         "scope": []
@@ -37,8 +37,8 @@
     "active": true,
     "targets": ["app", "dmg", "appimage"],
     "category": "Utility",
-    "shortDescription": "Rotate still images on a chosen monitor.",
-    "longDescription": "Picta displays and automatically rotates still images fullscreen on a monitor you pick, leaving every other display untouched.",
+    "shortDescription": "Show local media on a display you choose.",
+    "longDescription": "Picta shows local images and videos on a display you choose, with optional teams, live boards and operator cues.",
     "copyright": "",
     "licenseFile": "../LICENSE",
     "icon": [

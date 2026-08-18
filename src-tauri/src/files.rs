@@ -1,10 +1,11 @@
 //! Narrow filesystem access.
 //!
 //! The frontend has no general filesystem permission. It can only:
-//!  * read and write files whose name ends in `.picta`,
+//!  * read and write files whose name ends in `.picta`, `.pictateam` or
+//!    `.pictaset`,
 //!  * ask whether given paths exist,
-//!  * add supported image files to the asset-protocol scope so the presentation
-//!    webview may render them.
+//!  * add supported local media files to the asset-protocol scope so the
+//!    controller and presentation webviews may render them.
 //!
 //! The extension checks matter: they are what stops a `.picta` document from
 //! widening Picta's own read scope to arbitrary files on the machine. A
@@ -19,6 +20,8 @@ use tauri::{Manager, Runtime};
 const MAX_PICTA_BYTES: u64 = 8 * 1024 * 1024;
 
 const IMAGE_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
+const VIDEO_EXTENSIONS: [&str; 2] = ["mp4", "webm"];
+const DOCUMENT_EXTENSIONS: [&str; 3] = ["picta", "pictateam", "pictaset"];
 
 fn extension_is(path: &Path, wanted: &[&str]) -> bool {
     path.extension()
@@ -31,8 +34,32 @@ pub fn is_picta_path(path: &Path) -> bool {
     extension_is(path, &["picta"])
 }
 
+pub fn is_team_path(path: &Path) -> bool {
+    extension_is(path, &["pictateam"])
+}
+
+pub fn is_media_set_path(path: &Path) -> bool {
+    extension_is(path, &["pictaset"])
+}
+
 pub fn is_image_path(path: &Path) -> bool {
     extension_is(path, &IMAGE_EXTENSIONS)
+}
+
+pub fn is_video_path(path: &Path) -> bool {
+    extension_is(path, &VIDEO_EXTENSIONS)
+}
+
+pub fn is_media_path(path: &Path) -> bool {
+    is_image_path(path) || is_video_path(path)
+}
+
+fn is_document_path(path: &Path) -> bool {
+    extension_is(path, &DOCUMENT_EXTENSIONS)
+}
+
+fn is_allowed_path(path: &Path) -> bool {
+    is_document_path(path) || is_media_path(path)
 }
 
 pub fn read_picta(path: &str) -> Result<String, String> {
@@ -51,6 +78,21 @@ pub fn read_picta(path: &str) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Could not read this file: {e}"))
 }
 
+pub fn read_document(path: &str) -> Result<String, String> {
+    let path = PathBuf::from(path);
+    if !is_document_path(&path) {
+        return Err("Picta can only open .picta, .pictateam or .pictaset files.".to_string());
+    }
+    let metadata = std::fs::metadata(&path).map_err(|e| format!("Could not open this file: {e}"))?;
+    if !metadata.is_file() {
+        return Err("That path is not a file.".to_string());
+    }
+    if metadata.len() > MAX_PICTA_BYTES {
+        return Err("That file is too large for a Picta data file.".to_string());
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("Could not read this file: {e}"))
+}
+
 pub fn write_picta(path: &str, contents: &str) -> Result<(), String> {
     let path = PathBuf::from(path);
     if !is_picta_path(&path) {
@@ -61,7 +103,55 @@ pub fn write_picta(path: &str, contents: &str) -> Result<(), String> {
             return Err("That folder no longer exists.".to_string());
         }
     }
+    if contents.len() as u64 > MAX_PICTA_BYTES {
+        return Err("That Picta file is too large.".to_string());
+    }
     std::fs::write(&path, contents).map_err(|e| format!("Could not save this file: {e}"))
+}
+
+pub fn write_document(path: &str, contents: &str) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !is_document_path(&path) {
+        return Err("Picta can only save .picta, .pictateam or .pictaset files.".to_string());
+    }
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.is_dir() {
+            return Err("That folder no longer exists.".to_string());
+        }
+    }
+    if contents.len() as u64 > MAX_PICTA_BYTES {
+        return Err("That Picta data file is too large.".to_string());
+    }
+    std::fs::write(&path, contents).map_err(|e| format!("Could not save this file: {e}"))
+}
+
+/// Reveal one of Picta's own document files in the platform file manager.
+/// This is deliberately narrower than a generic shell/open command.
+pub fn reveal_path(path: &str) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !is_document_path(&path) {
+        return Err("Picta can only reveal .picta, .pictateam or .pictaset files.".to_string());
+    }
+    if !path.is_file() {
+        return Err("That Picta file no longer exists.".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    let result = std::process::Command::new("explorer")
+        .arg(format!("/select,{}", path.display()))
+        .status();
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg("-R").arg(&path).status();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open")
+        .arg(path.parent().unwrap_or_else(|| Path::new(".")))
+        .status();
+
+    match result {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("The file manager returned {status}.")),
+        Err(error) => Err(format!("Could not open the file manager: {error}")),
+    }
 }
 
 pub fn paths_exist(paths: &[String]) -> Vec<bool> {
@@ -69,21 +159,21 @@ pub fn paths_exist(paths: &[String]) -> Vec<bool> {
         .iter()
         .map(|p| {
             let path = Path::new(p);
-            path.is_file()
+            is_allowed_path(path) && path.is_file()
         })
         .collect()
 }
 
-/// Let the presentation webview render these images, and nothing else.
-pub fn allow_images<R: Runtime>(app: &tauri::AppHandle<R>, paths: &[String]) -> Result<(), String> {
+/// Let the webviews render these supported local media files, and nothing else.
+pub fn allow_media<R: Runtime>(app: &tauri::AppHandle<R>, paths: &[String]) -> Result<(), String> {
     let scope = app.asset_protocol_scope();
     for raw in paths {
         let path = Path::new(raw);
-        if !is_image_path(path) {
-            // Silently skipping would be worse: the image would render as
+        if !is_media_path(path) {
+            // Silently skipping would be worse: the media would render as
             // nothing with no explanation.
             return Err(format!(
-                "{} is not a supported image type.",
+                "{} is not a supported local media type.",
                 path.file_name().and_then(|n| n.to_str()).unwrap_or(raw)
             ));
         }
@@ -92,6 +182,11 @@ pub fn allow_images<R: Runtime>(app: &tauri::AppHandle<R>, paths: &[String]) -> 
             .map_err(|e| format!("Could not open {raw}: {e}"))?;
     }
     Ok(())
+}
+
+/// Kept as a small compatibility wrapper for older frontend builds.
+pub fn allow_images<R: Runtime>(app: &tauri::AppHandle<R>, paths: &[String]) -> Result<(), String> {
+    allow_media(app, paths)
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +274,23 @@ mod tests {
     }
 
     #[test]
+    fn recognises_supported_videos_and_documents_only() {
+        for good in [
+            "clip.mp4",
+            "clip.MP4",
+            "clip.webm",
+            "show.picta",
+            "team.pictateam",
+            "ads.pictaset",
+        ] {
+            assert!(is_allowed_path(Path::new(good)), "{good}");
+        }
+        for bad in ["clip.mov", "clip.avi", "clip.mkv", "show.json", "photo.svg"] {
+            assert!(!is_allowed_path(Path::new(bad)), "{bad}");
+        }
+    }
+
+    #[test]
     fn refuses_to_read_non_picta_paths() {
         let result = read_picta("/etc/hosts");
         assert!(result.is_err());
@@ -188,6 +300,12 @@ mod tests {
     fn refuses_to_write_non_picta_paths() {
         let result = write_picta("/tmp/picta-test-output.txt", "{}");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn refuses_to_read_or_write_arbitrary_document_extensions() {
+        assert!(read_document("/etc/hosts").is_err());
+        assert!(write_document("/tmp/picta-test-output.json", "{}").is_err());
     }
 
     #[test]

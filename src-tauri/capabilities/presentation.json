@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "presentation",
-  "description": "The presentation window only renders images the controller tells it to. It can exchange events and nothing else — no dialogs, no filesystem, no window control.",
+  "description": "The presentation window only renders media and board commands the controller sends. It can exchange events and nothing else — no dialogs, no filesystem, no window control.",
   "windows": ["presentation"],
   "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "core:event:allow-emit"]
 }

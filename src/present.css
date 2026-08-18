@@ -1,493 +1,290 @@
 /*
- * The presentation surface. Black, two stacked layers, nothing else — no text,
- * no error states, no cursor.
+ * The output is a board graphic, not a controller.  It uses solid surfaces,
+ * strong type and zone-local measurements.  There are no controls, gradients
+ * or decorative browser states on this window.
  */
 
-html,
-body {
-  margin: 0;
-  height: 100%;
+:root {
+  color-scheme: dark;
   background: #000;
-  overflow: hidden;
+  font-family: 'Arial Narrow', 'Segoe UI', Arial, sans-serif;
 }
 
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#output {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--output-background, #000);
+}
 body {
   cursor: none;
-  -webkit-user-select: none;
   user-select: none;
-  /* The takeover card is the only thing Picta draws with type in it, and it has
-     to read from the back of a gym, so it uses the platform UI face rather than
-     the default serif. */
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI Variable Display',
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    sans-serif;
 }
 
-.panes {
+.layout-root {
+  position: absolute;
+  inset: 0;
   display: flex;
-  height: 100%;
+  overflow: hidden;
+  background: var(--output-background, #000);
 }
-
-.pane {
-  position: relative;
-  height: 100%;
+.layout-split {
   min-width: 0;
-}
-
-.pane-images {
-  flex: 1 1 auto;
-}
-
-/* Not rendered at all in `full` layout, so an ordinary image show is exactly
-   what it was before split existed. */
-.pane-board {
-  display: none;
-}
-
-body.split .pane-images,
-body.split .pane-board {
-  flex: 0 0 50%;
-}
-
-body.split .pane-board {
+  min-height: 0;
   display: flex;
+  overflow: hidden;
+}
+.layout-split.columns {
+  flex-direction: row;
+}
+.layout-split.rows {
   flex-direction: column;
-  justify-content: center;
-  padding: 4vh 3.2vw;
-  box-sizing: border-box;
-  color: #fff;
-  background: #0b1220;
-  /* A hairline seam so the two halves read as deliberate rather than as one
-     image that failed to fill the screen. */
-  border-left: 2px solid rgba(124, 196, 255, 0.28);
+}
+.layout-child {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.layout-zone {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--output-background, #000);
+  --zone-width: 1px;
+  --zone-height: 1px;
+  --zone-min: 1px;
+}
+.zone-blank {
+  background: var(--output-background, #000);
+}
+.zone-media,
+.zone-program {
+  background: var(--output-background, #000);
 }
 
-.layer {
+.media-layer,
+.video-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   opacity: 0;
-  /* Duration is set from script so `none` can switch instantly. */
-  transition: opacity 0ms linear;
+  display: block;
   background: #000;
-  /* An <img> with no src must not render a broken-image glyph. */
-  color: transparent;
-  font-size: 0;
+  transition-property: opacity;
+  transition-timing-function: linear;
+  object-position: center;
 }
-
-.layer.visible {
-  opacity: 1;
-}
-
-.layer.fit {
+.media-layer.fit,
+.video-layer.fit {
   object-fit: contain;
 }
-
-.layer.fill {
+.media-layer.fill,
+.video-layer.fill {
+  object-fit: cover;
+}
+.media-layer.visible,
+.video-layer.visible {
+  opacity: 1;
+}
+.cue-image {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+.cue-image.fit {
+  object-fit: contain;
+}
+.cue-image.fill {
   object-fit: cover;
 }
 
-/* ---------------------------------------------------------------------------
- * The player takeover card.
- *
- * Sweeps in over whatever image is showing and out again, leaving the image
- * layers untouched underneath. Everything animates with `transform` and
- * `opacity` only, so the whole thing is composited on the GPU and a still image
- * costs nothing once the sweep has finished.
- *
- * Sizes are in `vmin`/`vw` so one stylesheet reads correctly on a 1080p TV and
- * on a 4K panel without measuring anything.
- * ------------------------------------------------------------------------- */
-
-.takeover {
-  position: fixed;
-  inset: 0;
-  /* `visibility` rather than `display` so the sweep can be animated. */
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.takeover.active {
-  visibility: visible;
-}
-
-.takeover-panel {
+.board-shell {
   position: absolute;
   inset: 0;
+  padding: 4.5%;
+  background: var(--board-primary, #111);
+  color: var(--board-foreground, #fff);
   display: flex;
-  align-items: center;
-  gap: 5vw;
-  padding: 0 7vw;
-  box-sizing: border-box;
-  color: #fff;
-  background: linear-gradient(105deg, #0b1220 0%, #111c2e 55%, #0b1220 100%);
-  /* Off-screen right, with the leading edge cut on a diagonal. The clip makes
-     the panel itself the "sweep": no separate wiping element to keep in sync. */
-  transform: translate3d(105%, 0, 0);
-  clip-path: polygon(6% 0, 100% 0, 100% 100%, 0 100%);
+  flex-direction: column;
+  justify-content: center;
 }
-
-.takeover.sweep-in .takeover-panel {
-  animation: takeover-sweep-in var(--sweep-ms, 480ms) cubic-bezier(0.16, 0.84, 0.24, 1) forwards;
-}
-
-.takeover.sweep-out .takeover-panel {
-  /* Leaving is quicker than arriving: the card has already been read. */
-  animation: takeover-sweep-out calc(var(--sweep-ms, 480ms) * 0.75) cubic-bezier(0.6, 0, 0.8, 0.2)
-    forwards;
-}
-
-@keyframes takeover-sweep-in {
-  from {
-    transform: translate3d(105%, 0, 0);
-  }
-  to {
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes takeover-sweep-out {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(-105%, 0, 0);
-  }
-}
-
-/* The jersey number: the thing that reads first from the back of a gym. */
-.takeover-jersey {
-  flex: 0 0 auto;
-  font-size: 38vmin;
-  font-weight: 800;
-  line-height: 0.8;
-  letter-spacing: -0.05em;
-  font-variant-numeric: tabular-nums;
-  /* Solid but dim: it reads as the player's number from across a gym without
-     competing with the name beside it. */
-  color: rgba(124, 196, 255, 0.16);
-}
-
-.takeover-jersey:empty {
-  display: none;
-}
-
-.takeover-body {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.takeover-position {
-  margin: 0 0 1.2vmin;
-  font-size: 3vmin;
-  font-weight: 600;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: #7cc4ff;
-}
-
-.takeover-position:empty {
-  display: none;
-}
-
-.takeover-name {
-  margin: 0;
-  font-size: 10.5vmin;
-  font-weight: 700;
-  line-height: 1.02;
-  letter-spacing: -0.015em;
-  /* Long names shrink rather than overflow the screen. */
-  overflow-wrap: anywhere;
-}
-
-.takeover-rule {
-  height: 0.6vmin;
-  width: 14vmin;
-  margin: 3vmin 0;
-  background: #7cc4ff;
-}
-
-.takeover-stats {
-  display: flex;
-  flex-wrap: wrap;
-  /* Grouped from the left rather than spread edge to edge: a card with four
-     figures on it should not stretch them across the whole screen, and one with
-     six should still fit. Wraps if a very wide set ever needs it. */
-  justify-content: flex-start;
-  gap: 3vmin 6.5vmin;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.takeover-stats li {
-  display: flex;
-  flex-direction: column-reverse;
-}
-
-.takeover-stats .value {
-  font-size: 8.5vmin;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.takeover-stats .label {
-  margin-top: 1vmin;
-  font-size: 2.4vmin;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-/* Content follows the panel in, just behind the leading edge, so the card does
-   not read as one flat rectangle sliding across. */
-.takeover.sweep-in .takeover-jersey,
-.takeover.sweep-in .takeover-body > * {
-  animation: takeover-content 420ms cubic-bezier(0.16, 0.84, 0.24, 1) backwards;
-}
-
-.takeover.sweep-in .takeover-jersey {
-  animation-delay: 120ms;
-}
-.takeover.sweep-in .takeover-position {
-  animation-delay: 160ms;
-}
-.takeover.sweep-in .takeover-name {
-  animation-delay: 200ms;
-}
-.takeover.sweep-in .takeover-rule {
-  animation-delay: 250ms;
-}
-.takeover.sweep-in .takeover-stats {
-  animation-delay: 290ms;
-}
-
-@keyframes takeover-content {
-  from {
-    opacity: 0;
-    transform: translate3d(3vw, 0, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-/* A panel this large sliding across a screen is exactly what someone with
-   vestibular sensitivity asks the system to stop doing. */
-@media (prefers-reduced-motion: reduce) {
-  .takeover.sweep-in .takeover-panel,
-  .takeover.sweep-out .takeover-panel {
-    animation-duration: 1ms;
-  }
-
-  .takeover.sweep-in .takeover-jersey,
-  .takeover.sweep-in .takeover-body > * {
-    animation: none;
-  }
-}
-
-/* ---------------------------------------------------------------------------
- * The always-on on-court board (split layout).
- *
- * Six rows of four figures, read from across a gym. Sizes are relative to the
- * *pane*, not the window: on a 3840×1080 ultrawide each half is 1920×1080, so
- * `vh` is the honest unit here — `vmin` would be governed by the full-window
- * height and `vw` by the full 3840 width.
- * ------------------------------------------------------------------------- */
-
 .board-title {
-  margin: 0 0 2.2vh;
-  font-size: 3vh;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: #7cc4ff;
+  margin: 0 0 2.5%;
+  font-size: clamp(20px, calc(var(--zone-min) * 0.055), 84px);
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
-
-.board {
+.board-table {
   width: 100%;
   border-collapse: collapse;
-  /* Fixed, with explicit column widths: the figures must not shift sideways as
-     counts grow from one digit to two, because this is a board people glance at
-     rather than read. A very long name gives way instead. */
   table-layout: fixed;
-}
-
-/* K A D B. Large and bright: these label the only numbers on the screen, and a
-   whispered header on a board read from across a gym is a header nobody reads. */
-.board-head {
-  padding: 0 0 1.2vh;
-  font-size: 4.8vh;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: #7cc4ff;
-  border-bottom: 3px solid rgba(124, 196, 255, 0.4);
-}
-
-.board-head.figure,
-.board-cell.figure {
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
-
-.board-head.number,
-.board-head.name {
-  border-bottom-color: rgba(255, 255, 255, 0.18);
-}
-
-/* Striping instead of rules: on a pane this wide a banded row carries the eye
-   from a name across to its figures far better than a hairline does. */
-.board tbody tr:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.07);
-}
-
-/* The placeholder is one line of text, not a row of figures, so it takes no
-   band. */
-.board tbody tr.board-empty-row {
-  background: none;
-}
-
-.board-cell {
-  padding: 1.5vh 0;
-  font-size: 5.4vh;
-  font-weight: 650;
-  line-height: 1.1;
+.board-table th,
+.board-table td {
+  padding: 1.4% 1.2%;
+  text-align: right;
   white-space: nowrap;
-}
-
-/* Breathing room at the band edges, and rounded ends so the stripe reads as a
-   row rather than as a full-bleed block. */
-.board-cell.number,
-.board-head.number {
-  width: 9%;
-}
-
-.board-cell.name,
-.board-head.name {
-  width: 43%;
-}
-
-.board-cell.figure,
-.board-head.figure {
-  width: 12%;
-}
-
-.board-cell.number {
-  padding-left: 1.6vw;
-  padding-right: 1.2vw;
-  border-radius: 0.8vh 0 0 0.8vh;
-  color: #7cc4ff;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.board-head.number {
-  padding-left: 1.6vw;
-  padding-right: 1.2vw;
-}
-
-.board-cell.name {
-  padding-right: 2vw;
-  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.board-cell.figure {
-  padding-left: 1.2vw;
+.board-table th {
+  color: color-mix(in srgb, var(--board-foreground, #fff) 70%, transparent);
+  font-size: clamp(15px, calc(var(--zone-min) * 0.035), 52px);
+  font-weight: 700;
+}
+.board-table td {
+  font-size: clamp(22px, calc(var(--zone-min) * 0.065), 102px);
+  font-weight: 800;
+}
+.board-table .number {
+  width: 10%;
+  text-align: left;
+}
+.board-table .name {
+  width: 42%;
+  text-align: left;
+}
+.board-table .stat {
+  width: auto;
+}
+.board-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 5%;
+  color: color-mix(in srgb, var(--board-foreground, #fff) 65%, transparent);
+  font-size: clamp(22px, calc(var(--zone-min) * 0.07), 96px);
   font-weight: 700;
 }
 
-.board-head.figure {
-  padding-left: 1.2vw;
+.player-card {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  padding: 4.5%;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
+  gap: 5%;
+  align-items: center;
+  overflow: hidden;
+  background: var(--card-primary, #111);
+  color: var(--card-foreground, #fff);
+}
+.player-card.no-photo {
+  grid-template-columns: 1fr;
+}
+.player-card.wide {
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
+  gap: 3%;
+}
+.player-card.no-photo.wide {
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.5fr) minmax(0, 1.5fr);
+}
+.player-card.tall {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto auto;
+  gap: 2%;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+.player-card.tall .player-photo {
+  width: 72%;
+  max-height: 42%;
+}
+.player-card.tall .player-number {
+  font-size: clamp(60px, calc(var(--zone-min) * 0.2), 260px);
+}
+.player-card.tall .player-stats {
+  justify-content: center;
+}
+.player-photo {
+  width: 100%;
+  height: 100%;
+  max-height: 82%;
+  object-fit: contain;
+  object-position: center bottom;
+  align-self: end;
+}
+.player-number {
+  margin: 0;
+  font-size: clamp(80px, calc(var(--zone-min) * 0.29), 440px);
+  font-weight: 900;
+  line-height: 0.76;
+  letter-spacing: -0.07em;
+}
+.player-copy {
+  min-width: 0;
+}
+.player-name {
+  margin: 0;
+  font-size: clamp(42px, calc(var(--zone-min) * 0.13), 220px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.player-position {
+  margin: 5% 0 0;
+  font-size: clamp(20px, calc(var(--zone-min) * 0.045), 72px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.player-stats {
+  align-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2% 5%;
+  min-width: 0;
+}
+.player-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.player-stat-value {
+  font-size: clamp(30px, calc(var(--zone-min) * 0.09), 140px);
+  font-weight: 900;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+.player-stat-label {
+  margin-top: 0.2em;
+  font-size: clamp(14px, calc(var(--zone-min) * 0.032), 48px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.78;
 }
 
-.board-cell.figure:last-child,
-.board-head.figure:last-child {
-  padding-right: 1.6vw;
+.full-cue {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: var(--output-background, #000);
+}
+.full-cue .player-card {
+  position: absolute;
 }
 
-.board-cell.figure:last-child {
-  border-radius: 0 0.8vh 0.8vh 0;
-}
-
-/* Shown instead of the rows until a lineup has been chosen. Never an error,
-   never a file path — the output display only ever carries content. */
-.board-empty {
-  padding: 2vh 0;
-  font-size: 3vh;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-/* ---------------------------------------------------------------------------
- * The takeover card on a very wide screen.
- *
- * Card sizes are driven by `vmin`, which on a 3840×1080 ultrawide is governed by
- * the 1080 height — so the default stacked layout occupies only the left third
- * and leaves most of the panel empty. Past 2:1 the card lays out across the
- * width instead: jersey, then name, then the figures in their own column.
- * ------------------------------------------------------------------------- */
-
-@media (min-aspect-ratio: 2 / 1) {
-  .takeover-panel {
-    gap: 4vw;
-    padding: 0 5vw;
-  }
-
-  .takeover-jersey {
-    font-size: 52vmin;
-  }
-
-  .takeover-body {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      'position stats'
-      'name     stats'
-      'rule     stats';
-    align-items: center;
-    column-gap: 5vw;
-  }
-
-  .takeover-position {
-    grid-area: position;
-    align-self: end;
-  }
-
-  .takeover-name {
-    grid-area: name;
-    font-size: 13vmin;
-  }
-
-  .takeover-rule {
-    grid-area: rule;
-    align-self: start;
-    margin: 2vmin 0 0;
-  }
-
-  .takeover-stats {
-    grid-area: stats;
-    /* Room to breathe here, unlike the stacked layout, so the figures spread. */
-    justify-content: space-between;
-    gap: 3vmin 4vmin;
-  }
-
-  .takeover-stats .value {
-    font-size: 11vmin;
-  }
-
-  .takeover-stats .label {
-    font-size: 3vmin;
+@media (prefers-reduced-motion: reduce) {
+  .media-layer,
+  .video-layer {
+    transition-duration: 0ms !important;
   }
 }
