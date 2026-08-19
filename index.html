@@ -7,323 +7,101 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <main class="app">
-      <header class="app-header">
-        <h1 class="wordmark">Picta</h1>
-        <p id="global-status" class="global-status" aria-live="polite">Ready</p>
-      </header>
-
-      <div class="tabs" role="tablist" aria-label="Picta sections">
-        <button
-          type="button"
-          class="tab"
-          id="tab-media"
-          role="tab"
-          aria-selected="true"
-          aria-controls="panel-media"
-        >
-          Media
-        </button>
-        <button
-          type="button"
-          class="tab"
-          id="tab-players"
-          role="tab"
-          aria-selected="false"
-          aria-controls="panel-players"
-          tabindex="-1"
-        >
-          Players
-        </button>
-        <button
-          type="button"
-          class="tab"
-          id="tab-output"
-          role="tab"
-          aria-selected="false"
-          aria-controls="panel-output"
-          tabindex="-1"
-        >
-          Output
-        </button>
-      </div>
-
-      <section id="scene-strip" class="scene-strip" aria-label="Scenes">
-        <div class="row scene-strip-heading">
-          <span class="block-title">Scenes</span>
-          <div class="scene-actions">
-            <button type="button" id="scene-new" class="text-button">New</button>
-            <button type="button" id="scene-duplicate" class="text-button">Duplicate</button>
-            <button type="button" id="scene-rename" class="text-button">Rename</button>
-            <button type="button" id="scene-delete" class="text-button">Delete</button>
-            <button type="button" id="scene-default" class="text-button">Make default</button>
-            <button type="button" id="scene-edit" class="small-button">Edit Zones</button>
-          </div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">P</div>
+          <div><p class="wordmark">Picta</p><p class="brand-subtitle">Show control</p></div>
         </div>
-        <div id="scene-buttons" class="scene-buttons" role="toolbar" aria-label="Show scenes"></div>
-      </section>
+        <nav class="primary-nav" aria-label="Workspace pages">
+          <button type="button" class="nav-item" data-page="home" aria-current="page"><span class="nav-icon" aria-hidden="true">⌂</span><span>Home</span></button>
+          <p class="nav-label">Prepare</p>
+          <button type="button" class="nav-item" data-page="media"><span class="nav-icon" aria-hidden="true">▣</span><span>Media</span></button>
+          <button type="button" class="nav-item" id="roster-view-tab" data-page="roster"><span class="nav-icon" aria-hidden="true">♙</span><span>Roster</span></button>
+          <button type="button" class="nav-item" data-page="scenes"><span class="nav-icon" aria-hidden="true">◇</span><span>Scenes</span></button>
+          <p class="nav-label">Operate</p>
+          <button type="button" class="nav-item" id="live-view-tab" data-page="live"><span class="nav-icon" aria-hidden="true">●</span><span>Live</span></button>
+          <button type="button" class="nav-item" data-page="output"><span class="nav-icon" aria-hidden="true">▰</span><span>Output</span></button>
+        </nav>
+        <div class="sidebar-footer">
+          <div id="update-notice" class="update-card" role="status" hidden><p id="update-text"></p><div class="row"><button type="button" id="update-open" class="text-button">What’s new</button><button type="button" id="update-dismiss" class="text-button">Dismiss</button></div></div>
+          <div class="connection-card"><span class="status-dot" aria-hidden="true"></span><p id="global-status" class="global-status" aria-live="polite">Ready</p></div>
+        </div>
+      </aside>
 
-      <section id="panel-media" class="tab-panel" role="tabpanel" aria-labelledby="tab-media">
-        <div class="resource-header">
-          <div>
-            <h2 class="block-title">Media</h2>
-            <p id="media-resource-name" class="muted">Inline media</p>
+      <main class="workspace">
+        <header class="workspace-header">
+          <div><p id="page-eyebrow" class="page-eyebrow">Workspace</p><h1 id="page-title" class="page-title">Home</h1><p id="page-description" class="page-description">Build the show, check the room, and go live.</p></div>
+          <div class="header-actions"><span id="save-state" class="save-state">Untitled show</span><button type="button" class="button secondary-button" id="header-output" data-go-page="output">Open output</button></div>
+        </header>
+        <p id="message" class="message" role="status" aria-live="polite" hidden></p>
+
+        <section id="page-home" class="page" data-page-panel="home">
+          <div class="hero-card">
+            <div class="hero-copy"><p class="hero-kicker">Your next show</p><h2>From files to the big screen without the control-room clutter.</h2><p>Work left to right: bring in content, shape the scene, confirm the display, then take it live.</p><button type="button" id="home-primary-action" class="button primary-button">Add media</button></div>
+            <div class="hero-visual" aria-hidden="true"><div class="hero-screen"><span></span><span></span></div><div class="hero-console"><i></i><i></i><i></i></div></div>
           </div>
-          <details class="resource-menu">
-            <summary aria-label="Media set file menu">⋯</summary>
-            <div class="menu-panel">
-              <button type="button" id="media-new-set">New Media Set</button>
-              <button type="button" id="media-open-set">Open Media Set…</button>
-              <button type="button" id="media-save-set">Save Media Set</button>
-              <button type="button" id="media-save-set-as">Save Media Set As…</button>
-              <button type="button" id="media-reveal-set">Reveal in Finder / Explorer</button>
+          <section class="flow-section" aria-labelledby="flow-heading">
+            <div class="section-header"><div><p class="section-kicker">Show path</p><h2 id="flow-heading">Ready in four moves</h2></div><p class="section-note">Roster is optional. Everything else follows the active scene.</p></div>
+            <div class="flow-grid">
+              <button type="button" class="flow-card" data-go-page="media"><span class="flow-number">1</span><span class="flow-copy"><strong>Bring in media</strong><small id="home-media-summary">No media yet</small></span><span class="flow-arrow">→</span></button>
+              <button type="button" class="flow-card" data-go-page="scenes"><span class="flow-number">2</span><span class="flow-copy"><strong>Shape the scene</strong><small id="home-scene-summary">Default scene</small></span><span class="flow-arrow">→</span></button>
+              <button type="button" class="flow-card" data-go-page="output"><span class="flow-number">3</span><span class="flow-copy"><strong>Choose the screen</strong><small id="home-display-summary">No display selected</small></span><span class="flow-arrow">→</span></button>
+              <button type="button" class="flow-card accent-card" data-go-page="output"><span class="flow-number">4</span><span class="flow-copy"><strong>Go live</strong><small id="home-live-summary">Waiting for setup</small></span><span class="flow-arrow">→</span></button>
             </div>
-          </details>
-        </div>
-
-        <button type="button" id="media-dropzone" class="dropzone">
-          <span class="dropzone-line">Drop images or videos here</span>
-          <span class="dropzone-sub">or <span class="link-ish">Choose Media</span></span>
-        </button>
-        <div id="media-list" class="media-list" aria-label="Media in playback order"></div>
-        <div class="row">
-          <p id="media-count" class="muted" aria-live="polite">No media</p>
-          <button type="button" id="media-clear" class="text-button">Clear</button>
-        </div>
-        <div id="media-missing" class="notice" role="status" hidden>
-          <p id="media-missing-text"></p>
-          <button type="button" id="media-locate" class="small-button">Locate Files…</button>
-        </div>
-
-        <section class="settings-grid" aria-label="Media settings">
-          <label
-            >Images stay
-            <select id="media-duration" class="control"></select
-          ></label>
-          <label
-            >Transition
-            <select id="media-transition" class="control">
-              <option value="crossfade">Crossfade</option>
-              <option value="none">None</option>
-            </select></label
-          >
-          <label
-            >Sizing
-            <select id="media-sizing" class="control">
-              <option value="fit">Fit</option>
-              <option value="fill">Fill</option>
-            </select></label
-          >
+          </section>
+          <div class="home-grid">
+            <section class="content-card"><div class="card-heading"><div><p class="section-kicker">Current show</p><h2>What’s loaded</h2></div><button type="button" class="text-button" data-go-page="roster">Manage roster</button></div><dl class="show-facts"><div><dt>Media</dt><dd id="home-media-count">0 items</dd></div><div><dt>Team</dt><dd id="home-team-summary">Not loaded</dd></div><div><dt>Scenes</dt><dd id="home-scenes-count">1 scene</dd></div></dl></section>
+            <section class="content-card quick-card"><p class="section-kicker">Operator tip</p><h2>Build calmly. Operate simply.</h2><p>Once output is live, use Space or → for next, ← for previous, and Esc to stop.</p></section>
+          </div>
         </section>
-        <div class="row gap">
-          <button type="button" id="media-previous" class="small-button grow">Previous</button>
-          <button type="button" id="media-next" class="small-button grow">Next</button>
-        </div>
-      </section>
 
-      <section
-        id="panel-players"
-        class="tab-panel"
-        role="tabpanel"
-        aria-labelledby="tab-players"
-        hidden
-      >
-        <div id="no-team" class="empty-state">
-          <h2 class="block-title">Players</h2>
-          <p>No team loaded.</p>
-          <div class="row gap">
-            <button type="button" id="team-new" class="small-button grow">New Team</button
-            ><button type="button" id="team-open" class="small-button grow">Open Team…</button>
-          </div>
-        </div>
-        <div id="team-loaded" hidden>
-          <div class="resource-header">
-            <div>
-              <h2 id="team-name" class="section-heading"></h2>
-              <p id="team-detail" class="muted"></p>
-              <p id="team-file-name" class="muted"></p>
-              <div id="custom-sport-editor" class="custom-sport-editor" hidden></div>
-            </div>
-            <details class="resource-menu">
-              <summary aria-label="Team file menu">⋯</summary>
-              <div class="menu-panel">
-                <button type="button" id="team-new-menu">New Team</button
-                ><button type="button" id="team-open-menu">Open Team…</button
-                ><button type="button" id="team-save">Save Team</button
-                ><button type="button" id="team-save-as">Save Team As…</button
-                ><button type="button" id="team-reveal">Reveal in Finder / Explorer</button
-                ><button type="button" id="team-locate">Locate Missing Media…</button>
-              </div>
-            </details>
-          </div>
-          <div class="subtabs" role="tablist" aria-label="Player views">
-            <button type="button" id="roster-view-tab" class="subtab active" role="tab">
-              Roster</button
-            ><button type="button" id="live-view-tab" class="subtab" role="tab">Live</button>
-          </div>
-          <div id="roster-view">
-            <div class="row">
-              <h3 class="subheading">Groups</h3>
-              <select
-                id="group-select"
-                class="control compact-control"
-                aria-label="Roster group"
-              ></select>
-            </div>
-            <div id="group-editor" class="group-editor"></div>
-            <div id="manual-session" class="manual-session" hidden></div>
-            <form id="add-player" class="add-player">
-              <input
-                id="new-number"
-                class="field-number"
-                type="text"
-                placeholder="#"
-                aria-label="Jersey number"
-                maxlength="3"
-                autocomplete="off"
-              /><input
-                id="new-name"
-                type="text"
-                placeholder="Player name"
-                aria-label="Player name"
-                autocomplete="off"
-              /><input
-                id="new-position"
-                class="field-position"
-                type="text"
-                placeholder="Pos"
-                aria-label="Position"
-                maxlength="8"
-                autocomplete="off"
-              /><button type="submit" class="small-button">Add Player</button>
-            </form>
-            <div id="roster-list" class="roster-list"></div>
-          </div>
-          <div id="live-view" hidden>
-            <div class="row">
-              <h3 class="subheading">Live stats</h3>
-              <select
-                id="live-group-select"
-                class="control compact-control"
-                aria-label="Live group"
-              ></select>
-            </div>
-            <div id="live-table" class="live-table"></div>
-          </div>
-          <aside id="player-inspector" class="inspector" hidden></aside>
-        </div>
-      </section>
-
-      <section
-        id="panel-output"
-        class="tab-panel"
-        role="tabpanel"
-        aria-labelledby="tab-output"
-        hidden
-      >
-        <section class="block">
-          <h2 class="block-title">Display</h2>
-          <select id="display-select" class="control" aria-label="Output display"></select>
-          <p id="display-detail" class="muted detail"></p>
-          <button type="button" id="identify" class="small-button">Identify Displays</button>
+        <section id="page-media" class="page" data-page-panel="media" hidden>
+          <div class="page-toolbar"><div><p class="resource-label">Media source</p><p id="media-resource-name" class="resource-name">Inline media</p></div><details class="resource-menu"><summary class="button secondary-button">Media set</summary><div class="menu-panel"><button type="button" id="media-new-set">New media set</button><button type="button" id="media-open-set">Open media set…</button><button type="button" id="media-save-set">Save media set</button><button type="button" id="media-save-set-as">Save media set as…</button><button type="button" id="media-reveal-set">Reveal in Finder / Explorer</button></div></details></div>
+          <button type="button" id="media-dropzone" class="media-import-card"><span class="import-icon" aria-hidden="true">＋</span><span><strong>Add images and videos</strong><small>Drop files here or browse your computer</small></span><span class="button secondary-button">Choose files</span></button>
+          <div id="media-missing" class="notice" role="status" hidden><div><strong>Some files need attention</strong><p id="media-missing-text"></p></div><button type="button" id="media-locate" class="button secondary-button">Locate files…</button></div>
+          <section class="content-card media-library"><div class="card-heading"><div><p class="section-kicker">Playback order</p><h2>Your media</h2></div><div class="row"><p id="media-count" class="muted" aria-live="polite">No media</p><button type="button" id="media-clear" class="text-button danger-button">Clear all</button></div></div><div id="media-list" class="media-list" aria-label="Media in playback order"></div><div id="media-empty" class="inline-empty"><span aria-hidden="true">▧</span><p>Nothing here yet. Add the images or videos you want to rotate.</p></div></section>
+          <details class="content-card disclosure-card"><summary><span><strong>Playback defaults</strong><small>Timing, transition, and sizing</small></span><span>⌄</span></summary><section class="settings-grid" aria-label="Media settings"><label>Images stay<select id="media-duration" class="control"></select></label><label>Transition<select id="media-transition" class="control"><option value="crossfade">Crossfade</option><option value="none">None</option></select></label><label>Sizing<select id="media-sizing" class="control"><option value="fit">Fit</option><option value="fill">Fill</option></select></label></section></details>
+          <div class="live-inline-actions"><span>Output controls</span><button type="button" id="media-previous" class="button secondary-button">Previous</button><button type="button" id="media-next" class="button secondary-button">Next</button></div>
         </section>
-        <section class="block">
-          <h2 class="block-title">Layout</h2>
-          <div id="layout-presets" class="preset-buttons">
-            <button type="button" data-layout="full" class="small-button">Full</button
-            ><button type="button" data-layout="half-half" class="small-button">Half + Half</button
-            ><button type="button" data-layout="program-2-3" class="small-button">2/3 + 1/3</button
-            ><button type="button" data-layout="board-1-3" class="small-button">
-              Board 1/3 + Program 2/3</button
-            ><button type="button" data-layout="custom" class="small-button">Custom…</button>
-          </div>
-          <div id="layout-preview" class="layout-preview" aria-label="Output layout preview"></div>
-          <p id="layout-detail" class="muted detail"></p>
-          <div id="zone-edit-panel" class="zone-edit-panel" hidden>
-            <div class="row">
-              <strong>Edit Zones</strong>
-              <label class="checkbox-label"
-                ><input type="checkbox" id="zone-edit-safe" checked /> Safe area</label
-              >
-            </div>
-            <div id="custom-layout-tools" class="custom-layout-tools" hidden>
-              <select
-                id="custom-zone-select"
-                class="control"
-                aria-label="Selected layout zone"
-              ></select
-              ><button type="button" id="split-columns" class="small-button">
-                Split Left / Right</button
-              ><button type="button" id="split-rows" class="small-button">
-                Split Top / Bottom
-              </button>
-              <select id="custom-role-select" class="control" aria-label="Zone role">
-                <option value="program">Program</option>
-                <option value="live-board">Live Board</option>
-                <option value="media">Media</option>
-                <option value="blank">Blank</option>
-              </select>
-              <button type="button" id="merge-zone" class="small-button">Merge Selected</button>
-            </div>
-            <p class="muted detail">
-              Drag a divider or select a zone to change its role. Changes stay in draft until Done.
-            </p>
-            <div class="row gap">
-              <button type="button" id="zone-edit-cancel" class="small-button grow">Cancel</button>
-              <button type="button" id="zone-edit-done" class="small-button primary-ish grow">
-                Done
-              </button>
+
+        <section id="page-roster" class="page" data-page-panel="roster" hidden>
+          <div id="no-team" class="empty-state"><div class="empty-illustration" aria-hidden="true">♙</div><p class="section-kicker">Optional</p><h2>Add a team when the show needs player cards or a live board.</h2><p>You can still run media-only shows without setting this up.</p><div class="row gap"><button type="button" id="team-new" class="button primary-button grow">Create team</button><button type="button" id="team-open" class="button secondary-button grow">Open team…</button></div></div>
+          <div id="team-loaded" hidden>
+            <div class="page-toolbar team-toolbar"><div><p class="section-kicker">Team</p><h2 id="team-name" class="resource-title"></h2><p id="team-detail" class="muted"></p><p id="team-file-name" class="muted"></p></div><details class="resource-menu"><summary class="button secondary-button">Team file</summary><div class="menu-panel"><button type="button" id="team-new-menu">New team</button><button type="button" id="team-open-menu">Open team…</button><button type="button" id="team-save">Save team</button><button type="button" id="team-save-as">Save team as…</button><button type="button" id="team-reveal">Reveal in Finder / Explorer</button><button type="button" id="team-locate">Locate missing media…</button></div></details></div>
+            <div id="custom-sport-editor" class="custom-sport-editor" hidden></div>
+            <div id="roster-view" class="roster-layout">
+              <section class="content-card roster-main"><div class="card-heading"><div><p class="section-kicker">People</p><h2>Roster</h2></div><span class="muted">Click a player to edit</span></div><form id="add-player" class="add-player"><input id="new-number" class="field-number" type="text" placeholder="#" aria-label="Jersey number" maxlength="3" autocomplete="off" /><input id="new-name" type="text" placeholder="Player name" aria-label="Player name" autocomplete="off" /><input id="new-position" class="field-position" type="text" placeholder="Position" aria-label="Position" maxlength="8" autocomplete="off" /><button type="submit" class="button secondary-button">Add player</button></form><div id="roster-list" class="roster-list"></div></section>
+              <aside id="player-inspector" class="inspector" hidden></aside>
+              <section class="content-card groups-card"><div class="card-heading"><div><p class="section-kicker">Presentation</p><h2>Groups</h2></div><select id="group-select" class="control compact-control" aria-label="Roster group"></select></div><div id="manual-session" class="manual-session" hidden></div><div id="group-editor" class="group-editor"></div></section>
             </div>
           </div>
         </section>
-        <section class="settings-grid">
-          <label
-            >Live Board
-            <select id="output-group" class="control"></select></label
-          ><label
-            >Background
-            <select id="output-background" class="control">
-              <option value="black">Black</option>
-              <option value="primary">Team primary</option>
-              <option value="secondary">Team secondary</option>
-            </select></label
-          >
+
+        <section id="page-live" class="page" data-page-panel="live" hidden>
+          <div id="live-empty" class="empty-state"><div class="empty-illustration" aria-hidden="true">●</div><p class="section-kicker">Game-time workspace</p><h2>Load a team before opening live stats.</h2><p>The Live page becomes your fast operator surface once a roster is ready.</p><button type="button" class="button primary-button" data-go-page="roster">Go to roster</button></div>
+          <div id="live-view" hidden><div class="live-heading"><div><p class="section-kicker">Game-time workspace</p><h2>Live board</h2><p>Choose who is live and update stats without leaving this screen.</p></div><label class="select-label">Active group<select id="live-group-select" class="control compact-control" aria-label="Live group"></select></label></div><div id="live-table" class="live-table"></div></div>
         </section>
-        <div class="output-actions">
-          <button type="button" id="output-start" class="primary">Start Output</button
-          ><button type="button" id="output-stop" class="small-button danger-button" hidden>
-            Stop Output
-          </button>
-        </div>
-      </section>
 
-      <p id="message" class="message" role="status" aria-live="polite" hidden></p>
-      <div id="cue-controls" class="cue-controls" hidden>
-        <p id="cue-status" class="muted"></p>
-        <div class="row gap">
-          <button type="button" id="cue-previous" class="small-button grow">Previous</button
-          ><button type="button" id="cue-next" class="small-button grow">Next</button
-          ><button type="button" id="cue-end" class="small-button grow">End</button>
-        </div>
-      </div>
-      <div id="update-notice" class="notice info" role="status" hidden>
-        <p id="update-text"></p>
-        <button type="button" id="update-open" class="small-button">What’s New</button>
-      </div>
-    </main>
+        <section id="page-scenes" class="page" data-page-panel="scenes" hidden>
+          <section id="scene-strip" class="scene-browser" aria-label="Scenes"><div class="scene-browser-top"><div><p class="section-kicker">Show scenes</p><h2>Choose what the audience sees</h2></div><button type="button" id="scene-new" class="button primary-button">New scene</button></div><div id="scene-buttons" class="scene-buttons" role="toolbar" aria-label="Show scenes"></div><div class="scene-actions"><button type="button" id="scene-duplicate" class="text-button">Duplicate</button><button type="button" id="scene-rename" class="text-button">Rename</button><button type="button" id="scene-delete" class="text-button danger-button">Delete</button><button type="button" id="scene-default" class="text-button">Make default</button></div></section>
+          <div class="scene-workspace">
+            <section class="content-card preview-card"><div class="card-heading"><div><p class="section-kicker">Canvas</p><h2>Layout preview</h2></div><button type="button" id="scene-edit" class="button secondary-button">Edit zones</button></div><div id="layout-preview" class="layout-preview" aria-label="Output layout preview"></div><p id="layout-detail" class="muted detail"></p><div id="zone-edit-panel" class="zone-edit-panel" hidden><div class="row"><strong>Edit zones</strong><label class="checkbox-label"><input type="checkbox" id="zone-edit-safe" checked /> Safe area</label></div><div id="custom-layout-tools" class="custom-layout-tools" hidden><select id="custom-zone-select" class="control" aria-label="Selected layout zone"></select><button type="button" id="split-columns" class="button secondary-button">Split left / right</button><button type="button" id="split-rows" class="button secondary-button">Split top / bottom</button><select id="custom-role-select" class="control" aria-label="Zone role"><option value="program">Program</option><option value="live-board">Live Board</option><option value="media">Media</option><option value="blank">Blank</option></select><button type="button" id="merge-zone" class="button secondary-button">Merge selected</button></div><p class="muted detail">Drag a divider or select a zone. Nothing changes until you choose Done.</p><div class="row gap"><button type="button" id="zone-edit-cancel" class="button secondary-button grow">Cancel</button><button type="button" id="zone-edit-done" class="button primary-button grow">Done</button></div></div></section>
+            <aside class="scene-settings"><section class="content-card"><p class="section-kicker">Starting point</p><h2>Layout</h2><div id="layout-presets" class="preset-buttons"><button type="button" data-layout="full" class="preset-card"><strong>Full</strong><small>Program fills the screen</small></button><button type="button" data-layout="half-half" class="preset-card"><strong>Half + half</strong><small>Program and live board</small></button><button type="button" data-layout="program-2-3" class="preset-card"><strong>Program focus</strong><small>2/3 program + 1/3 board</small></button><button type="button" data-layout="board-1-3" class="preset-card"><strong>Board first</strong><small>1/3 board + 2/3 program</small></button><button type="button" data-layout="custom" class="preset-card"><strong>Custom</strong><small>Build your own zones</small></button></div></section><section class="content-card scene-options"><p class="section-kicker">Scene options</p><label>Live board<select id="output-group" class="control"></select></label><label>Background<select id="output-background" class="control"><option value="black">Black</option><option value="primary">Team primary</option><option value="secondary">Team secondary</option></select></label></section></aside>
+          </div>
+        </section>
 
-    <dialog id="confirm-dialog" class="confirm">
-      <form method="dialog">
-        <p id="confirm-text"></p>
-        <div class="confirm-actions">
-          <button type="submit" value="cancel" class="small-button">Cancel</button
-          ><button type="submit" value="discard" class="small-button">Don’t Save</button
-          ><button type="submit" value="save" class="small-button primary-ish" autofocus>
-            Save All
-          </button>
-        </div>
-      </form>
-    </dialog>
+        <section id="page-output" class="page" data-page-panel="output" hidden>
+          <div class="output-hero"><div><p class="section-kicker">Final check</p><h2>Put the active scene on the right screen.</h2><p>Confirm the destination below. Picta never guesses if a display disappears.</p></div><div id="output-state-badge" class="output-state-badge">OFF AIR</div></div>
+          <div class="output-grid"><section class="content-card display-card"><div class="card-heading"><div><p class="section-kicker">Destination</p><h2>Output display</h2></div><button type="button" id="identify" class="text-button">Identify displays</button></div><select id="display-select" class="control display-control" aria-label="Output display"></select><p id="display-detail" class="muted detail"></p></section><section class="content-card readiness-card"><p class="section-kicker">Active scene</p><h2 id="output-scene-name">Default</h2><div class="mini-screen" id="output-mini-preview"><span>Program</span></div><dl class="readiness-list"><div><dt>Media</dt><dd id="output-media-readiness">Not ready</dd></div><div><dt>Team board</dt><dd id="output-team-readiness">Optional</dd></div><div><dt>Display</dt><dd id="output-display-readiness">Choose one</dd></div></dl><button type="button" class="text-button" data-go-page="scenes">Edit scene</button></section></div>
+          <div class="take-live-card"><div><p class="section-kicker">Audience output</p><h2 id="output-action-title">Ready when you are</h2><p id="output-action-copy">Choose a display to enable output.</p></div><div class="output-actions"><button type="button" id="output-start" class="button take-live-button">Start output</button><button type="button" id="output-stop" class="button stop-button" hidden>Stop output</button></div></div>
+        </section>
+
+        <div id="cue-controls" class="cue-dock" hidden><div><span class="live-pulse"></span><p><strong>Live cue</strong><small id="cue-status"></small></p></div><div class="row"><button type="button" id="cue-previous" class="button secondary-button">Previous</button><button type="button" id="cue-next" class="button secondary-button">Next</button><button type="button" id="cue-end" class="button stop-button">End cue</button></div></div>
+      </main>
+    </div>
+
+    <dialog id="confirm-dialog" class="confirm"><form method="dialog"><p class="section-kicker">Unsaved work</p><h2>Save before continuing?</h2><p id="confirm-text"></p><div class="confirm-actions"><button type="submit" value="cancel" class="button secondary-button">Cancel</button><button type="submit" value="discard" class="button secondary-button">Don’t save</button><button type="submit" value="save" class="button primary-button" autofocus>Save all</button></div></form></dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
