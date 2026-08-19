@@ -3,7 +3,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { message as messageDialog } from '@tauri-apps/plugin-dialog';
 import * as ipc from './app/ipc.js';
@@ -16,6 +16,7 @@ import {
 import { OutputController } from './app/output-controller.js';
 import { emptyPrefs, flushPrefs, readPrefs, writePrefs, type Prefs } from './app/prefs.js';
 import {
+  chooseFolder,
   chooseMedia,
   chooseMediaSetToOpen,
   chooseMediaSetToSave,
@@ -32,6 +33,13 @@ import {
   openShowDocument,
   saveShowDocument,
 } from './app/show-io.js';
+import {
+  PAGE_NAMES,
+  pageFromHash,
+  pageHash,
+  renderPage,
+  type PageName,
+} from './app/page-navigation.js';
 import {
   appendMedia,
   defaultMediaSet,
@@ -84,7 +92,7 @@ import {
   topologyEquals,
   type DisplayInfo,
 } from './core/monitors.js';
-import { basename, dirname, type PathStyle } from './core/paths.js';
+import { basename, dirname, resolvePath, type PathStyle } from './core/paths.js';
 import {
   layoutPreset,
   layoutPresetId,
@@ -142,6 +150,20 @@ function need<T extends HTMLElement>(id: string): T {
 
 const ui = {
   globalStatus: need<HTMLParagraphElement>('global-status'),
+  navItems: [...document.querySelectorAll<HTMLButtonElement>('.nav-item[data-page]')],
+  workspace: need<HTMLElement>('page-home').parentElement as HTMLElement,
+  saveState: need<HTMLElement>('save-state'),
+  headerOutput: need<HTMLButtonElement>('header-output'),
+  homePrimaryAction: need<HTMLButtonElement>('home-primary-action'),
+  homeShowTitle: need<HTMLElement>('show-overview-title'),
+  homeShowStatus: need<HTMLElement>('home-show-status'),
+  homeMediaSummary: need<HTMLElement>('home-media-summary'),
+  homeSceneSummary: need<HTMLElement>('home-scene-summary'),
+  homeDisplaySummary: need<HTMLElement>('home-display-summary'),
+  homeLiveSummary: need<HTMLElement>('home-live-summary'),
+  homeMediaCount: need<HTMLElement>('home-media-count'),
+  homeTeamSummary: need<HTMLElement>('home-team-summary'),
+  homeScenesCount: need<HTMLElement>('home-scenes-count'),
   sceneStrip: need<HTMLElement>('scene-strip'),
   sceneButtons: need<HTMLDivElement>('scene-buttons'),
   sceneNew: need<HTMLButtonElement>('scene-new'),
@@ -150,20 +172,11 @@ const ui = {
   sceneDelete: need<HTMLButtonElement>('scene-delete'),
   sceneDefault: need<HTMLButtonElement>('scene-default'),
   sceneEdit: need<HTMLButtonElement>('scene-edit'),
-  tabs: [
-    need<HTMLButtonElement>('tab-media'),
-    need<HTMLButtonElement>('tab-players'),
-    need<HTMLButtonElement>('tab-output'),
-  ],
-  panels: [
-    need<HTMLElement>('panel-media'),
-    need<HTMLElement>('panel-players'),
-    need<HTMLElement>('panel-output'),
-  ],
   message: need<HTMLParagraphElement>('message'),
   mediaResourceName: need<HTMLParagraphElement>('media-resource-name'),
   mediaDropzone: need<HTMLButtonElement>('media-dropzone'),
   mediaList: need<HTMLDivElement>('media-list'),
+  mediaEmpty: need<HTMLDivElement>('media-empty'),
   mediaCount: need<HTMLParagraphElement>('media-count'),
   mediaClear: need<HTMLButtonElement>('media-clear'),
   mediaMissing: need<HTMLDivElement>('media-missing'),
@@ -180,9 +193,8 @@ const ui = {
   teamDetail: need<HTMLParagraphElement>('team-detail'),
   teamFileName: need<HTMLParagraphElement>('team-file-name'),
   customSportEditor: need<HTMLDivElement>('custom-sport-editor'),
-  rosterViewTab: need<HTMLButtonElement>('roster-view-tab'),
-  liveViewTab: need<HTMLButtonElement>('live-view-tab'),
   rosterView: need<HTMLDivElement>('roster-view'),
+  liveEmpty: need<HTMLDivElement>('live-empty'),
   liveView: need<HTMLDivElement>('live-view'),
   groupSelect: need<HTMLSelectElement>('group-select'),
   groupEditor: need<HTMLDivElement>('group-editor'),
@@ -215,6 +227,14 @@ const ui = {
   outputBackground: need<HTMLSelectElement>('output-background'),
   outputStart: need<HTMLButtonElement>('output-start'),
   outputStop: need<HTMLButtonElement>('output-stop'),
+  outputStateBadge: need<HTMLDivElement>('output-state-badge'),
+  outputSceneName: need<HTMLElement>('output-scene-name'),
+  outputMiniPreview: need<HTMLDivElement>('output-mini-preview'),
+  outputMediaReadiness: need<HTMLElement>('output-media-readiness'),
+  outputTeamReadiness: need<HTMLElement>('output-team-readiness'),
+  outputDisplayReadiness: need<HTMLElement>('output-display-readiness'),
+  outputActionTitle: need<HTMLElement>('output-action-title'),
+  outputActionCopy: need<HTMLElement>('output-action-copy'),
   cueControls: need<HTMLDivElement>('cue-controls'),
   cueStatus: need<HTMLParagraphElement>('cue-status'),
   cuePrevious: need<HTMLButtonElement>('cue-previous'),
@@ -225,10 +245,17 @@ const ui = {
   updateNotice: need<HTMLDivElement>('update-notice'),
   updateText: need<HTMLParagraphElement>('update-text'),
   updateOpen: need<HTMLButtonElement>('update-open'),
+  updateDismiss: need<HTMLButtonElement>('update-dismiss'),
+  teamDialog: need<HTMLDialogElement>('team-dialog'),
+  teamDialogForm: need<HTMLFormElement>('team-dialog-form'),
+  teamDialogName: need<HTMLInputElement>('team-dialog-name'),
+  teamDialogSport: need<HTMLSelectElement>('team-dialog-sport'),
+  teamDialogPrimary: need<HTMLInputElement>('team-dialog-primary'),
+  teamDialogSecondary: need<HTMLInputElement>('team-dialog-secondary'),
+  teamDialogError: need<HTMLParagraphElement>('team-dialog-error'),
+  teamDialogCancel: need<HTMLButtonElement>('team-dialog-cancel'),
 };
 
-type TabName = 'media' | 'players' | 'output';
-type PlayerView = 'roster' | 'live';
 type SaveChoice = 'save' | 'discard' | 'cancel';
 
 interface ShowState {
@@ -254,8 +281,7 @@ let mediaFilePath: string | null = null;
 let mediaDirty = false;
 let teamFilePath: string | null = null;
 let teamDirty = false;
-let activeTab: TabName = 'media';
-let playerView: PlayerView = 'roster';
+let activePage: PageName = pageFromHash(window.location.hash);
 let selectedPlayerId: string | null = null;
 let selectedRosterGroupId: string | null = null;
 let selectedLiveGroupId: string | null = null;
@@ -268,8 +294,9 @@ let selectedDisplayId: string | null = null;
 let lostDisplayHint: Prefs['displayHint'] = null;
 let watchHandle: number | null = null;
 let busy = false;
+let offeredUpdateVersion: string | null = null;
 
-const appWindow = getCurrentWindow();
+const appWindow = isTauri() ? getCurrentWindow() : null;
 
 function mediaSet(): MediaSet {
   const resource = show.data.media;
@@ -353,7 +380,9 @@ function resourceDirtyNames(): string[] {
 
 function syncTitle(): void {
   const name = show.filePath ? basename(show.filePath, style).replace(/\.picta$/i, '') : 'Untitled';
-  void appWindow.setTitle(`${show.dirty ? '• ' : ''}${name} — Picta`);
+  void appWindow?.setTitle(`${show.dirty ? '• ' : ''}${name} — Picta`);
+  const dirtyCount = resourceDirtyNames().length;
+  ui.saveState.textContent = dirtyCount > 0 ? `${name} · unsaved` : `${name} show`;
 }
 
 function markShowDirty(): void {
@@ -475,7 +504,7 @@ function renderScenes(): void {
     button.className = 'scene-button';
     button.textContent = scene.name;
     button.dataset['sceneId'] = scene.id;
-    button.setAttribute('aria-pressed', String(scene.id === (activeSceneId ?? selectedSceneId)));
+    button.setAttribute('aria-pressed', String(output.active && scene.id === activeSceneId));
     button.setAttribute('aria-current', scene.id === selectedSceneId ? 'true' : 'false');
     button.addEventListener('click', () => activateScene(scene.id));
     ui.sceneButtons.append(button);
@@ -486,6 +515,7 @@ function renderScenes(): void {
   ui.sceneDelete.disabled = show.data.scenes.length <= 1;
   ui.sceneDefault.disabled = scene.id === show.data.defaultSceneId;
   ui.sceneEdit.disabled = zoneEditSession !== null;
+  renderSummaries();
 }
 
 function layoutEditMessage(scene: Scene, width: number, height: number): LayoutEditPreviewMessage {
@@ -572,6 +602,8 @@ const output = new OutputController({
   onStopped: (reason) => {
     if (reason === 'display-lost')
       setMessage('Output display disconnected. Choose the same display to resume.');
+    renderMedia();
+    renderPlayers();
     renderOutput();
     updateGlobalStatus();
   },
@@ -609,26 +641,82 @@ function updateGlobalStatus(): void {
   ui.globalStatus.classList.add('live');
 }
 
-function selectTab(tab: TabName): void {
-  activeTab = tab;
-  const names: TabName[] = ['media', 'players', 'output'];
-  for (let index = 0; index < names.length; index += 1) {
-    const selected = names[index] === tab;
-    const button = ui.tabs[index] as HTMLButtonElement;
-    const panel = ui.panels[index] as HTMLElement;
-    button.setAttribute('aria-selected', String(selected));
-    button.tabIndex = selected ? 0 : -1;
-    panel.hidden = !selected;
-  }
+type HistoryMode = 'push' | 'replace' | 'none';
+
+function selectPage(page: PageName, historyMode: HistoryMode = 'push'): void {
+  const changed = activePage !== page;
+  activePage = page;
+  renderPage(document, page);
+  if (historyMode === 'replace') history.replaceState({ page }, '', pageHash(page));
+  else if (historyMode === 'push' && (changed || window.location.hash !== pageHash(page)))
+    history.pushState({ page }, '', pageHash(page));
+  ui.headerOutput.disabled = page === 'output';
+  ui.headerOutput.textContent = page === 'output' ? 'Output open' : 'Open output';
+  if (changed) ui.workspace.scrollTo({ top: 0, behavior: 'instant' });
 }
 
-function setPlayerView(view: PlayerView): void {
-  playerView = view;
-  ui.rosterView.hidden = view !== 'roster';
-  ui.liveView.hidden = view !== 'live';
-  ui.rosterViewTab.classList.toggle('active', view === 'roster');
-  ui.liveViewTab.classList.toggle('active', view === 'live');
-  renderPlayers();
+function countLabel(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+function renderSummaries(): void {
+  const media = mediaSet();
+  const usableMedia = media.items.filter((item) => !item.missing).length;
+  const currentTeam = team();
+  const scene = selectedScene();
+  const display = findById(displays, selectedDisplayId);
+  const hasBoard = layoutZones(scene.layout).some((zone) => zone.role === 'live-board');
+  const boardReady = currentTeam !== undefined && liveGroupId(scene) !== null;
+  const showName = show.filePath
+    ? basename(show.filePath, style).replace(/\.picta$/i, '')
+    : 'Untitled';
+  ui.saveState.textContent =
+    resourceDirtyNames().length > 0 ? `${showName} · unsaved` : `${showName} show`;
+  ui.homeShowTitle.textContent = showName;
+  ui.homeShowStatus.textContent = output.active
+    ? `On air · ${display ? displayLabel(display) : 'Output'}`
+    : 'Not on air';
+
+  ui.homePrimaryAction.textContent = media.items.length === 0 ? 'Add media' : 'Review media';
+  ui.homeMediaSummary.textContent =
+    media.items.length === 0
+      ? 'No media yet'
+      : `${countLabel(usableMedia, 'file')} ready${usableMedia < media.items.length ? ` · ${media.items.length - usableMedia} missing` : ''}`;
+  ui.homeSceneSummary.textContent = `${scene.name} · ${layoutZones(scene.layout).length} zone${layoutZones(scene.layout).length === 1 ? '' : 's'}`;
+  ui.homeDisplaySummary.textContent = display ? displayLabel(display) : 'No display selected';
+  ui.homeLiveSummary.textContent = output.active
+    ? `Live on ${display ? displayLabel(display) : 'output'}`
+    : display
+      ? 'Ready to start'
+      : 'Waiting for a display';
+  ui.homeMediaCount.textContent = countLabel(media.items.length, 'item');
+  ui.homeTeamSummary.textContent = currentTeam
+    ? `${currentTeam.name} · ${countLabel(currentTeam.players.length, 'player')}`
+    : 'Not loaded';
+  ui.homeScenesCount.textContent = countLabel(show.data.scenes.length, 'scene');
+
+  ui.outputStateBadge.textContent = output.active ? 'ON AIR' : 'OFF AIR';
+  ui.outputStateBadge.classList.toggle('live', output.active);
+  ui.outputSceneName.textContent = scene.name;
+  ui.outputMiniPreview.textContent = `${layoutZones(scene.layout).length} zone${layoutZones(scene.layout).length === 1 ? '' : 's'} · ${layoutPresetId(scene.layout) === 'custom' ? 'Custom' : 'Preset'}`;
+  ui.outputMediaReadiness.textContent =
+    usableMedia === 0 ? 'None' : countLabel(usableMedia, 'item');
+  ui.outputTeamReadiness.textContent = hasBoard
+    ? boardReady
+      ? (currentTeam?.name ?? 'Ready')
+      : 'Team required'
+    : 'Not used';
+  ui.outputDisplayReadiness.textContent = display ? displayLabel(display) : 'Not selected';
+  if (output.active) {
+    ui.outputActionTitle.textContent = 'Output active';
+    ui.outputActionCopy.textContent = `${scene.name} · ${display ? displayLabel(display) : 'Output display'}`;
+  } else if (!display) {
+    ui.outputActionTitle.textContent = 'No display selected';
+    ui.outputActionCopy.textContent = 'Select an output display.';
+  } else {
+    ui.outputActionTitle.textContent = 'Ready';
+    ui.outputActionCopy.textContent = `${scene.name} · ${displayLabel(display)}`;
+  }
 }
 
 function renderMedia(): void {
@@ -641,6 +729,32 @@ function renderMedia(): void {
   data.items.forEach((item, index) => {
     const row = document.createElement('article');
     row.className = 'media-item';
+    row.draggable = true;
+    row.dataset['mediaId'] = item.id;
+    row.addEventListener('dragstart', (event) => {
+      event.dataTransfer?.setData('application/x-picta-media', item.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragover', (event) => {
+      if (!event.dataTransfer?.types.includes('application/x-picta-media')) return;
+      event.preventDefault();
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', (event) => {
+      const sourceId = event.dataTransfer?.getData('application/x-picta-media');
+      const from = data.items.findIndex((candidate) => candidate.id === sourceId);
+      row.classList.remove('drag-over');
+      if (from < 0 || from === index) return;
+      event.preventDefault();
+      updateMedia({ ...data, items: moveMediaItem(data.items, from, index) });
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      for (const candidate of ui.mediaList.querySelectorAll('.drag-over'))
+        candidate.classList.remove('drag-over');
+    });
     const preview = document.createElement('div');
     preview.className = 'media-preview';
     if (item.type === 'image' && !item.missing) {
@@ -703,6 +817,7 @@ function renderMedia(): void {
       ? 'No media'
       : `${data.items.length} item${data.items.length === 1 ? '' : 's'}`;
   ui.mediaClear.hidden = data.items.length === 0;
+  ui.mediaEmpty.hidden = data.items.length !== 0;
   ui.mediaMissing.hidden = missing === 0;
   ui.mediaMissingText.textContent = `${missing} media file${missing === 1 ? '' : 's'} could not be found.`;
   ui.mediaDuration.replaceChildren();
@@ -720,6 +835,7 @@ function renderMedia(): void {
   ui.mediaSizing.value = data.imageSizing;
   ui.mediaPrevious.disabled = !output.active;
   ui.mediaNext.disabled = !output.active;
+  renderSummaries();
 }
 
 async function showMediaNow(item: MediaItem): Promise<void> {
@@ -757,12 +873,11 @@ async function locateMedia(): Promise<void> {
   const data = mediaSet();
   const missing = data.items.filter((item) => item.missing);
   if (missing.length === 0) return;
-  const folder = window.prompt(
-    'Folder containing the moved media files:',
-    prefs.lastDirectory ?? '',
-  );
+  const folder = await chooseFolder(prefs.lastDirectory, 'Locate Moved Media');
   if (!folder) return;
-  const candidates = missing.map((item) => `${folder}/${basename(item.path, style)}`);
+  prefs = { ...prefs, lastDirectory: folder };
+  writePrefs(prefs);
+  const candidates = missing.map((item) => resolvePath(folder, basename(item.path, style), style));
   const exists = await ipc.pathsExist(candidates).catch(() => candidates.map(() => false));
   const next = data.items.map((item) => {
     const index = missing.findIndex((candidate) => candidate.id === item.id);
@@ -798,12 +913,11 @@ async function locateTeamMedia(): Promise<void> {
     setMessage('No missing team media was found.');
     return;
   }
-  const folder = window.prompt(
-    'Folder containing the moved team media files:',
-    prefs.lastDirectory ?? '',
-  );
+  const folder = await chooseFolder(prefs.lastDirectory, 'Locate Moved Team Media');
   if (!folder) return;
-  const candidates = missing.map((item) => `${folder}/${basename(item.path, style)}`);
+  prefs = { ...prefs, lastDirectory: folder };
+  writePrefs(prefs);
+  const candidates = missing.map((item) => resolvePath(folder, basename(item.path, style), style));
   const exists = await ipc.pathsExist(candidates).catch(() => candidates.map(() => false));
   const replacements = new Map(
     missing.flatMap((item, index) =>
@@ -975,6 +1089,31 @@ function renderGroupEditor(current: Team): void {
     if (!player) continue;
     const row = document.createElement('div');
     row.className = 'group-row';
+    row.draggable = true;
+    row.dataset['playerId'] = player.id;
+    row.addEventListener('dragstart', (event) => {
+      event.dataTransfer?.setData('application/x-picta-group-player', player.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragover', (event) => {
+      if (!event.dataTransfer?.types.includes('application/x-picta-group-player')) return;
+      event.preventDefault();
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', (event) => {
+      const sourceId = event.dataTransfer?.getData('application/x-picta-group-player');
+      const from = group.playerIds.indexOf(sourceId ?? '');
+      row.classList.remove('drag-over');
+      if (from < 0 || from === index) return;
+      event.preventDefault();
+      updateTeam(reorderGroupPlayer(current, group.id, from, index));
+    });
+    row.addEventListener('dragend', () => {
+      for (const candidate of ui.groupEditor.querySelectorAll('.dragging, .drag-over'))
+        candidate.classList.remove('dragging', 'drag-over');
+    });
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
     handle.textContent = '☰';
@@ -1139,12 +1278,47 @@ function cancelActiveCue(): void {
   output.cancelCue();
 }
 
+function reorderRosterPlayer(current: Team, sourceId: string, targetId: string): Team {
+  const from = current.players.findIndex((player) => player.id === sourceId);
+  const to = current.players.findIndex((player) => player.id === targetId);
+  if (from < 0 || to < 0 || from === to) return current;
+  const players = current.players.slice();
+  const [player] = players.splice(from, 1);
+  if (!player) return current;
+  players.splice(to, 0, player);
+  return { ...current, players };
+}
+
 function renderRosterList(current: Team): void {
   ui.rosterList.replaceChildren();
   for (const player of current.players) {
     const row = document.createElement('div');
     row.className = 'roster-row';
     row.tabIndex = 0;
+    row.draggable = true;
+    row.dataset['playerId'] = player.id;
+    row.addEventListener('dragstart', (event) => {
+      event.dataTransfer?.setData('application/x-picta-roster-player', player.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragover', (event) => {
+      if (!event.dataTransfer?.types.includes('application/x-picta-roster-player')) return;
+      event.preventDefault();
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', (event) => {
+      const sourceId = event.dataTransfer?.getData('application/x-picta-roster-player');
+      row.classList.remove('drag-over');
+      if (!sourceId || sourceId === player.id) return;
+      event.preventDefault();
+      updateTeam(reorderRosterPlayer(current, sourceId, player.id));
+    });
+    row.addEventListener('dragend', () => {
+      for (const candidate of ui.rosterList.querySelectorAll('.dragging, .drag-over'))
+        candidate.classList.remove('dragging', 'drag-over');
+    });
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
     handle.textContent = '☰';
@@ -1464,13 +1638,21 @@ function renderPlayers(): void {
   const current = team();
   ui.noTeam.hidden = current !== undefined;
   ui.teamLoaded.hidden = current === undefined;
-  if (!current) return;
+  ui.liveEmpty.hidden = current !== undefined;
+  ui.liveView.hidden = current === undefined;
+  if (!current) {
+    ui.liveTable.replaceChildren();
+    renderSummaries();
+    return;
+  }
+  ui.rosterView.hidden = false;
   renderTeamHeader(current);
   renderCustomSportEditor(current);
   renderGroupEditor(current);
   renderRosterList(current);
   renderInspector(current);
-  if (playerView === 'live') renderLive(current);
+  renderLive(current);
+  renderSummaries();
 }
 
 function updateOutputBoard(): void {
@@ -1487,6 +1669,7 @@ function renderDisplays(): void {
     selectedDisplayId = null;
     ui.displaySelect.disabled = true;
     ui.displayDetail.textContent = '';
+    renderOutput();
     return;
   }
   ui.displaySelect.disabled = output.active;
@@ -1716,6 +1899,7 @@ function renderOutput(): void {
   ui.outputStop.disabled = !output.active;
   ui.displaySelect.disabled = output.active;
   updateGlobalStatus();
+  renderSummaries();
 }
 
 async function refreshDisplays(): Promise<DisplayInfo[]> {
@@ -1798,6 +1982,8 @@ async function startOutput(): Promise<void> {
       setMessage('No usable media could be started.');
       return;
     }
+    renderMedia();
+    renderPlayers();
     renderOutput();
     startWatching();
   } catch (error) {
@@ -1813,41 +1999,63 @@ function stopOutput(): void {
   activeSceneId = null;
   output.stop('user');
   void ipc.closePresentation().catch(() => undefined);
+  renderMedia();
+  renderPlayers();
   renderOutput();
   startWatching();
 }
 
+interface NewTeamDetails {
+  name: string;
+  sport: string;
+  primary: string;
+  secondary: string;
+}
+
+function askNewTeamDetails(): Promise<NewTeamDetails | null> {
+  ui.teamDialogName.value = '';
+  ui.teamDialogSport.value = 'volleyball';
+  ui.teamDialogPrimary.value = '#1b4b36';
+  ui.teamDialogSecondary.value = '#ffffff';
+  ui.teamDialogError.hidden = true;
+  ui.teamDialog.returnValue = 'cancel';
+  ui.teamDialog.showModal();
+  window.requestAnimationFrame(() => ui.teamDialogName.focus());
+  return new Promise((resolve) => {
+    let result: NewTeamDetails | null = null;
+    const submit = (event: SubmitEvent) => {
+      event.preventDefault();
+      const name = ui.teamDialogName.value.trim();
+      if (!name) {
+        ui.teamDialogError.textContent = 'Enter a team name.';
+        ui.teamDialogError.hidden = false;
+        ui.teamDialogName.focus();
+        return;
+      }
+      result = {
+        name,
+        sport: ui.teamDialogSport.value,
+        primary: ui.teamDialogPrimary.value,
+        secondary: ui.teamDialogSecondary.value,
+      };
+      ui.teamDialog.close('create');
+    };
+    const cancel = () => ui.teamDialog.close('cancel');
+    const close = () => {
+      ui.teamDialogForm.removeEventListener('submit', submit);
+      ui.teamDialogCancel.removeEventListener('click', cancel);
+      resolve(ui.teamDialog.returnValue === 'create' ? result : null);
+    };
+    ui.teamDialogForm.addEventListener('submit', submit);
+    ui.teamDialogCancel.addEventListener('click', cancel);
+    ui.teamDialog.addEventListener('close', close, { once: true });
+  });
+}
+
 async function createNewTeam(): Promise<void> {
-  const name = window.prompt('Team name:');
-  if (!name?.trim()) return;
-  const sport = (
-    window.prompt(
-      'Sport (volleyball, basketball, soccer, football, baseball, softball or custom):',
-      'volleyball',
-    ) ?? 'volleyball'
-  )
-    .trim()
-    .toLowerCase();
-  const allowedSports = new Set([
-    'volleyball',
-    'basketball',
-    'soccer',
-    'football',
-    'baseball',
-    'softball',
-    'custom',
-  ]);
-  const selectedSport = allowedSports.has(sport) ? sport : 'custom';
-  const primary = window.prompt('Primary color (#RRGGBB):', '#1b4b36') ?? '#1b4b36';
-  const secondary = window.prompt('Secondary color (#RRGGBB):', '#ffffff') ?? '#ffffff';
-  const color = (value: string, fallback: string): string =>
-    /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim() : fallback;
-  const data = createTeam(
-    name,
-    selectedSport,
-    color(primary, '#1b4b36'),
-    color(secondary, '#ffffff'),
-  );
+  const details = await askNewTeamDetails();
+  if (!details) return;
+  const data = createTeam(details.name, details.sport, details.primary, details.secondary);
   show.data = {
     ...show.data,
     team: { kind: 'inline', data },
@@ -1863,7 +2071,7 @@ async function createNewTeam(): Promise<void> {
   renderPlayers();
   renderOutput();
   if (output.active) output.setTheme(outputTheme());
-  selectTab('players');
+  selectPage('roster');
 }
 
 async function openTeamFile(): Promise<void> {
@@ -1892,7 +2100,7 @@ async function openTeamFile(): Promise<void> {
     setMessage(
       `${result.missingPaths.length} team media file${result.missingPaths.length === 1 ? '' : 's'} could not be found.`,
     );
-  selectTab('players');
+  selectPage('roster');
   prefs = { ...prefs, lastDirectory: dirname(path, style) };
   writePrefs(prefs);
 }
@@ -2073,7 +2281,7 @@ async function openShowFile(path?: string): Promise<void> {
     setMessage(
       `${result.missingCount} media file${result.missingCount === 1 ? '' : 's'} could not be found.`,
     );
-  if (team()) selectTab('players');
+  if (team()) selectPage('roster');
 }
 
 function renderAll(): void {
@@ -2103,26 +2311,47 @@ async function checkForUpdate(force = false): Promise<void> {
   prefs = { ...prefs, lastUpdateCheck: Date.now() };
   writePrefs(prefs);
   if (!status || !shouldNotify(status, prefs.dismissedVersion)) return;
+  offeredUpdateVersion = status.latestVersion;
   ui.updateText.textContent = updateNoticeText(status);
   ui.updateNotice.hidden = false;
 }
 
-function wire(): void {
-  for (let index = 0; index < ui.tabs.length; index += 1) {
-    const tab = ui.tabs[index] as HTMLButtonElement;
-    tab.addEventListener('click', () =>
-      selectTab(['media', 'players', 'output'][index] as TabName),
-    );
-    tab.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+function wirePageNavigation(): void {
+  for (let index = 0; index < ui.navItems.length; index += 1) {
+    const item = ui.navItems[index];
+    if (!item) continue;
+    item.addEventListener('click', () => {
+      const page = item.dataset['page'];
+      if (page && PAGE_NAMES.includes(page as PageName)) selectPage(page as PageName);
+    });
+    item.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
       event.preventDefault();
-      const next = event.key === 'ArrowRight' ? (index + 1) % 3 : (index + 2) % 3;
-      selectTab(['media', 'players', 'output'][next] as TabName);
-      (ui.tabs[next] as HTMLButtonElement).focus();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const next = (index + direction + ui.navItems.length) % ui.navItems.length;
+      const nextItem = ui.navItems[next];
+      const page = nextItem?.dataset['page'];
+      if (nextItem && page && PAGE_NAMES.includes(page as PageName)) {
+        selectPage(page as PageName);
+        nextItem.focus();
+      }
     });
   }
-  ui.rosterViewTab.addEventListener('click', () => setPlayerView('roster'));
-  ui.liveViewTab.addEventListener('click', () => setPlayerView('live'));
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-go-page]')) {
+    button.addEventListener('click', () => {
+      const page = button.dataset['goPage'];
+      if (page && PAGE_NAMES.includes(page as PageName)) selectPage(page as PageName);
+    });
+  }
+  ui.homePrimaryAction.addEventListener('click', () => selectPage('media'));
+  window.addEventListener('popstate', () => selectPage(pageFromHash(window.location.hash), 'none'));
+  window.addEventListener('hashchange', () =>
+    selectPage(pageFromHash(window.location.hash), 'none'),
+  );
+}
+
+function wire(): void {
+  wirePageNavigation();
   ui.mediaDropzone.addEventListener(
     'click',
     () => void chooseMedia(prefs.lastDirectory).then(addMedia),
@@ -2396,6 +2625,14 @@ function wire(): void {
     'click',
     () => void ipc.openReleasesPage().catch(() => setMessage('Could not open the browser.')),
   );
+  ui.updateDismiss.addEventListener('click', () => {
+    if (offeredUpdateVersion) {
+      prefs = { ...prefs, dismissedVersion: offeredUpdateVersion };
+      writePrefs(prefs);
+    }
+    offeredUpdateVersion = null;
+    ui.updateNotice.hidden = true;
+  });
   void listen<{ key: string }>(EVENT_KEY, (event) => {
     if (!output.active) return;
     if (event.payload.key === 'Escape') {
@@ -2434,13 +2671,18 @@ function wire(): void {
     }
   });
   void getCurrentWebviewWindow().onDragDropEvent((event) => {
+    if (event.payload.type === 'enter' || event.payload.type === 'over') {
+      ui.mediaDropzone.classList.toggle('drag-active', activePage === 'media');
+      return;
+    }
+    ui.mediaDropzone.classList.remove('drag-active');
     if (event.payload.type !== 'drop') return;
     const paths = event.payload.paths;
     const showPath = paths.find((path) => /\.picta$/i.test(path));
     const setPath = paths.find((path) => /\.pictaset$/i.test(path));
     const teamPath = paths.find((path) => /\.pictateam$/i.test(path));
     if (showPath) void openShowFile(showPath);
-    else if (activeTab === 'media' && setPath)
+    else if (setPath)
       void (async () => {
         const result = await openMediaSet(setPath, style);
         if (result.ok) {
@@ -2449,9 +2691,10 @@ function wire(): void {
           mediaDirty = false;
           markShowDirty();
           renderAll();
+          selectPage('media');
         }
       })();
-    else if (activeTab === 'players' && teamPath)
+    else if (teamPath)
       void (async () => {
         const result = await openTeam(teamPath, style);
         if (result.ok) {
@@ -2464,21 +2707,26 @@ function wire(): void {
           teamDirty = false;
           markShowDirty();
           renderAll();
+          selectPage('roster');
         }
       })();
-    else if (activeTab === 'media') void addMedia(paths);
+    else if (activePage === 'media') void addMedia(paths);
+    else if (paths.some(isSupportedMediaPath))
+      setMessage('Open the Media page before dropping images or videos.');
   });
-  void appWindow.onCloseRequested(async (event) => {
-    event.preventDefault();
-    stopOutput();
-    if (!(await ensureSaved())) return;
-    await persistWindow();
-    await ipc.closePresentation().catch(() => undefined);
-    await ipc.quitApp().catch(() => undefined);
-  });
+  if (appWindow)
+    void appWindow.onCloseRequested(async (event) => {
+      event.preventDefault();
+      if (!(await ensureSaved())) return;
+      stopOutput();
+      await persistWindow();
+      await ipc.closePresentation().catch(() => undefined);
+      await ipc.quitApp().catch(() => undefined);
+    });
 }
 
 async function persistWindow(): Promise<void> {
+  if (!appWindow) return;
   try {
     const size = await appWindow.innerSize();
     const position = await appWindow.outerPosition();
@@ -2493,6 +2741,7 @@ async function persistWindow(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (!appWindow) return;
   style = await ipc
     .pathStyle()
     .catch(() => (navigator.userAgent.includes('Windows') ? 'win32' : 'posix'));
@@ -2520,7 +2769,7 @@ async function main(): Promise<void> {
     }
   }
   renderAll();
-  selectTab('media');
+  selectPage(activePage, 'replace');
   const startup = await ipc.startupFile().catch(() => null);
   if (startup) await openShowFile(startup);
   await appWindow.show();
@@ -2529,4 +2778,13 @@ async function main(): Promise<void> {
   void checkForUpdate();
 }
 
-void main().catch((error: unknown) => setMessage(`Picta could not start: ${String(error)}`));
+// Paint the requested route immediately; native initialization can continue without a blank flash.
+renderPage(document, activePage);
+if (appWindow) {
+  void main().catch((error: unknown) => setMessage(`Picta could not start: ${String(error)}`));
+} else {
+  // The browser preview is intentionally read-only apart from page navigation.
+  renderAll();
+  wirePageNavigation();
+  selectPage(activePage, 'replace');
+}
