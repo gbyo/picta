@@ -106,7 +106,7 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid #aeb1b6;
+  outline: 2px solid #74787e;
   outline-offset: 1px;
 }
 
@@ -1892,32 +1892,32 @@ h2 {
    -------------------------------------------------------------------------- */
 
 :root {
-  --bg: #202124;
-  --sidebar: #18191b;
-  --sidebar-raised: #303236;
-  --surface: #292a2e;
-  --surface-soft: #242529;
-  --surface-tint: #2c2e32;
-  --border: #3b3d42;
-  --border-strong: #55585f;
-  --text: #ededee;
-  --muted: #a5a8ae;
-  --muted-light: #777b82;
-  --accent: #c9ccd1;
-  --accent-hover: #eceef0;
-  --accent-soft: #383a3f;
-  --accent-text: #17181a;
-  --danger: #ff7d87;
-  --danger-soft: #442529;
-  --success: #98c5a7;
-  --success-soft: #293a30;
-  --warning: #d9ad75;
+  --bg: #ececed;
+  --sidebar: #e3e4e6;
+  --sidebar-raised: #ffffff;
+  --surface: #f8f8f8;
+  --surface-soft: #f0f0f1;
+  --surface-tint: #f2f3f4;
+  --border: #cacccf;
+  --border-strong: #aeb1b5;
+  --text: #202124;
+  --muted: #666a70;
+  --muted-light: #92969c;
+  --accent: #465159;
+  --accent-hover: #282e33;
+  --accent-soft: #e1e3e5;
+  --accent-text: #ffffff;
+  --danger: #a92732;
+  --danger-soft: #f6e8e9;
+  --success: #376f4b;
+  --success-soft: #e5efe8;
+  --warning: #8b581c;
   --shadow-sm: none;
   --shadow-md: 0 8px 24px rgba(18, 22, 27, 0.14);
   --radius-sm: 3px;
   --radius: 4px;
   --radius-lg: 5px;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -1940,7 +1940,7 @@ strong {
 
 .sidebar {
   padding: 16px 10px 12px;
-  border-right: 1px solid #33353a;
+  border-right: 1px solid #c7c9cc;
   background: var(--sidebar);
   color: var(--text);
 }
@@ -1953,7 +1953,7 @@ strong {
 .brand-mark {
   width: 28px;
   height: 28px;
-  border: 1px solid #55585e;
+  border: 1px solid #202124;
   border-radius: 3px;
   background: #0e0f10;
   box-shadow: none;
@@ -1966,7 +1966,7 @@ strong {
 }
 
 .brand-subtitle {
-  color: #7f838a;
+  color: #777b81;
   font-size: 10px;
 }
 
@@ -1976,7 +1976,7 @@ strong {
 
 .nav-label {
   margin: 15px 9px 5px;
-  color: #72767d;
+  color: #74787e;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
@@ -1989,22 +1989,22 @@ strong {
   padding: 6px 9px;
   border: 1px solid transparent;
   border-radius: 3px;
-  color: #b7bac0;
+  color: #43474c;
   transition: none;
 }
 
 .nav-item:hover {
-  border-color: #3b3d42;
-  background: #24262a;
+  border-color: #c7c9cc;
+  background: #eceeef;
   color: var(--text);
 }
 
 .nav-item[aria-current='page'] {
-  border-color: #484b51;
-  background: #303236;
-  color: #fff;
+  border-color: #bfc2c6;
+  background: #ffffff;
+  color: #17181a;
   font-weight: 600;
-  box-shadow: inset 2px 0 0 #d7d9dc;
+  box-shadow: inset 2px 0 0 #303338;
 }
 
 .nav-icon {
@@ -2018,14 +2018,14 @@ strong {
 .connection-card,
 .update-card {
   padding: 9px;
-  border-color: #383a3f;
+  border-color: #c7c9cc;
   border-radius: 3px;
-  background: #202124;
+  background: #eceeef;
 }
 
 .global-status,
 .update-card {
-  color: #9b9fa6;
+  color: #5d6167;
   font-size: 10px;
 }
 
@@ -2061,7 +2061,7 @@ strong {
   padding: 10px 28px;
   align-items: center;
   border-bottom: 1px solid var(--border);
-  background: #26272a;
+  background: #f4f4f5;
 }
 
 .page-eyebrow,
@@ -2127,31 +2127,31 @@ strong {
 }
 
 .primary-button {
-  border-color: #c6c8cc;
-  background: #d4d6d9;
-  color: #17181a;
+  border-color: #303338;
+  background: #303338;
+  color: #ffffff;
   box-shadow: none;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #f0f1f2;
+  background: #17191c;
 }
 
 .secondary-button,
 .small-button {
-  border-color: #51545a;
-  background: #313338;
+  border-color: #b8bbc0;
+  background: #ffffff;
   box-shadow: none;
 }
 
 .secondary-button:hover:not(:disabled),
 .small-button:hover:not(:disabled) {
-  border-color: #70747b;
-  background: #3a3c41;
+  border-color: #8e9298;
+  background: #f0f1f2;
 }
 
 .text-button {
-  color: #c1c4c9;
+  color: #414950;
   font-size: 11px;
 }
 
@@ -2173,12 +2173,12 @@ strong {
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
-  color: #fff;
+  color: var(--text);
 }
 
 .show-overview .section-kicker,
 .show-overview .muted {
-  color: #989ca3;
+  color: #6c7076;
 }
 
 .show-overview h2 {
@@ -2194,15 +2194,15 @@ strong {
 }
 
 .show-overview .primary-button {
-  border-color: #c6c8cc;
-  background: #d4d6d9;
-  color: #17181a;
+  border-color: #303338;
+  background: #303338;
+  color: #ffffff;
 }
 
 .show-overview .secondary-button {
-  border-color: #53565c;
-  background: #2c2e32;
-  color: #fff;
+  border-color: #b8bbc0;
+  background: #ffffff;
+  color: var(--text);
 }
 
 .home-console {
@@ -2264,7 +2264,7 @@ strong {
 }
 
 .setup-row:hover {
-  background: #303236;
+  background: #eceeef;
 }
 
 .setup-index {
@@ -2340,11 +2340,11 @@ kbd {
   display: inline-block;
   margin: 0 2px 0 5px;
   padding: 2px 5px;
-  border: 1px solid #55585e;
-  border-bottom-color: #6a6d73;
+  border: 1px solid #b8bbc0;
+  border-bottom-color: #999da3;
   border-radius: 3px;
-  background: #303236;
-  color: #d8dade;
+  background: #f2f2f3;
+  color: #41454a;
   font:
     9px ui-monospace,
     SFMono-Regular,
@@ -2371,22 +2371,22 @@ kbd {
   min-height: 74px;
   gap: 12px;
   padding: 14px 16px;
-  border-color: #55585e;
+  border-color: #aeb1b5;
   border-radius: 4px;
-  background: #26272a;
+  background: #f7f7f7;
 }
 
 .media-import-card:hover {
-  border-color: #7b7f86;
-  background: #2c2e32;
+  border-color: #81858b;
+  background: #eeeeef;
 }
 
 .import-icon {
   width: 28px;
   height: 28px;
   border-radius: 3px;
-  background: #393b40;
-  color: #c1c4c9;
+  background: #dfe1e3;
+  color: #50545a;
   font-size: 18px;
 }
 
@@ -2448,10 +2448,10 @@ kbd {
 
 .scene-button[aria-current='true'],
 .preset-card.active {
-  border-color: #858990;
-  background: #3a3c41;
-  color: #fff;
-  box-shadow: inset 2px 0 0 #d5d7da;
+  border-color: #888c92;
+  background: #e1e3e5;
+  color: #202124;
+  box-shadow: inset 2px 0 0 #35383d;
 }
 
 .layout-preview {
@@ -2540,14 +2540,14 @@ kbd {
 }
 
 .take-live-button {
-  border-color: #c6c8cc;
-  background: #d4d6d9;
-  color: #17181a;
+  border-color: #303338;
+  background: #303338;
+  color: #ffffff;
   box-shadow: none;
 }
 
 .take-live-button:hover:not(:disabled) {
-  background: #f0f1f2;
+  background: #17191c;
 }
 
 .cue-dock,
@@ -2577,7 +2577,7 @@ kbd {
   .sidebar {
     padding: 6px 10px;
     border-right: 0;
-    border-bottom: 1px solid #33353a;
+    border-bottom: 1px solid #c7c9cc;
   }
 
   .brand-block {
