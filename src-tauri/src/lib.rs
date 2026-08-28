@@ -101,6 +101,21 @@ fn save_prefs(app: tauri::AppHandle, value: serde_json::Value) -> Result<(), Str
 }
 
 #[tauri::command]
+fn load_recovery(app: tauri::AppHandle) -> serde_json::Value {
+    files::load_recovery(&app)
+}
+
+#[tauri::command]
+fn save_recovery(app: tauri::AppHandle, value: serde_json::Value) -> Result<(), String> {
+    files::save_recovery(&app, &value)
+}
+
+#[tauri::command]
+fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
+    files::clear_recovery(&app)
+}
+
+#[tauri::command]
 fn startup_file() -> Option<String> {
     files::startup_file()
 }
@@ -254,6 +269,9 @@ pub fn run() {
             reveal_path,
             load_prefs,
             save_prefs,
+            load_recovery,
+            save_recovery,
+            clear_recovery,
             startup_file,
             path_style,
             quit_app,

@@ -181,6 +181,8 @@ and failures are reported in the controller, never on the output screen.
 - [`.pictateam` format](docs/pictateam-format.md): reusable portable teams.
 - [`.pictaset` format](docs/pictaset-format.md): reusable ordered media.
 - [Layout model](docs/layouts.md): recursive zones and exact geometry rules.
+- [Reliability notes](docs/reliability.md): output preflight limits and local
+  crash recovery behavior.
 
 All formats are small, human-readable JSON. Paths are written relative to the
 owning file whenever practical and use forward slashes on disk. Paths inside a

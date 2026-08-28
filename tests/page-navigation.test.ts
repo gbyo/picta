@@ -58,6 +58,12 @@ describe('controller page navigation', () => {
     expect(pageFromHash('')).toBe('home');
   });
 
+  it('does not throw for malformed URI escapes in the hash', () => {
+    expect(() => pageFromHash('#%')).not.toThrow();
+    expect(pageFromHash('#%')).toBe('home');
+    expect(pageFromHash('#%E0%A4%A')).toBe('home');
+  });
+
   it('keeps Home dashboard and Output readiness targets in the rendered document', () => {
     const document = renderedController();
     for (const id of [

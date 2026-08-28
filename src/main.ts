@@ -14,6 +14,16 @@ import {
   type ThemeMessage,
 } from './app/events.js';
 import { OutputController, type CueContext } from './app/output-controller.js';
+import {
+  inlineMediaSession,
+  newDocumentSession,
+  OperationGeneration,
+  replaceMediaInSession,
+  replaceTeamInSession,
+  runLatestOpen,
+  sessionFromShow,
+  type DocumentSession,
+} from './app/document-lifecycle.js';
 import type { CueQueueState } from './core/cues.js';
 import {
   askSceneName,
@@ -21,7 +31,7 @@ import {
   renderScenePicker,
   renderSceneStrip,
 } from './app/scenes-ui.js';
-import { askConfirm, askCustomStat, askText } from './app/dialogs.js';
+import { askConfirm, askCustomStat, askRecovery, askText } from './app/dialogs.js';
 import { renderManualWorkspace } from './app/manual-presentation.js';
 import { renderLayoutPreview, renderZoneSelect, type LayoutPath } from './app/layout-editor.js';
 import { emptyPrefs, flushPrefs, readPrefs, writePrefs, type Prefs } from './app/prefs.js';
@@ -154,6 +164,17 @@ import {
 } from './core/zone-edit.js';
 import { INTERVAL_CHOICES } from './core/types.js';
 import { shouldCheckNow, shouldNotify, updateNoticeText } from './core/update.js';
+import {
+  discardRecoverySnapshot,
+  readRecoverySnapshot,
+  writeRecoverySnapshot,
+} from './app/recovery-io.js';
+import { createRecoverySnapshot, type RecoverySnapshot } from './app/recovery.js';
+import {
+  MediaPreflightCache,
+  type MediaPreflightFailure,
+  type MediaPreflightResult,
+} from './app/media-preflight.js';
 
 function need<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -278,6 +299,9 @@ const ui = {
   cueEnd: need<HTMLButtonElement>('cue-end'),
   confirmDialog: need<HTMLDialogElement>('confirm-dialog'),
   confirmText: need<HTMLParagraphElement>('confirm-text'),
+  recoveryDialog: need<HTMLDialogElement>('recovery-dialog'),
+  recoveryRecover: need<HTMLButtonElement>('recovery-recover'),
+  recoveryDiscard: need<HTMLButtonElement>('recovery-discard'),
   updateNotice: need<HTMLDivElement>('update-notice'),
   updateText: need<HTMLParagraphElement>('update-text'),
   updateOpen: need<HTMLButtonElement>('update-open'),
@@ -350,8 +374,89 @@ let lostDisplayHint: Prefs['displayHint'] = null;
 let watchHandle: number | null = null;
 let busy = false;
 let offeredUpdateVersion: string | null = null;
+const resourceOpenOperations = new OperationGeneration();
+let recoveryTimer: number | null = null;
+let recoveryRevision = 0;
+let recoveryWrites: Promise<void> = Promise.resolve();
+const mediaPreflight = new MediaPreflightCache();
+let mediaPreflightResult: MediaPreflightResult | null = null;
+let mediaPreflightRevision = 0;
 
 const appWindow = isTauri() ? getCurrentWindow() : null;
+
+function currentDocumentSession(): DocumentSession {
+  return { show, mediaFilePath, mediaDirty, teamFilePath, teamDirty };
+}
+
+function adoptDocumentSession(next: DocumentSession): void {
+  show = next.show;
+  mediaFilePath = next.mediaFilePath;
+  mediaDirty = next.mediaDirty;
+  teamFilePath = next.teamFilePath;
+  teamDirty = next.teamDirty;
+  invalidateMediaPreflight();
+}
+
+function scheduleRecoveryPersistence(): void {
+  recoveryRevision += 1;
+  const revision = recoveryRevision;
+  if (recoveryTimer !== null) window.clearTimeout(recoveryTimer);
+  if (!show.dirty && !mediaDirty && !teamDirty) {
+    recoveryWrites = recoveryWrites
+      .then(async () => {
+        if (revision === recoveryRevision) await discardRecoverySnapshot();
+      })
+      .catch(() => undefined);
+    return;
+  }
+  recoveryTimer = window.setTimeout(() => {
+    recoveryTimer = null;
+    recoveryWrites = recoveryWrites
+      .then(async () => {
+        if (revision !== recoveryRevision) return;
+        if (!show.dirty && !mediaDirty && !teamDirty) {
+          await discardRecoverySnapshot();
+          return;
+        }
+        await writeRecoverySnapshot(createRecoverySnapshot(currentDocumentSession()));
+      })
+      .catch(() => undefined);
+  }, 900);
+}
+
+async function clearRecoveryPersistence(): Promise<void> {
+  if (recoveryTimer !== null) {
+    window.clearTimeout(recoveryTimer);
+    recoveryTimer = null;
+  }
+  recoveryRevision += 1;
+  await recoveryWrites.catch(() => undefined);
+  await discardRecoverySnapshot();
+}
+
+function applyRecoverySnapshot(snapshot: RecoverySnapshot): void {
+  adoptDocumentSession({
+    show: {
+      filePath: snapshot.showFilePath,
+      data: snapshot.data,
+      dirty: snapshot.showDirty,
+    },
+    mediaFilePath: snapshot.mediaFilePath,
+    mediaDirty: snapshot.mediaDirty,
+    teamFilePath: snapshot.teamFilePath,
+    teamDirty: snapshot.teamDirty,
+  });
+  selectedPlayerId = null;
+  selectedRosterGroupId = snapshot.data.team?.data?.groups[0]?.id ?? null;
+  selectedLiveGroupId = snapshot.data.team?.data?.groups[0]?.id ?? null;
+  selectedSceneId = snapshot.data.defaultSceneId;
+  activeSceneId = null;
+  zoneEditSession = null;
+  manualSession = null;
+  syncTitle();
+  renderAll();
+  scheduleRecoveryPersistence();
+}
 
 function mediaSet(): MediaSet {
   const resource = show.data.media;
@@ -359,6 +464,31 @@ function mediaSet(): MediaSet {
     resource.data ??
     defaultMediaSet(resource.kind === 'file' ? basename(resource.path, style) : 'Inline Media')
   );
+}
+
+function invalidateMediaPreflight(): void {
+  mediaPreflightRevision += 1;
+  mediaPreflightResult = null;
+  mediaPreflight.clear();
+}
+
+function mediaPreflightFailure(item: MediaItem): MediaPreflightFailure | undefined {
+  return mediaPreflightResult?.failed.find((failure) => failure.id === item.id);
+}
+
+async function refreshMediaPreflight(): Promise<{
+  data: MediaSet;
+  result: MediaPreflightResult;
+  revision: number;
+}> {
+  const revision = mediaPreflightRevision;
+  const data = mediaSet();
+  const result = await mediaPreflight.check(data.items);
+  if (revision === mediaPreflightRevision) {
+    mediaPreflightResult = result;
+    renderMedia();
+  }
+  return { data, result, revision };
 }
 
 function team(): Team | undefined {
@@ -443,6 +573,7 @@ function syncTitle(): void {
 function markShowDirty(): void {
   show.dirty = true;
   syncTitle();
+  scheduleRecoveryPersistence();
 }
 
 function markResourceDirty(kind: 'media' | 'team'): void {
@@ -453,6 +584,8 @@ function markResourceDirty(kind: 'media' | 'team'): void {
     teamDirty = true;
     if (show.data.team?.kind !== 'file') markShowDirty();
   }
+  syncTitle();
+  scheduleRecoveryPersistence();
 }
 
 function reconcileEventForTeam(data: ShowDocument['event'], current: Team): ShowDocument['event'] {
@@ -480,6 +613,7 @@ function setMessage(value: string | null): void {
 function updateMedia(data: MediaSet, dirty = true): void {
   const resource = show.data.media;
   show.data = { ...show.data, media: { ...resource, data } };
+  invalidateMediaPreflight();
   if (dirty) markResourceDirty('media');
   renderMedia();
   renderOutput();
@@ -910,9 +1044,19 @@ function countLabel(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? '' : 's'}`;
 }
 
+function mediaPreflightMessage(result: MediaPreflightResult): string | null {
+  if (result.failed.length === 0) return null;
+  const names = [...new Set(result.failed.map((failure) => basename(failure.path, style)))];
+  const listed = names.slice(0, 3).join(', ');
+  const remainder = names.length > 3 ? ` and ${names.length - 3} more` : '';
+  return `${result.ready} ready · ${result.failed.length} can't play. Output will skip ${listed}${remainder}.`;
+}
+
 function renderSummaries(): void {
   const media = mediaSet();
   const usableMedia = media.items.filter((item) => !item.missing).length;
+  const preflight =
+    mediaPreflightResult?.total === media.items.length ? mediaPreflightResult : null;
   const currentTeam = team();
   const scene = selectedScene();
   const display = findById(displays, selectedDisplayId);
@@ -932,7 +1076,9 @@ function renderSummaries(): void {
   ui.homeMediaSummary.textContent =
     media.items.length === 0
       ? 'No media yet'
-      : `${countLabel(usableMedia, 'file')} ready${usableMedia < media.items.length ? ` · ${media.items.length - usableMedia} missing` : ''}`;
+      : preflight
+        ? `${countLabel(preflight.ready, 'file')} ready${preflight.failed.length > 0 ? ` · ${preflight.failed.length} can't play` : ''}`
+        : `${countLabel(usableMedia, 'file')} ready${usableMedia < media.items.length ? ` · ${media.items.length - usableMedia} missing` : ''}`;
   ui.homeSceneSummary.textContent = `${scene.name} · ${layoutZones(scene.layout).length} zone${layoutZones(scene.layout).length === 1 ? '' : 's'}`;
   ui.homeDisplaySummary.textContent = display ? displayLabel(display) : 'No display selected';
   ui.homeLiveSummary.textContent = output.active
@@ -951,7 +1097,11 @@ function renderSummaries(): void {
   ui.outputSceneName.textContent = scene.name;
   ui.outputMiniPreview.textContent = `${layoutZones(scene.layout).length} zone${layoutZones(scene.layout).length === 1 ? '' : 's'} · ${layoutPresetId(scene.layout) === 'custom' ? 'Custom' : 'Preset'}`;
   ui.outputMediaReadiness.textContent =
-    usableMedia === 0 ? 'None' : countLabel(usableMedia, 'item');
+    media.items.length === 0
+      ? 'None'
+      : preflight
+        ? `${preflight.ready} ready · ${preflight.failed.length} can't play`
+        : `${countLabel(usableMedia, 'item')} · preflight on start`;
   ui.outputTeamReadiness.textContent = hasBoard
     ? boardReady
       ? (currentTeam?.name ?? 'Ready')
@@ -1024,11 +1174,14 @@ function renderMedia(): void {
     name.textContent = basename(item.path, style);
     const meta = document.createElement('div');
     meta.className = 'media-meta';
+    const preflightFailure = mediaPreflightFailure(item);
     meta.textContent = item.missing
       ? 'Missing'
-      : item.type === 'video'
-        ? 'Video'
-        : `${mediaDurationSeconds(item, data)} seconds`;
+      : preflightFailure
+        ? `Can't play · ${preflightFailure.message}`
+        : item.type === 'video'
+          ? 'Video'
+          : `${mediaDurationSeconds(item, data)} seconds`;
     const actions = document.createElement('div');
     actions.className = 'media-actions';
     const action = (label: string, handler: () => void, disabled = false) => {
@@ -2196,6 +2349,7 @@ async function startOutput(): Promise<void> {
     return;
   }
   busy = true;
+  let presentationOpened = false;
   try {
     const currentDisplays = await refreshDisplays();
     const display = findById(currentDisplays, selectedDisplayId);
@@ -2209,21 +2363,33 @@ async function startOutput(): Promise<void> {
       setMessage(valid.message);
       return;
     }
+    let preflight = await refreshMediaPreflight();
+    if (preflight.revision !== mediaPreflightRevision) preflight = await refreshMediaPreflight();
+    const failedPaths = new Set(preflight.result.failed.map((failure) => failure.path));
+    const outputMedia: MediaSet = {
+      ...preflight.data,
+      // A failed optional item is skipped for this run while remaining visible
+      // in the editor with its diagnostic, so the operator can repair it later.
+      items: preflight.data.items.map((item) =>
+        failedPaths.has(item.path) ? { ...item, missing: true } : item,
+      ),
+    };
     output.resetReady();
     const placed = await ipc.openPresentation(display.id);
+    presentationOpened = true;
     prefs = { ...prefs, displayHint: hintFor(placed) };
     writePrefs(prefs);
     lostDisplayHint = null;
     const settings = {
-      intervalSeconds: mediaSet().imageDurationSeconds,
-      transition: mediaSet().transition,
-      imageSizing: mediaSet().imageSizing,
+      intervalSeconds: outputMedia.imageDurationSeconds,
+      transition: outputMedia.transition,
+      imageSizing: outputMedia.imageSizing,
       layout: scene.layout,
     };
     selectedSceneId = scene.id;
     activeSceneId = scene.id;
     output.setTheme(outputTheme(scene));
-    const started = await output.begin(mediaSet(), settings, liveBoardData(scene));
+    const started = await output.begin(outputMedia, settings, liveBoardData(scene));
     if (!started) {
       activeSceneId = null;
       // The presentation window is already on the display.  Nothing can start
@@ -2231,14 +2397,22 @@ async function startOutput(): Promise<void> {
       // here rather than stranding a blank window on the wall.
       await ipc.closePresentation().catch(() => undefined);
       renderOutput();
-      setMessage('No usable media could be started.');
+      setMessage(
+        output.lastBeginFailure === 'presentation-not-ready' ||
+          output.lastBeginFailure === 'presentation-unavailable'
+          ? 'The output window did not finish starting.'
+          : (mediaPreflightMessage(preflight.result) ?? 'No usable media could be started.'),
+      );
       return;
     }
     renderMedia();
     renderPlayers();
     renderOutput();
+    const preflightNotice = mediaPreflightMessage(preflight.result);
+    if (preflightNotice) setMessage(preflightNotice);
     startWatching();
   } catch (error) {
+    if (presentationOpened && !output.active) await ipc.closePresentation().catch(() => undefined);
     setMessage(String(error));
   } finally {
     busy = false;
@@ -2306,9 +2480,11 @@ function askNewTeamDetails(): Promise<NewTeamDetails | null> {
 }
 
 async function createNewTeam(): Promise<void> {
+  const operation = resourceOpenOperations.start();
   if (!(await ensureResourceSaved('team'))) return;
   const details = await askNewTeamDetails();
   if (!details) return;
+  if (!resourceOpenOperations.isCurrent(operation)) return;
   const data = createTeam(details.name, details.sport, details.primary, details.secondary);
   show.data = {
     ...show.data,
@@ -2328,69 +2504,93 @@ async function createNewTeam(): Promise<void> {
   selectPage('roster');
 }
 
-async function openTeamFile(): Promise<void> {
-  if (!(await ensureResourceSaved('team'))) return;
-  const path = await chooseTeamToOpen(prefs.lastDirectory);
-  if (!path) return;
-  const result = await openTeam(path, style);
-  if (!result.ok) {
-    await messageDialog(result.message, { title: 'Picta', kind: 'error' });
+async function openTeamFile(path?: string): Promise<void> {
+  const outcome = await runLatestOpen(
+    resourceOpenOperations,
+    async () => {
+      if (!(await ensureResourceSaved('team'))) return null;
+      const target = path ?? (await chooseTeamToOpen(prefs.lastDirectory));
+      if (!target) return null;
+      return openTeam(target, style);
+    },
+    (result) => result.ok,
+    (result) => {
+      if (!result.ok) return;
+      adoptDocumentSession(replaceTeamInSession(currentDocumentSession(), result));
+      selectedRosterGroupId = result.data.groups[0]?.id ?? null;
+      selectedLiveGroupId = result.data.groups[0]?.id ?? null;
+      setLiveBoardGroupId(selectedLiveGroupId);
+      markShowDirty();
+      renderPlayers();
+      renderOutput();
+      if (output.active) output.setTheme(outputTheme());
+    },
+  );
+  if (outcome.status === 'failed') {
+    if (!outcome.value.ok)
+      await messageDialog(outcome.value.message, { title: 'Picta', kind: 'error' });
     return;
   }
-  show.data = {
-    ...show.data,
-    team: { kind: 'file', path, data: result.data },
-    event: { stats: {}, liveGroups: {} },
-  };
-  teamFilePath = path;
-  teamDirty = false;
-  selectedRosterGroupId = result.data.groups[0]?.id ?? null;
-  selectedLiveGroupId = result.data.groups[0]?.id ?? null;
-  setLiveBoardGroupId(selectedLiveGroupId);
-  markShowDirty();
-  renderPlayers();
-  renderOutput();
-  if (output.active) output.setTheme(outputTheme());
+  if (outcome.status === 'error') {
+    await messageDialog(String(outcome.error), { title: 'Picta', kind: 'error' });
+    return;
+  }
+  if (outcome.status !== 'committed' || !outcome.value.ok) return;
+  const result = outcome.value;
   if (result.missingPaths.length > 0)
     setMessage(
       `${result.missingPaths.length} team media file${result.missingPaths.length === 1 ? '' : 's'} could not be found.`,
     );
   selectPage('roster');
-  prefs = { ...prefs, lastDirectory: dirname(path, style) };
+  prefs = { ...prefs, lastDirectory: dirname(result.filePath, style) };
   writePrefs(prefs);
 }
 
 async function newMediaSet(): Promise<void> {
+  const operation = resourceOpenOperations.start();
   if (!(await ensureResourceSaved('media'))) return;
+  if (!resourceOpenOperations.isCurrent(operation)) return;
   const data = defaultMediaSet('Inline Media');
-  show.data = { ...show.data, media: { kind: 'inline', data } };
+  adoptDocumentSession(inlineMediaSession(currentDocumentSession(), data));
   markShowDirty();
-  mediaFilePath = null;
-  mediaDirty = true;
   renderMedia();
   renderOutput();
 }
 
-async function openMediaSetFile(): Promise<void> {
-  if (!(await ensureResourceSaved('media'))) return;
-  const path = await chooseMediaSetToOpen(prefs.lastDirectory);
-  if (!path) return;
-  const result = await openMediaSet(path, style);
-  if (!result.ok) {
-    await messageDialog(result.message, { title: 'Picta', kind: 'error' });
+async function openMediaSetFile(path?: string): Promise<void> {
+  const outcome = await runLatestOpen(
+    resourceOpenOperations,
+    async () => {
+      if (!(await ensureResourceSaved('media'))) return null;
+      const target = path ?? (await chooseMediaSetToOpen(prefs.lastDirectory));
+      if (!target) return null;
+      return openMediaSet(target, style);
+    },
+    (result) => result.ok,
+    (result) => {
+      if (!result.ok) return;
+      adoptDocumentSession(replaceMediaInSession(currentDocumentSession(), result));
+      markShowDirty();
+      renderMedia();
+      renderOutput();
+    },
+  );
+  if (outcome.status === 'failed') {
+    if (!outcome.value.ok)
+      await messageDialog(outcome.value.message, { title: 'Picta', kind: 'error' });
     return;
   }
-  show.data = { ...show.data, media: { kind: 'file', path, data: result.data } };
-  mediaFilePath = path;
-  mediaDirty = false;
-  markShowDirty();
-  renderMedia();
-  renderOutput();
+  if (outcome.status === 'error') {
+    await messageDialog(String(outcome.error), { title: 'Picta', kind: 'error' });
+    return;
+  }
+  if (outcome.status !== 'committed' || !outcome.value.ok) return;
+  const result = outcome.value;
   if (result.missingPaths.length > 0)
     setMessage(
       `${result.missingPaths.length} media file${result.missingPaths.length === 1 ? '' : 's'} could not be found.`,
     );
-  prefs = { ...prefs, lastDirectory: dirname(path, style) };
+  prefs = { ...prefs, lastDirectory: dirname(result.filePath, style) };
   writePrefs(prefs);
 }
 
@@ -2407,6 +2607,7 @@ async function saveShow(): Promise<boolean> {
   syncTitle();
   prefs = { ...prefs, lastDirectory: dirname(path, style) };
   writePrefs(prefs);
+  scheduleRecoveryPersistence();
   return true;
 }
 async function saveMedia(): Promise<boolean> {
@@ -2429,6 +2630,7 @@ async function saveMedia(): Promise<boolean> {
   show.data = { ...show.data, media: { kind: 'file', path, data } };
   if (!wasLinked) markShowDirty();
   renderMedia();
+  scheduleRecoveryPersistence();
   return true;
 }
 async function saveTeamResource(): Promise<boolean> {
@@ -2452,6 +2654,7 @@ async function saveTeamResource(): Promise<boolean> {
   show.data = { ...show.data, team: { kind: 'file', path, data: current } };
   if (!wasLinked) markShowDirty();
   renderPlayers();
+  scheduleRecoveryPersistence();
   return true;
 }
 
@@ -2499,13 +2702,11 @@ async function ensureSaved(): Promise<boolean> {
 }
 
 async function newShow(): Promise<void> {
+  const operation = resourceOpenOperations.start();
   if (!(await ensureSaved())) return;
+  if (!resourceOpenOperations.isCurrent(operation)) return;
   stopOutput();
-  show = { filePath: null, data: newShowData(), dirty: false };
-  mediaFilePath = null;
-  mediaDirty = false;
-  teamFilePath = null;
-  teamDirty = false;
+  adoptDocumentSession(newDocumentSession(newShowData()));
   selectedPlayerId = null;
   selectedSceneId = show.data.defaultSceneId;
   activeSceneId = null;
@@ -2513,32 +2714,48 @@ async function newShow(): Promise<void> {
   manualSession = null;
   syncTitle();
   renderAll();
+  scheduleRecoveryPersistence();
 }
 
 async function openShowFile(path?: string): Promise<void> {
-  if (!(await ensureSaved())) return;
-  const target = path ?? (await chooseShowToOpen(prefs.lastDirectory));
-  if (!target) return;
-  stopOutput();
-  const result = await openShowDocument(target, style);
-  if (!result.ok) {
-    await messageDialog(result.message, { title: 'Picta', kind: 'error' });
+  const outcome = await runLatestOpen(
+    resourceOpenOperations,
+    async () => {
+      if (!(await ensureSaved())) return null;
+      const target = path ?? (await chooseShowToOpen(prefs.lastDirectory));
+      if (!target) return null;
+      return openShowDocument(target, style);
+    },
+    (result) => result.ok,
+    (result) => {
+      if (!result.ok) return;
+      // The current show and output remain untouched until the replacement has
+      // completed parsing, hydration, and validation above.
+      stopOutput();
+      adoptDocumentSession(sessionFromShow(result));
+      selectedRosterGroupId = result.data.team?.data?.groups[0]?.id ?? null;
+      selectedLiveGroupId = result.data.team?.data?.groups[0]?.id ?? null;
+      selectedSceneId = result.data.defaultSceneId;
+      activeSceneId = null;
+      zoneEditSession = null;
+      manualSession = null;
+      syncTitle();
+      renderAll();
+      scheduleRecoveryPersistence();
+    },
+  );
+  if (outcome.status === 'failed') {
+    if (!outcome.value.ok)
+      await messageDialog(outcome.value.message, { title: 'Picta', kind: 'error' });
     return;
   }
-  show = { filePath: target, data: result.data, dirty: false };
-  mediaFilePath = result.data.media.kind === 'file' ? result.data.media.path : null;
-  mediaDirty = false;
-  teamFilePath = result.data.team?.kind === 'file' ? result.data.team.path : null;
-  teamDirty = false;
-  selectedRosterGroupId = result.data.team?.data?.groups[0]?.id ?? null;
-  selectedLiveGroupId = result.data.team?.data?.groups[0]?.id ?? null;
-  selectedSceneId = result.data.defaultSceneId;
-  activeSceneId = null;
-  zoneEditSession = null;
-  manualSession = null;
-  syncTitle();
-  renderAll();
-  prefs = { ...prefs, lastDirectory: dirname(target, style) };
+  if (outcome.status === 'error') {
+    await messageDialog(String(outcome.error), { title: 'Picta', kind: 'error' });
+    return;
+  }
+  if (outcome.status !== 'committed' || !outcome.value.ok) return;
+  const result = outcome.value;
+  prefs = { ...prefs, lastDirectory: dirname(result.filePath, style) };
   writePrefs(prefs);
   if (result.migratedFromV1) setMessage('Opened a v1 show. Save it to write the new v2 format.');
   else if (result.missingResources.length > 0)
@@ -2862,37 +3079,13 @@ function wire(): void {
     const setPath = paths.find((path) => /\.pictaset$/i.test(path));
     const teamPath = paths.find((path) => /\.pictateam$/i.test(path));
     if (showPath) void openShowFile(showPath);
-    else if (setPath)
-      void (async () => {
-        if (!(await ensureResourceSaved('media'))) return;
-        const result = await openMediaSet(setPath, style);
-        if (result.ok) {
-          show.data = { ...show.data, media: { kind: 'file', path: setPath, data: result.data } };
-          mediaFilePath = setPath;
-          mediaDirty = false;
-          markShowDirty();
-          renderAll();
-          selectPage('media');
-        }
-      })();
-    else if (teamPath)
-      void (async () => {
-        if (!(await ensureResourceSaved('team'))) return;
-        const result = await openTeam(teamPath, style);
-        if (result.ok) {
-          show.data = {
-            ...show.data,
-            team: { kind: 'file', path: teamPath, data: result.data },
-            event: { stats: {}, liveGroups: {} },
-          };
-          teamFilePath = teamPath;
-          teamDirty = false;
-          markShowDirty();
-          renderAll();
-          selectPage('roster');
-        }
-      })();
-    else if (paths.some(isSupportedMediaPath)) {
+    else if (setPath) {
+      if (activePage !== 'media') selectPage('media');
+      void openMediaSetFile(setPath);
+    } else if (teamPath) {
+      if (activePage !== 'roster') selectPage('roster');
+      void openTeamFile(teamPath);
+    } else if (paths.some(isSupportedMediaPath)) {
       if (activePage !== 'media') selectPage('media');
       void addMedia(paths);
     }
@@ -2902,6 +3095,9 @@ function wire(): void {
       event.preventDefault();
       if (!(await ensureSaved())) return;
       stopOutput();
+      // A clean shutdown, including an explicit "Discard" choice, must not
+      // resurrect the work the operator just chose not to keep.
+      await clearRecoveryPersistence();
       await persistWindow();
       await ipc.closePresentation().catch(() => undefined);
       await ipc.quitApp().catch(() => undefined);
@@ -2953,10 +3149,26 @@ async function main(): Promise<void> {
   }
   renderAll();
   selectPage(activePage, 'replace');
-  const startup = await ipc.startupFile().catch(() => null);
-  if (startup) await openShowFile(startup);
   await appWindow.show();
   await appWindow.setFocus();
+  const recovery = await readRecoverySnapshot();
+  let recovered = false;
+  if (recovery) {
+    const choice = await askRecovery({
+      dialog: ui.recoveryDialog,
+      recover: ui.recoveryRecover,
+      discard: ui.recoveryDiscard,
+    });
+    if (choice === 'recover') {
+      applyRecoverySnapshot(recovery);
+      recovered = true;
+      setMessage('Recovered unsaved work from your last session.');
+    } else {
+      await discardRecoverySnapshot();
+    }
+  }
+  const startup = await ipc.startupFile().catch(() => null);
+  if (startup && !recovered) await openShowFile(startup);
   startWatching();
   void checkForUpdate();
 }

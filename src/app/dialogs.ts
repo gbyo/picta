@@ -107,6 +107,27 @@ export function askConfirm(
   );
 }
 
+export interface RecoveryDialogElements {
+  dialog: HTMLDialogElement;
+  recover: HTMLButtonElement;
+  discard: HTMLButtonElement;
+}
+
+export type RecoveryChoice = 'recover' | 'discard';
+
+/** Offer the two safe actions for a machine-local crash snapshot. */
+export function askRecovery(elements: RecoveryDialogElements): Promise<RecoveryChoice> {
+  elements.dialog.returnValue = 'discard';
+  elements.dialog.showModal();
+  return new Promise((resolve) =>
+    elements.dialog.addEventListener(
+      'close',
+      () => resolve(elements.dialog.returnValue === 'recover' ? 'recover' : 'discard'),
+      { once: true },
+    ),
+  );
+}
+
 export interface StatDialogElements {
   dialog: HTMLDialogElement;
   form: HTMLFormElement;
