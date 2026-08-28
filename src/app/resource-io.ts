@@ -27,6 +27,19 @@ export async function chooseMedia(startDirectory: string | null): Promise<string
   return (Array.isArray(selection) ? selection : [selection]).filter(isSupportedMediaPath);
 }
 
+export async function chooseFolder(
+  startDirectory: string | null,
+  title = 'Choose Folder',
+): Promise<string | null> {
+  const selection = await openDialog({
+    multiple: false,
+    directory: true,
+    title,
+    ...(startDirectory ? { defaultPath: startDirectory } : {}),
+  });
+  return typeof selection === 'string' ? selection : null;
+}
+
 export async function chooseTeamToOpen(startDirectory: string | null): Promise<string | null> {
   const selection = await openDialog({
     multiple: false,

@@ -18,7 +18,6 @@ export interface ScenePickerElements {
   picker: HTMLElement;
   current: HTMLElement;
   hint: HTMLElement;
-  menu: HTMLDetailsElement;
   duplicate: HTMLButtonElement;
   rename: HTMLButtonElement;
   makeDefault: HTMLButtonElement;
