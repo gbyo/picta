@@ -1526,6 +1526,35 @@ h2 {
   color: var(--muted);
 }
 
+/* A preset is readable when the scene is not being edited, but only Edit Zones
+   may apply one, so the disabled state has to stay legible rather than faint. */
+/* Operator controls are read at a glance and often at arm's length; a label
+   that breaks across two lines reads as two controls. */
+.button,
+.text-button,
+.scene-actions button {
+  white-space: nowrap;
+}
+
+.preset-card:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.preset-card:not(:disabled):hover {
+  border-color: var(--border-strong);
+}
+
+#layout-presets-hint {
+  margin-top: 10px;
+}
+
+.stat-id-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 13px;
+}
+
 .preset-card.active {
   border-color: var(--accent);
   background: var(--surface-tint);

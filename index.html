@@ -476,19 +476,8 @@
               <section class="content-card">
                 <p class="section-kicker">Layout</p>
                 <h2>Presets</h2>
-                <div id="layout-presets" class="preset-buttons">
-                  <button type="button" data-layout="full" class="preset-card">
-                    <strong>Full</strong><small>Program fills the screen</small></button
-                  ><button type="button" data-layout="half-half" class="preset-card">
-                    <strong>Half + half</strong><small>Program and live board</small></button
-                  ><button type="button" data-layout="program-2-3" class="preset-card">
-                    <strong>Program focus</strong><small>2/3 program + 1/3 board</small></button
-                  ><button type="button" data-layout="board-1-3" class="preset-card">
-                    <strong>Board first</strong><small>1/3 board + 2/3 program</small></button
-                  ><button type="button" data-layout="custom" class="preset-card">
-                    <strong>Custom</strong><small>Manual zones</small>
-                  </button>
-                </div>
+                <div id="layout-presets" class="preset-buttons"></div>
+                <p id="layout-presets-hint" class="muted detail"></p>
               </section>
               <section class="content-card scene-options">
                 <p class="section-kicker">Scene options</p>
@@ -665,6 +654,92 @@
           <button type="submit" value="cancel" class="button secondary-button" autofocus>
             Cancel</button
           ><button type="submit" value="delete" class="button stop-button">Delete</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="text-dialog" class="confirm form-dialog">
+      <form method="dialog" id="text-dialog-form">
+        <p id="text-dialog-kicker" class="section-kicker"></p>
+        <h2 id="text-dialog-title">Name</h2>
+        <div class="dialog-fields">
+          <label
+            ><span id="text-dialog-label">Name</span
+            ><input id="text-dialog-input" type="text" autocomplete="off" maxlength="60"
+          /></label>
+        </div>
+        <p id="text-dialog-error" class="dialog-error" role="alert" hidden></p>
+        <div class="confirm-actions">
+          <button type="submit" value="cancel" class="button secondary-button">Cancel</button
+          ><button
+            type="submit"
+            value="confirm"
+            id="text-dialog-confirm"
+            class="button primary-button"
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="action-dialog" class="confirm">
+      <form method="dialog">
+        <p id="action-dialog-kicker" class="section-kicker"></p>
+        <h2 id="action-dialog-title">Confirm</h2>
+        <p id="action-dialog-text"></p>
+        <div class="confirm-actions">
+          <button type="submit" value="cancel" class="button secondary-button" autofocus>
+            Cancel</button
+          ><button
+            type="submit"
+            value="confirm"
+            id="action-dialog-confirm"
+            class="button primary-button"
+          >
+            Confirm
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="stat-dialog" class="confirm form-dialog">
+      <form method="dialog" id="stat-dialog-form">
+        <p class="section-kicker">Custom sport</p>
+        <h2>Add a statistic</h2>
+        <p class="dialog-description">
+          The name labels the counter, the short label heads its column on the live board.
+        </p>
+        <div class="dialog-fields">
+          <label
+            >Name<input
+              id="stat-dialog-label"
+              type="text"
+              autocomplete="off"
+              maxlength="40"
+              placeholder="Points"
+          /></label>
+          <div class="stat-id-fields">
+            <label
+              >Id<input
+                id="stat-dialog-id"
+                type="text"
+                autocomplete="off"
+                maxlength="40"
+                placeholder="points" /></label
+            ><label
+              >Short label<input
+                id="stat-dialog-short"
+                type="text"
+                autocomplete="off"
+                maxlength="4"
+                placeholder="PTS"
+            /></label>
+          </div>
+        </div>
+        <p id="stat-dialog-error" class="dialog-error" role="alert" hidden></p>
+        <div class="confirm-actions">
+          <button type="submit" value="cancel" class="button secondary-button">Cancel</button
+          ><button type="submit" value="confirm" class="button primary-button">
+            Add statistic
+          </button>
         </div>
       </form>
     </dialog>

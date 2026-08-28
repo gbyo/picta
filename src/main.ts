@@ -21,6 +21,7 @@ import {
   renderScenePicker,
   renderSceneStrip,
 } from './app/scenes-ui.js';
+import { askConfirm, askCustomStat, askText } from './app/dialogs.js';
 import { renderManualWorkspace } from './app/manual-presentation.js';
 import { renderLayoutPreview, renderZoneSelect, type LayoutPath } from './app/layout-editor.js';
 import { emptyPrefs, flushPrefs, readPrefs, writePrefs, type Prefs } from './app/prefs.js';
@@ -181,7 +182,6 @@ const ui = {
   scenePicker: need<HTMLDivElement>('scene-picker'),
   sceneCurrent: need<HTMLParagraphElement>('scene-current'),
   sceneHint: need<HTMLParagraphElement>('scene-hint'),
-  sceneMenu: need<HTMLDetailsElement>('scene-menu'),
   sceneNew: need<HTMLButtonElement>('scene-new'),
   sceneDuplicate: need<HTMLButtonElement>('scene-duplicate'),
   sceneRename: need<HTMLButtonElement>('scene-rename'),
@@ -245,6 +245,7 @@ const ui = {
   identify: need<HTMLButtonElement>('identify'),
   layoutHeading: need<HTMLHeadingElement>('layout-heading'),
   layoutPresets: need<HTMLDivElement>('layout-presets'),
+  layoutPresetsHint: need<HTMLParagraphElement>('layout-presets-hint'),
   layoutPreview: need<HTMLDivElement>('layout-preview'),
   layoutDetail: need<HTMLParagraphElement>('layout-detail'),
   layoutNormal: need<HTMLDivElement>('layout-normal'),
@@ -288,6 +289,25 @@ const ui = {
   teamDialogSecondary: need<HTMLInputElement>('team-dialog-secondary'),
   teamDialogError: need<HTMLParagraphElement>('team-dialog-error'),
   teamDialogCancel: need<HTMLButtonElement>('team-dialog-cancel'),
+  textDialog: need<HTMLDialogElement>('text-dialog'),
+  textDialogForm: need<HTMLFormElement>('text-dialog-form'),
+  textDialogKicker: need<HTMLElement>('text-dialog-kicker'),
+  textDialogTitle: need<HTMLElement>('text-dialog-title'),
+  textDialogLabel: need<HTMLElement>('text-dialog-label'),
+  textDialogInput: need<HTMLInputElement>('text-dialog-input'),
+  textDialogError: need<HTMLParagraphElement>('text-dialog-error'),
+  textDialogConfirm: need<HTMLButtonElement>('text-dialog-confirm'),
+  actionDialog: need<HTMLDialogElement>('action-dialog'),
+  actionDialogKicker: need<HTMLElement>('action-dialog-kicker'),
+  actionDialogTitle: need<HTMLElement>('action-dialog-title'),
+  actionDialogText: need<HTMLParagraphElement>('action-dialog-text'),
+  actionDialogConfirm: need<HTMLButtonElement>('action-dialog-confirm'),
+  statDialog: need<HTMLDialogElement>('stat-dialog'),
+  statDialogForm: need<HTMLFormElement>('stat-dialog-form'),
+  statDialogLabel: need<HTMLInputElement>('stat-dialog-label'),
+  statDialogId: need<HTMLInputElement>('stat-dialog-id'),
+  statDialogShort: need<HTMLInputElement>('stat-dialog-short'),
+  statDialogError: need<HTMLParagraphElement>('stat-dialog-error'),
 };
 
 type SaveChoice = 'save' | 'discard' | 'cancel';
@@ -658,6 +678,40 @@ function sceneDialogElements() {
   };
 }
 
+function textDialogElements() {
+  return {
+    dialog: ui.textDialog,
+    form: ui.textDialogForm,
+    kicker: ui.textDialogKicker,
+    title: ui.textDialogTitle,
+    label: ui.textDialogLabel,
+    input: ui.textDialogInput,
+    error: ui.textDialogError,
+    confirm: ui.textDialogConfirm,
+  };
+}
+
+function actionDialogElements() {
+  return {
+    dialog: ui.actionDialog,
+    kicker: ui.actionDialogKicker,
+    title: ui.actionDialogTitle,
+    text: ui.actionDialogText,
+    confirm: ui.actionDialogConfirm,
+  };
+}
+
+function statDialogElements() {
+  return {
+    dialog: ui.statDialog,
+    form: ui.statDialogForm,
+    label: ui.statDialogLabel,
+    id: ui.statDialogId,
+    shortLabel: ui.statDialogShort,
+    error: ui.statDialogError,
+  };
+}
+
 function sceneDeleteElements() {
   return { dialog: ui.sceneDeleteDialog, text: ui.sceneDeleteText };
 }
@@ -845,6 +899,10 @@ function selectPage(page: PageName, historyMode: HistoryMode = 'push'): void {
   ui.headerOutput.disabled = page === 'output';
   ui.headerOutput.textContent = page === 'output' ? 'Output open' : 'Open output';
   if (changed) ui.workspace.scrollTo({ top: 0, behavior: 'instant' });
+  if (changed && page === 'live') {
+    const current = team();
+    if (current) renderLive(current);
+  }
 }
 
 function countLabel(count: number, singular: string): string {
@@ -1198,18 +1256,20 @@ function renderCustomSportEditor(current: Team): void {
   add.className = 'small-button';
   add.textContent = 'Add Statistic';
   add.addEventListener('click', () => {
-    const id = window.prompt('Statistic id (for example, points):');
-    const label = window.prompt('Statistic label:', id ?? '');
-    const shortLabel = window.prompt('Short label:', label?.slice(0, 4).toUpperCase() ?? '');
-    if (!id?.trim() || !label?.trim() || !shortLabel?.trim()) return;
-    updateCustomSport(current, [
-      ...custom.stats.map(({ id: statId, label: statLabel, shortLabel: statShort }) => ({
-        id: statId,
-        label: statLabel,
-        shortLabel: statShort,
-      })),
-      { id, label, shortLabel },
-    ]);
+    void (async () => {
+      const stat = await askCustomStat(statDialogElements(), (id) =>
+        custom.stats.some((existing) => existing.id === id),
+      );
+      if (!stat) return;
+      updateCustomSport(current, [
+        ...custom.stats.map(({ id: statId, label: statLabel, shortLabel: statShort }) => ({
+          id: statId,
+          label: statLabel,
+          shortLabel: statShort,
+        })),
+        stat,
+      ]);
+    })();
   });
   editor.append(add);
 }
@@ -1251,11 +1311,22 @@ function renderGroupEditor(current: Team): void {
   add.className = 'small-button';
   add.textContent = 'New Group';
   add.addEventListener('click', () => {
-    const name = window.prompt('Group name:');
-    if (!name?.trim()) return;
-    const next = addGroup(current, makeGroup(name));
-    selectedRosterGroupId = next.groups.at(-1)?.id ?? selectedRosterGroupId;
-    updateTeam(next);
+    void (async () => {
+      const name = await askText(textDialogElements(), {
+        kicker: 'Presentation',
+        title: 'New group',
+        label: 'Group name',
+        confirmLabel: 'Create group',
+        validate: (value) =>
+          current.groups.some((item) => item.name.toLocaleLowerCase() === value.toLocaleLowerCase())
+            ? 'This team already has a group with that name.'
+            : null,
+      });
+      if (!name) return;
+      const next = addGroup(current, makeGroup(name));
+      selectedRosterGroupId = next.groups.at(-1)?.id ?? selectedRosterGroupId;
+      updateTeam(next);
+    })();
   });
   const remove = document.createElement('button');
   remove.type = 'button';
@@ -1264,10 +1335,19 @@ function renderGroupEditor(current: Team): void {
   remove.disabled = current.groups.length <= 1 || !group;
   if (group)
     remove.addEventListener('click', () => {
-      if (!window.confirm(`Remove the group “${group.name}”?`)) return;
-      const next = removeGroup(current, group.id);
-      selectedRosterGroupId = next.groups[0]?.id ?? null;
-      updateTeam(next);
+      void (async () => {
+        const confirmed = await askConfirm(actionDialogElements(), {
+          kicker: 'Presentation',
+          title: 'Remove group',
+          text: `Remove the group “${group.name}”? The players stay on the roster.`,
+          confirmLabel: 'Remove group',
+          destructive: true,
+        });
+        if (!confirmed) return;
+        const next = removeGroup(current, group.id);
+        selectedRosterGroupId = next.groups[0]?.id ?? null;
+        updateTeam(next);
+      })();
     });
   groupActions.append(play, manual, add, remove);
   ui.groupEditor.append(groupActions);
@@ -1858,7 +1938,9 @@ function renderPlayers(): void {
   renderGroupEditor(current);
   renderRosterList(current);
   renderInspector(current);
-  renderLive(current);
+  // The live board is one row per player per statistic; only build it while it
+  // is the page being looked at.
+  if (activePage === 'live') renderLive(current);
   // Last: a running lineup collapses the setup UI the calls above just drew.
   renderManualSession(current);
   renderSummaries();
@@ -1919,33 +2001,58 @@ function previewDividerRatio(path: LayoutPath, ratio: number): void {
 }
 
 /** Rebuild the Start-from presets.  They only exist inside Edit Zones. */
+const PRESET_NOTES: Record<(typeof LAYOUT_PRESETS)[number], string> = {
+  full: 'Program fills the screen',
+  'half-half': 'Program and live board',
+  'program-2-3': '2/3 program + 1/3 board',
+  'board-1-3': '1/3 board + 2/3 program',
+};
+
+/**
+ * Presets are drawn from the layout module rather than the markup, so the panel
+ * can never offer a layout the app does not have.  They stay visible when the
+ * scene is not being edited — the operator should see which one this scene uses
+ * — but only Edit Zones may change it, because a preset outside the draft would
+ * rewrite a saved scene with no way back.
+ */
 function renderLayoutPresets(layout: LayoutNode): void {
   ui.layoutPresets.replaceChildren();
+  const editing = zoneEditSession !== null;
   const current = layoutPresetId(layout);
   for (const id of LAYOUT_PRESETS) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'small-button';
-    button.textContent = layoutPresetLabel(id);
+    button.className = 'preset-card';
+    const name = document.createElement('strong');
+    name.textContent = layoutPresetLabel(id);
+    const note = document.createElement('small');
+    note.textContent = PRESET_NOTES[id];
+    button.append(name, note);
     button.setAttribute('aria-pressed', String(id === current));
     if (id === current) button.classList.add('active');
+    button.disabled = !editing;
     // A preset changes the draft only; Cancel still restores the original.
     button.addEventListener('click', () => setDraftLayoutChecked(layoutPreset(id)));
     ui.layoutPresets.append(button);
   }
+  ui.layoutPresetsHint.textContent = editing
+    ? 'Choosing one replaces the draft. Cancel still restores the scene.'
+    : current === 'custom'
+      ? 'This scene uses a custom layout. Choose Edit zones to change it.'
+      : 'Choose Edit zones to change the layout.';
 }
 
 function renderZoneEditor(scene: Scene): void {
   const editing = zoneEditSession !== null;
-  ui.layoutHeading.textContent = editing ? `Edit Zones — ${scene.name}` : 'Layout';
+  ui.layoutHeading.textContent = editing ? `Edit zones — ${scene.name}` : 'Layout preview';
   // The editor replaces the normal layout panel rather than stacking below it.
   ui.layoutNormal.hidden = editing;
   ui.zoneEditPanel.hidden = !editing;
+  renderLayoutPresets(scene.layout);
   if (!editing) {
     renderLayoutAction();
     return;
   }
-  renderLayoutPresets(scene.layout);
   renderZoneSelect(ui.customZoneSelect, scene.layout);
   const zones = layoutZones(scene.layout);
   const selectedZoneId = zoneEditSession?.selectedZoneId ?? zones[0]?.id;
@@ -2190,6 +2297,7 @@ function askNewTeamDetails(): Promise<NewTeamDetails | null> {
 }
 
 async function createNewTeam(): Promise<void> {
+  if (!(await ensureResourceSaved('team'))) return;
   const details = await askNewTeamDetails();
   if (!details) return;
   const data = createTeam(details.name, details.sport, details.primary, details.secondary);
@@ -2212,6 +2320,7 @@ async function createNewTeam(): Promise<void> {
 }
 
 async function openTeamFile(): Promise<void> {
+  if (!(await ensureResourceSaved('team'))) return;
   const path = await chooseTeamToOpen(prefs.lastDirectory);
   if (!path) return;
   const result = await openTeam(path, style);
@@ -2243,6 +2352,7 @@ async function openTeamFile(): Promise<void> {
 }
 
 async function newMediaSet(): Promise<void> {
+  if (!(await ensureResourceSaved('media'))) return;
   const data = defaultMediaSet('Inline Media');
   show.data = { ...show.data, media: { kind: 'inline', data } };
   markShowDirty();
@@ -2253,6 +2363,7 @@ async function newMediaSet(): Promise<void> {
 }
 
 async function openMediaSetFile(): Promise<void> {
+  if (!(await ensureResourceSaved('media'))) return;
   const path = await chooseMediaSetToOpen(prefs.lastDirectory);
   if (!path) return;
   const result = await openMediaSet(path, style);
@@ -2335,8 +2446,7 @@ async function saveTeamResource(): Promise<boolean> {
   return true;
 }
 
-function askSaveChanges(): Promise<SaveChoice> {
-  const names = resourceDirtyNames();
+function askSaveChanges(names = resourceDirtyNames()): Promise<SaveChoice> {
   ui.confirmText.textContent = `You have unsaved changes:\n\n${names.map((name) => `• ${name}`).join('\n')}`;
   ui.confirmDialog.returnValue = 'cancel';
   ui.confirmDialog.showModal();
@@ -2350,6 +2460,22 @@ function askSaveChanges(): Promise<SaveChoice> {
       { once: true },
     ),
   );
+}
+
+/**
+ * Opening a team or a media set replaces the one the show is using.  Offer to
+ * save that resource first: replacing it silently threw away every unsaved
+ * roster or playlist edit.
+ */
+async function ensureResourceSaved(kind: 'media' | 'team'): Promise<boolean> {
+  const dirty = kind === 'media' ? mediaDirty : teamDirty;
+  if (!dirty) return true;
+  const filePath = kind === 'media' ? mediaFilePath : teamFilePath;
+  const fallback = kind === 'media' ? 'Untitled.pictaset' : 'Untitled.pictateam';
+  const choice = await askSaveChanges([filePath ? basename(filePath, style) : fallback]);
+  if (choice === 'cancel') return false;
+  if (choice === 'discard') return true;
+  return kind === 'media' ? saveMedia() : saveTeamResource();
 }
 
 async function ensureSaved(): Promise<boolean> {
@@ -2412,7 +2538,7 @@ async function openShowFile(path?: string): Promise<void> {
         .map((resource) => basename(resource.path, style))
         .join(
           ' and ',
-        )}. Open it from the ${result.missingResources.some((resource) => resource.kind === 'team') ? 'Players' : 'Media'} tab to relink it.`,
+        )}. Open it from the ${result.missingResources.some((resource) => resource.kind === 'team') ? 'Roster' : 'Media'} page to relink it.`,
     );
   else if (result.missingCount > 0)
     setMessage(
@@ -2722,6 +2848,7 @@ function wire(): void {
     if (showPath) void openShowFile(showPath);
     else if (setPath)
       void (async () => {
+        if (!(await ensureResourceSaved('media'))) return;
         const result = await openMediaSet(setPath, style);
         if (result.ok) {
           show.data = { ...show.data, media: { kind: 'file', path: setPath, data: result.data } };
@@ -2734,6 +2861,7 @@ function wire(): void {
       })();
     else if (teamPath)
       void (async () => {
+        if (!(await ensureResourceSaved('team'))) return;
         const result = await openTeam(teamPath, style);
         if (result.ok) {
           show.data = {
@@ -2748,9 +2876,10 @@ function wire(): void {
           selectPage('roster');
         }
       })();
-    else if (activePage === 'media') void addMedia(paths);
-    else if (paths.some(isSupportedMediaPath))
-      setMessage('Open the Media page before dropping images or videos.');
+    else if (paths.some(isSupportedMediaPath)) {
+      if (activePage !== 'media') selectPage('media');
+      void addMedia(paths);
+    }
   });
   if (appWindow)
     void appWindow.onCloseRequested(async (event) => {
