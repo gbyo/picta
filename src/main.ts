@@ -13,7 +13,16 @@ import {
   type LayoutEditPreviewMessage,
   type ThemeMessage,
 } from './app/events.js';
-import { OutputController } from './app/output-controller.js';
+import { OutputController, type CueContext } from './app/output-controller.js';
+import type { CueQueueState } from './core/cues.js';
+import {
+  askSceneName,
+  confirmDeleteScene,
+  renderScenePicker,
+  renderSceneStrip,
+} from './app/scenes-ui.js';
+import { renderManualWorkspace } from './app/manual-presentation.js';
+import { renderLayoutPreview, renderZoneSelect, type LayoutPath } from './app/layout-editor.js';
 import { emptyPrefs, flushPrefs, readPrefs, writePrefs, type Prefs } from './app/prefs.js';
 import {
   chooseFolder,
@@ -59,6 +68,7 @@ import type {
   Scene,
   ShowDocument,
   Team,
+  ZoneRole,
 } from './core/domain.js';
 import {
   boardStatDefinitions,
@@ -94,8 +104,10 @@ import {
 } from './core/monitors.js';
 import { basename, dirname, resolvePath, type PathStyle } from './core/paths.js';
 import {
+  LAYOUT_PRESETS,
   layoutPreset,
   layoutPresetId,
+  layoutPresetLabel,
   layoutZones,
   mergeZone,
   resolveZoneRects,
@@ -103,12 +115,15 @@ import {
   splitZone,
   updateSplitRatioAtPath,
   validateLayout,
+  zoneRoleLabel,
 } from './core/layouts.js';
-import { cuesForPlayers, cueForPlayer } from './core/player-cues.js';
+import { cuesForPlayers, playerHasVideo } from './core/player-cues.js';
+import { presentPlayer, type PresentationOutcome } from './core/player-presentation.js';
 import {
   addScene,
   cloneScene,
   defaultSceneSet,
+  moveScene,
   nextSceneId,
   renameScene,
   removeScene,
@@ -121,11 +136,8 @@ import {
 import {
   beginManualGroup,
   cancelManualPlayer,
-  completeManualPlayer,
-  endManualGroup,
-  manualPlayerShown,
-  manualRemainingCount,
-  replayManualGroup,
+  finishManualPlayer,
+  manualShownCount,
   startManualPlayer,
   undoManualPlayer,
   type ManualGroupSession,
@@ -166,12 +178,26 @@ const ui = {
   homeScenesCount: need<HTMLElement>('home-scenes-count'),
   sceneStrip: need<HTMLElement>('scene-strip'),
   sceneButtons: need<HTMLDivElement>('scene-buttons'),
+  scenePicker: need<HTMLDivElement>('scene-picker'),
+  sceneCurrent: need<HTMLParagraphElement>('scene-current'),
+  sceneHint: need<HTMLParagraphElement>('scene-hint'),
+  sceneMenu: need<HTMLDetailsElement>('scene-menu'),
   sceneNew: need<HTMLButtonElement>('scene-new'),
   sceneDuplicate: need<HTMLButtonElement>('scene-duplicate'),
   sceneRename: need<HTMLButtonElement>('scene-rename'),
   sceneDelete: need<HTMLButtonElement>('scene-delete'),
   sceneDefault: need<HTMLButtonElement>('scene-default'),
+  sceneMoveLeft: need<HTMLButtonElement>('scene-move-left'),
+  sceneMoveRight: need<HTMLButtonElement>('scene-move-right'),
   sceneEdit: need<HTMLButtonElement>('scene-edit'),
+  sceneDialog: need<HTMLDialogElement>('scene-dialog'),
+  sceneDialogForm: need<HTMLFormElement>('scene-dialog-form'),
+  sceneDialogTitle: need<HTMLElement>('scene-dialog-title'),
+  sceneDialogName: need<HTMLInputElement>('scene-dialog-name'),
+  sceneDialogError: need<HTMLParagraphElement>('scene-dialog-error'),
+  sceneDialogConfirm: need<HTMLButtonElement>('scene-dialog-confirm'),
+  sceneDeleteDialog: need<HTMLDialogElement>('scene-delete-dialog'),
+  sceneDeleteText: need<HTMLParagraphElement>('scene-delete-text'),
   message: need<HTMLParagraphElement>('message'),
   mediaResourceName: need<HTMLParagraphElement>('media-resource-name'),
   mediaDropzone: need<HTMLButtonElement>('media-dropzone'),
@@ -193,12 +219,19 @@ const ui = {
   teamDetail: need<HTMLParagraphElement>('team-detail'),
   teamFileName: need<HTMLParagraphElement>('team-file-name'),
   customSportEditor: need<HTMLDivElement>('custom-sport-editor'),
+  teamMenu: need<HTMLDetailsElement>('team-menu'),
   rosterView: need<HTMLDivElement>('roster-view'),
+  rosterSetup: need<HTMLDivElement>('roster-setup'),
   liveEmpty: need<HTMLDivElement>('live-empty'),
   liveView: need<HTMLDivElement>('live-view'),
   groupSelect: need<HTMLSelectElement>('group-select'),
   groupEditor: need<HTMLDivElement>('group-editor'),
-  manualSession: need<HTMLDivElement>('manual-session'),
+  manualSession: need<HTMLElement>('manual-session'),
+  manualTitle: need<HTMLElement>('manual-title'),
+  manualCount: need<HTMLParagraphElement>('manual-count'),
+  manualRows: need<HTMLDivElement>('manual-rows'),
+  manualUndo: need<HTMLButtonElement>('manual-undo'),
+  manualEnd: need<HTMLButtonElement>('manual-end'),
   rosterList: need<HTMLDivElement>('roster-list'),
   addPlayer: need<HTMLFormElement>('add-player'),
   newNumber: need<HTMLInputElement>('new-number'),
@@ -210,10 +243,11 @@ const ui = {
   displaySelect: need<HTMLSelectElement>('display-select'),
   displayDetail: need<HTMLParagraphElement>('display-detail'),
   identify: need<HTMLButtonElement>('identify'),
+  layoutHeading: need<HTMLHeadingElement>('layout-heading'),
   layoutPresets: need<HTMLDivElement>('layout-presets'),
   layoutPreview: need<HTMLDivElement>('layout-preview'),
   layoutDetail: need<HTMLParagraphElement>('layout-detail'),
-  customTools: need<HTMLDivElement>('custom-layout-tools'),
+  layoutNormal: need<HTMLDivElement>('layout-normal'),
   customZoneSelect: need<HTMLSelectElement>('custom-zone-select'),
   customRoleSelect: need<HTMLSelectElement>('custom-role-select'),
   splitColumns: need<HTMLButtonElement>('split-columns'),
@@ -481,41 +515,151 @@ function setLiveBoardGroupId(groupId: string | null): void {
   });
 }
 
+/**
+ * Switch the scene the physical board is using.  This is a runtime operation:
+ * it never dirties the show.
+ */
 function activateScene(sceneId: string): void {
   const scene = sceneById(show.data.scenes, sceneId);
   if (!scene || zoneEditSession) return;
   if (manualSession?.currentPlayerId) manualSession = cancelManualPlayer(manualSession);
   selectedSceneId = scene.id;
-  activeSceneId = output.active ? scene.id : activeSceneId;
   if (output.active) {
+    activeSceneId = scene.id;
     output.applyScene(scene, liveBoardData(scene));
     output.setTheme(outputTheme(scene));
   }
-  renderScenes();
   renderOutput();
-  updateGlobalStatus();
+}
+
+/**
+ * Choose which scene the Output tab is configuring.  While output is live this
+ * deliberately leaves the board alone — the operator switches the board from
+ * the global strip, or with the explicit Switch action next to the layout.
+ */
+function selectScene(sceneId: string): void {
+  if (zoneEditSession || !sceneById(show.data.scenes, sceneId)) return;
+  selectedSceneId = sceneId;
+  if (!output.active) activeSceneId = null;
+  renderOutput();
 }
 
 function renderScenes(): void {
-  ui.sceneButtons.replaceChildren();
-  for (const scene of show.data.scenes) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'scene-button';
-    button.textContent = scene.name;
-    button.dataset['sceneId'] = scene.id;
-    button.setAttribute('aria-pressed', String(output.active && scene.id === activeSceneId));
-    button.setAttribute('aria-current', scene.id === selectedSceneId ? 'true' : 'false');
-    button.addEventListener('click', () => activateScene(scene.id));
-    ui.sceneButtons.append(button);
-  }
-  const scene = selectedScene();
-  ui.sceneDuplicate.disabled = show.data.scenes.length === 0;
-  ui.sceneRename.disabled = show.data.scenes.length === 0;
-  ui.sceneDelete.disabled = show.data.scenes.length <= 1;
-  ui.sceneDefault.disabled = scene.id === show.data.defaultSceneId;
-  ui.sceneEdit.disabled = zoneEditSession !== null;
+  renderSceneStrip(
+    { strip: ui.sceneStrip, buttons: ui.sceneButtons },
+    {
+      scenes: show.data.scenes,
+      activeSceneId,
+      // The quick-switch strip only earns its space while output is live.
+      live: output.active,
+      onSwitch: (sceneId) => activateScene(sceneId),
+    },
+  );
+  renderScenePicker(
+    {
+      picker: ui.scenePicker,
+      current: ui.sceneCurrent,
+      hint: ui.sceneHint,
+      duplicate: ui.sceneDuplicate,
+      rename: ui.sceneRename,
+      makeDefault: ui.sceneDefault,
+      moveLeft: ui.sceneMoveLeft,
+      moveRight: ui.sceneMoveRight,
+      remove: ui.sceneDelete,
+    },
+    {
+      scenes: show.data.scenes,
+      selectedSceneId: selectedScene().id,
+      activeSceneId,
+      defaultSceneId: show.data.defaultSceneId,
+      live: output.active,
+      editing: zoneEditSession !== null,
+      onSelect: (sceneId) => selectScene(sceneId),
+    },
+  );
   renderSummaries();
+}
+
+function applySceneSet(next: SceneSet): void {
+  show.data = { ...show.data, ...next };
+  markShowDirty();
+  renderOutput();
+}
+
+async function newSceneFromMenu(): Promise<void> {
+  const name = await askSceneName(sceneDialogElements(), {
+    kind: 'new',
+    initialName: '',
+    validate: (value) => (sceneNameTaken(show.data.scenes, value) ? nameTakenMessage : null),
+  });
+  if (!name) return;
+  const scene: Scene = {
+    id: nextSceneId(show.data.scenes, name),
+    name,
+    layout: layoutPreset('full'),
+    background: { kind: 'black' },
+  };
+  selectedSceneId = scene.id;
+  applySceneSet(addScene(sceneSet(), scene));
+}
+
+async function duplicateSceneFromMenu(): Promise<void> {
+  const source = selectedScene();
+  const name = await askSceneName(sceneDialogElements(), {
+    kind: 'duplicate',
+    initialName: `${source.name} Copy`,
+    validate: (value) => (sceneNameTaken(show.data.scenes, value) ? nameTakenMessage : null),
+  });
+  if (!name) return;
+  const scene = { ...cloneScene(source), id: nextSceneId(show.data.scenes, name), name };
+  selectedSceneId = scene.id;
+  applySceneSet(addScene(sceneSet(), scene));
+}
+
+async function renameSceneFromMenu(): Promise<void> {
+  const scene = selectedScene();
+  const name = await askSceneName(sceneDialogElements(), {
+    kind: 'rename',
+    initialName: scene.name,
+    validate: (value) =>
+      sceneNameTaken(show.data.scenes, value, scene.id) ? nameTakenMessage : null,
+  });
+  if (!name) return;
+  applySceneSet(renameScene(sceneSet(), scene.id, name));
+}
+
+async function deleteSceneFromMenu(): Promise<void> {
+  const scene = selectedScene();
+  if (output.active && scene.id === activeSceneId) {
+    setMessage('Switch to another scene before deleting the one on the board.');
+    return;
+  }
+  if (show.data.scenes.length <= 1) {
+    setMessage('A show must keep at least one scene.');
+    return;
+  }
+  if (!(await confirmDeleteScene(sceneDeleteElements(), scene.name))) return;
+  const next = removeScene(sceneSet(), scene.id);
+  if (!next) return;
+  selectedSceneId = next.scenes[0]?.id ?? null;
+  applySceneSet(next);
+}
+
+const nameTakenMessage = 'Another scene already uses that name.';
+
+function sceneDialogElements() {
+  return {
+    dialog: ui.sceneDialog,
+    form: ui.sceneDialogForm,
+    title: ui.sceneDialogTitle,
+    name: ui.sceneDialogName,
+    error: ui.sceneDialogError,
+    confirm: ui.sceneDialogConfirm,
+  };
+}
+
+function sceneDeleteElements() {
+  return { dialog: ui.sceneDeleteDialog, text: ui.sceneDeleteText };
 }
 
 function layoutEditMessage(scene: Scene, width: number, height: number): LayoutEditPreviewMessage {
@@ -546,15 +690,41 @@ function sendLayoutEditPreview(): void {
   output.previewLayout(layoutEditMessage(zoneEditSession.draft, width, height));
 }
 
+/** True when Edit Zones would silently repurpose the live board. */
+function zoneEditNeedsSwitch(): boolean {
+  return output.active && activeSceneId !== null && selectedScene().id !== activeSceneId;
+}
+
 function beginZonesEdit(): void {
   if (zoneEditSession) return;
+  // Editing puts the physical board into calibration mode; never do that to a
+  // scene the operator is not looking at.
+  if (zoneEditNeedsSwitch()) {
+    setMessage('Switch the board to this scene before editing its zones.');
+    renderOutput();
+    return;
+  }
+  // Done, Cancel and the zone tools all live on the Scenes page. Never leave
+  // the board in calibration mode with no visible way out.
+  if (activePage !== 'scenes') selectPage('scenes');
   zoneEditSession = beginZoneEdit(selectedScene());
   if (output.active) {
     const { width, height } = currentOutputDimensions();
     output.beginLayoutEdit(layoutEditMessage(zoneEditSession.draft, width, height));
   }
-  renderScenes();
   renderOutput();
+}
+
+function setDraftLayoutChecked(layout: LayoutNode, warning?: string): void {
+  if (!zoneEditSession) return;
+  if (!validateLayout(layout).ok) {
+    if (warning) setMessage(warning);
+    renderOutput();
+    return;
+  }
+  zoneEditSession = setDraftLayout(zoneEditSession, layout);
+  renderOutput();
+  sendLayoutEditPreview();
 }
 
 function cancelZonesEdit(): void {
@@ -565,7 +735,6 @@ function cancelZonesEdit(): void {
     output.endLayoutEdit(original.layout, liveBoardData(original));
     output.setTheme(outputTheme(original));
   }
-  renderScenes();
   renderOutput();
 }
 
@@ -578,7 +747,6 @@ function doneZonesEdit(): void {
     output.endLayoutEdit(next.layout, liveBoardData(next));
     output.setTheme(outputTheme(next));
   }
-  renderScenes();
   renderOutput();
 }
 
@@ -608,19 +776,43 @@ const output = new OutputController({
     updateGlobalStatus();
   },
   onCueState: (state) => {
-    ui.cueControls.hidden = !state.active;
-    if (state.active) {
-      const current = state.current;
-      ui.cueStatus.textContent = current
-        ? `Playing ${current.type.replace('-', ' ')} · ${state.index + 1} of ${state.total}`
-        : '';
-    }
+    renderCueControls(state);
     if (manualSession && team()) renderPlayers();
     updateGlobalStatus();
   },
   onWarning: (message) => setMessage(message),
 });
 
+/**
+ * Cue controls describe the operation, not the queue.  A single manually
+ * chosen player has no "next", so it does not get a Next button.
+ */
+function renderCueControls(state: CueQueueState): void {
+  ui.cueControls.hidden = !state.active;
+  if (!state.active) return;
+  const context = output.cueContext;
+  const ordered = context?.kind === 'ordered-group';
+  ui.cueStatus.textContent = ordered
+    ? `${context.label} · ${state.index + 1} of ${state.total}`
+    : (context?.label ?? '');
+  ui.cuePrevious.hidden = !ordered;
+  ui.cueNext.hidden = !ordered;
+  ui.cuePrevious.disabled = state.index <= 0;
+  ui.cueEnd.textContent = ordered
+    ? 'End Lineup'
+    : context?.kind === 'single-player'
+      ? 'End Player'
+      : 'End';
+}
+
+function manualGroupName(session: ManualGroupSession): string {
+  return team()?.groups.find((group) => group.id === session.groupId)?.name ?? session.groupId;
+}
+
+/**
+ * One short line the operator can glance at.  It says what Picta believes is
+ * on the board right now — never a log.
+ */
 function updateGlobalStatus(): void {
   if (!output.active) {
     ui.globalStatus.textContent = `Ready · ${selectedScene().name}`;
@@ -628,16 +820,16 @@ function updateGlobalStatus(): void {
     return;
   }
   const display = findById(displays, selectedDisplayId);
-  const manual = manualSession;
-  const manualGroupName = manual
-    ? (team()?.groups.find((group) => group.id === manual.groupId)?.name ?? manual.groupId)
-    : '';
-  const manualStatus = manual
-    ? ` · ${manualGroupName} · ${manual.shownPlayerIds.length}/${manual.playerIds.length}`
-    : '';
-  ui.globalStatus.textContent = output.cueActive
-    ? `● LIVE · ${activeScene().name} · Cue active${manualStatus}`
-    : `● LIVE · ${activeScene().name} · ${display ? displayLabel(display) : 'Output'}${manualStatus}`;
+  const context = output.cueContext;
+  const cueState = output.cueState;
+  const detail = context
+    ? context.kind === 'ordered-group'
+      ? `${context.label} ${cueState.index + 1}/${cueState.total}`
+      : context.label
+    : manualSession
+      ? `${manualGroupName(manualSession)} ${manualShownCount(manualSession)}/${manualSession.playerIds.length}`
+      : (display && displayLabel(display)) || 'Output';
+  ui.globalStatus.textContent = `● LIVE · ${activeScene().name} · ${detail}`;
   ui.globalStatus.classList.add('live');
 }
 
@@ -850,7 +1042,7 @@ async function showMediaNow(item: MediaItem): Promise<void> {
           holdMs: Math.max(3000, mediaDurationSeconds(item, mediaSet()) * 1000),
           label: basename(item.path, style),
         };
-  await output.playCues([cue]);
+  await output.playCues([cue], { kind: 'single-media', label: basename(item.path, style) });
 }
 
 async function addMedia(paths: readonly string[]): Promise<void> {
@@ -1051,7 +1243,7 @@ function renderGroupEditor(current: Team): void {
   if (group)
     manual.addEventListener('click', () => {
       manualSession = beginManualGroup(group.id, group.playerIds);
-      renderGroupEditor(current);
+      renderPlayers();
       updateGlobalStatus();
     });
   const add = document.createElement('button');
@@ -1079,11 +1271,7 @@ function renderGroupEditor(current: Team): void {
     });
   groupActions.append(play, manual, add, remove);
   ui.groupEditor.append(groupActions);
-  if (!group) {
-    ui.manualSession.hidden = true;
-    return;
-  }
-  renderManualSession(current, group);
+  if (!group) return;
   for (let index = 0; index < group.playerIds.length; index += 1) {
     const player = current.players.find((item) => item.id === group.playerIds[index]);
     if (!player) continue;
@@ -1170,107 +1358,121 @@ function renderGroupEditor(current: Team): void {
   }
 }
 
-function renderManualSession(current: Team, group: import('./core/domain.js').PlayerGroup): void {
-  const session = manualSession?.groupId === group.id ? manualSession : null;
-  ui.manualSession.replaceChildren();
-  ui.manualSession.hidden = session === null;
-  if (!session) return;
-  const heading = document.createElement('div');
-  heading.className = 'row';
-  const title = document.createElement('strong');
-  title.textContent = `Manual lineup · ${group.name}`;
-  const count = document.createElement('span');
-  count.className = 'muted';
-  count.textContent = `${manualRemainingCount(session)} remaining`;
-  heading.append(title, count);
-  ui.manualSession.append(heading);
-  const rows = document.createElement('div');
-  rows.className = 'manual-rows';
-  for (const playerId of group.playerIds) {
-    const player = current.players.find((item) => item.id === playerId);
-    if (!player) continue;
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'manual-row';
-    const shown = manualPlayerShown(session, player.id);
-    const currentPlayer = session.currentPlayerId === player.id;
-    row.disabled =
-      session.ended ||
-      shown ||
-      session.currentPlayerId !== null ||
-      output.cueActive ||
-      !output.active;
-    const check = document.createElement('span');
-    check.className = shown ? 'manual-check shown' : 'manual-check';
-    check.textContent = shown ? '✓' : '○';
-    const label = document.createElement('span');
-    label.textContent = `${player.number ? `#${player.number} ` : ''}${player.name}`;
-    const state = document.createElement('span');
-    state.className = 'muted';
-    state.textContent = currentPlayer ? 'Playing…' : shown ? 'Shown' : 'Present';
-    row.append(check, label, state);
-    row.addEventListener('click', () => void presentManualPlayer(player.id));
-    rows.append(row);
+function playerLabel(player: Player): string {
+  return `${player.number ? `#${player.number} ` : ''}${player.name}`;
+}
+
+/**
+ * The manual lineup takes over the Players tab while it runs, so the operator
+ * sees the lineup and nothing else during introductions.
+ */
+function renderManualSession(current: Team): void {
+  const session = manualSession;
+  const group = session ? current.groups.find((item) => item.id === session.groupId) : undefined;
+  // A group deleted mid-session ends it rather than stranding the workspace.
+  if (session && !group) manualSession = null;
+  const active = manualSession !== null && group !== undefined;
+  ui.rosterSetup.hidden = active;
+  if (active) ui.playerInspector.hidden = true;
+  renderManualWorkspace(
+    {
+      section: ui.manualSession,
+      title: ui.manualTitle,
+      count: ui.manualCount,
+      rows: ui.manualRows,
+      undo: ui.manualUndo,
+      end: ui.manualEnd,
+    },
+    manualSession && group
+      ? {
+          session: manualSession,
+          group,
+          players: current.players,
+          outputActive: output.active,
+          onPresent: (playerId) => void presentManualPlayer(playerId),
+          onUndo: () => {
+            if (manualSession) manualSession = undoManualPlayer(manualSession);
+            renderPlayers();
+            updateGlobalStatus();
+          },
+          onEnd: () => endManualSession(),
+        }
+      : null,
+  );
+}
+
+/** End Lineup returns the tab to the normal roster UI; nothing lingers. */
+function endManualSession(): void {
+  if (!manualSession) return;
+  if (manualSession.currentPlayerId !== null) output.cancelCue();
+  manualSession = null;
+  renderPlayers();
+  updateGlobalStatus();
+}
+
+/** Explain a presentation the audience did not see.  Never on the output. */
+function reportPresentation(
+  report: { outcome: PresentationOutcome; usedCardFallback: boolean },
+  player: Player,
+  mode: 'preferred' | 'card' | 'video',
+): void {
+  const name = playerLabel(player);
+  if (report.outcome === 'cancelled') return;
+  if (report.outcome === 'unavailable') {
+    setMessage(`${name} has no usable intro video.`);
+    return;
   }
-  ui.manualSession.append(rows);
-  const actions = document.createElement('div');
-  actions.className = 'row gap';
-  const undo = document.createElement('button');
-  undo.type = 'button';
-  undo.className = 'small-button grow';
-  undo.textContent = 'Undo last';
-  undo.disabled = session.history.length === 0 || session.currentPlayerId !== null;
-  undo.addEventListener('click', () => {
-    if (manualSession) manualSession = undoManualPlayer(manualSession);
-    renderGroupEditor(current);
-    updateGlobalStatus();
-  });
-  const end = document.createElement('button');
-  end.type = 'button';
-  end.className = 'small-button grow';
-  end.textContent = session.ended ? 'Ended' : 'End';
-  end.disabled = session.ended;
-  end.addEventListener('click', () => {
-    if (manualSession) manualSession = endManualGroup(manualSession);
-    renderGroupEditor(current);
-    updateGlobalStatus();
-  });
-  const replay = document.createElement('button');
-  replay.type = 'button';
-  replay.className = 'small-button grow';
-  replay.textContent = 'Replay';
-  replay.disabled = !session.ended || output.cueActive;
-  replay.addEventListener('click', () => {
-    if (manualSession) manualSession = replayManualGroup(manualSession);
-    renderGroupEditor(current);
-    updateGlobalStatus();
-  });
-  actions.append(undo, end, replay);
-  ui.manualSession.append(actions);
+  if (report.outcome === 'failed') {
+    setMessage(
+      mode === 'video' ? `${name}'s intro video could not play.` : `Could not present ${name}.`,
+    );
+    return;
+  }
+  if (report.usedCardFallback)
+    setMessage(`${name}'s intro video could not play, so the player card was shown.`);
+  else setMessage(null);
+}
+
+function presentSinglePlayer(
+  player: Player,
+  current: Team,
+  mode: 'preferred' | 'card' | 'video',
+): Promise<{ outcome: PresentationOutcome; usedCardFallback: boolean }> {
+  const context: CueContext = { kind: 'single-player', label: playerLabel(player) };
+  return presentPlayer(
+    player,
+    current,
+    show.data.event,
+    { mode },
+    {
+      play: (cue) => output.playCue(cue, context),
+    },
+  );
 }
 
 async function presentManualPlayer(playerId: string): Promise<void> {
-  if (!manualSession || !output.active || output.cueActive) return;
+  const session = manualSession;
+  if (!session || !output.active || output.cueActive) return;
   const current = team();
   const player = current?.players.find((item) => item.id === playerId);
   if (!current || !player) return;
-  const next = startManualPlayer(manualSession, playerId);
-  if (next === manualSession) return;
-  const cue = cueForPlayer(player, current, show.data.event);
-  if (!cue) return;
-  manualSession = next;
+  const started = startManualPlayer(session, playerId);
+  if (started === session) return;
+  manualSession = started;
   renderPlayers();
   updateGlobalStatus();
-  await output.playCues([cue]);
-  if (manualSession?.currentPlayerId === playerId) {
-    manualSession = completeManualPlayer(manualSession);
-    renderPlayers();
-    updateGlobalStatus();
-  }
+  // Manual and ordered lineups share the same preferred presentation; only the
+  // choice of who goes next differs.
+  const report = await presentSinglePlayer(player, current, 'preferred');
+  if (manualSession?.currentPlayerId === playerId)
+    manualSession = finishManualPlayer(manualSession, report.outcome);
+  reportPresentation(report, player, 'preferred');
+  renderPlayers();
+  updateGlobalStatus();
 }
 
 function cancelActiveCue(): void {
-  if (manualSession?.currentPlayerId !== null && manualSession?.currentPlayerId !== undefined) {
+  if (manualSession?.currentPlayerId != null) {
     manualSession = cancelManualPlayer(manualSession);
     renderPlayers();
     updateGlobalStatus();
@@ -1343,7 +1545,7 @@ function renderRosterList(current: Team): void {
     const showButton = document.createElement('button');
     showButton.type = 'button';
     showButton.className = 'small-button';
-    showButton.textContent = 'Show';
+    showButton.textContent = 'Show Card';
     showButton.disabled = !output.active;
     showButton.addEventListener('click', () => void showPlayerCard(player));
     actions.append(inspect, showButton);
@@ -1357,24 +1559,18 @@ function renderRosterList(current: Team): void {
   }
 }
 
-function playerCardCue(player: Player): Cue | null {
-  const current = team();
-  return current ? cueForPlayer(player, current, show.data.event) : null;
-}
-
+/** Show Card always shows the card, even when an intro video exists. */
 async function showPlayerCard(player: Player): Promise<void> {
-  const cue = playerCardCue(player);
-  if (cue) await output.playCues([cue]);
+  const current = team();
+  if (!current || !output.active) return;
+  reportPresentation(await presentSinglePlayer(player, current, 'card'), player, 'card');
 }
 
+/** Play Intro Video never quietly degrades into a card. */
 async function showPlayerVideo(player: Player): Promise<void> {
   const current = team();
-  const cue = current ? cueForPlayer(player, current, show.data.event) : null;
-  if (!cue || cue.type !== 'video') {
-    setMessage(`${player.name} has no usable intro video.`);
-    return;
-  }
-  await output.playCues([cue]);
+  if (!current || !output.active) return;
+  reportPresentation(await presentSinglePlayer(player, current, 'video'), player, 'video');
 }
 
 async function playGroup(group: import('./core/domain.js').PlayerGroup): Promise<void> {
@@ -1382,8 +1578,11 @@ async function playGroup(group: import('./core/domain.js').PlayerGroup): Promise
   const current = team();
   if (!current) return;
   const cues = cuesForPlayers(group.playerIds, current, show.data.event);
-  if (cues.length === 0) setMessage('This group has no usable players.');
-  else await output.playCues(cues);
+  if (cues.length === 0) {
+    setMessage('This group has no usable players.');
+    return;
+  }
+  await output.playCues(cues, { kind: 'ordered-group', label: group.name });
 }
 
 function renderInspector(current: Team): void {
@@ -1494,12 +1693,20 @@ function renderInspector(current: Team): void {
   card.className = 'small-button grow';
   card.textContent = 'Show Card';
   card.disabled = !output.active;
+  // Show Card stays available whether or not the player has a video.
+  if (!output.active) card.title = 'Start output to present a player.';
   card.addEventListener('click', () => void showPlayerCard(player));
   const video = document.createElement('button');
   video.type = 'button';
   video.className = 'small-button grow';
-  video.textContent = 'Play Video';
-  video.disabled = !output.active || !player.media.introVideo;
+  video.textContent = 'Play Intro Video';
+  const hasVideo = playerHasVideo(player);
+  video.disabled = !output.active || !hasVideo;
+  video.title = !hasVideo
+    ? 'This player has no usable intro video.'
+    : !output.active
+      ? 'Start output to present a player.'
+      : '';
   video.addEventListener('click', () => void showPlayerVideo(player));
   const remove = document.createElement('button');
   remove.type = 'button';
@@ -1652,6 +1859,8 @@ function renderPlayers(): void {
   renderRosterList(current);
   renderInspector(current);
   renderLive(current);
+  // Last: a running lineup collapses the setup UI the calls above just drew.
+  renderManualSession(current);
   renderSummaries();
 }
 
@@ -1695,186 +1904,112 @@ function renderDisplays(): void {
   renderOutput();
 }
 
-function commitDividerRatio(path: readonly ('first' | 'second')[], ratio: number): void {
+function commitDividerRatio(path: LayoutPath, ratio: number): void {
+  if (!zoneEditSession) return;
+  setDraftLayoutChecked(updateSplitRatioAtPath(editorScene().layout, path, ratio));
+}
+
+/** Draft-only preview while a divider is being dragged. */
+function previewDividerRatio(path: LayoutPath, ratio: number): void {
   if (!zoneEditSession) return;
   const next = updateSplitRatioAtPath(editorScene().layout, path, ratio);
   if (!validateLayout(next).ok) return;
   zoneEditSession = setDraftLayout(zoneEditSession, next);
-  renderOutput();
   sendLayoutEditPreview();
 }
 
-function renderPreviewNode(
-  node: LayoutNode,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  path: readonly ('first' | 'second')[],
-  rects: Map<string, { width: number; height: number }>,
-  editing = zoneEditSession !== null,
-): void {
-  if (node.type === 'zone') {
-    const element = document.createElement('div');
-    element.className = `preview-zone ${node.role}`;
-    if (zoneEditSession?.selectedZoneId === node.id) element.classList.add('selected');
-    element.style.left = `${x * 100}%`;
-    element.style.top = `${y * 100}%`;
-    element.style.width = `${width * 100}%`;
-    element.style.height = `${height * 100}%`;
-    const dimensions = rects.get(node.id);
-    element.textContent = `${node.role === 'live-board' ? 'LIVE BOARD' : node.role.toUpperCase()}\n${dimensions?.width ?? 0} × ${dimensions?.height ?? 0}`;
-    element.style.whiteSpace = 'pre-line';
-    if (editing) {
-      element.tabIndex = 0;
-      element.addEventListener('click', () => {
-        if (!zoneEditSession) return;
-        zoneEditSession = selectEditZone(zoneEditSession, node.id);
-        renderOutput();
-        sendLayoutEditPreview();
-      });
-    }
-    ui.layoutPreview.append(element);
-    return;
+/** Rebuild the Start-from presets.  They only exist inside Edit Zones. */
+function renderLayoutPresets(layout: LayoutNode): void {
+  ui.layoutPresets.replaceChildren();
+  const current = layoutPresetId(layout);
+  for (const id of LAYOUT_PRESETS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small-button';
+    button.textContent = layoutPresetLabel(id);
+    button.setAttribute('aria-pressed', String(id === current));
+    if (id === current) button.classList.add('active');
+    // A preset changes the draft only; Cancel still restores the original.
+    button.addEventListener('click', () => setDraftLayoutChecked(layoutPreset(id)));
+    ui.layoutPresets.append(button);
   }
-  const ratio = Math.max(0.1, Math.min(0.9, node.ratio));
-  const firstWidth = node.direction === 'columns' ? width * ratio : width;
-  const firstHeight = node.direction === 'rows' ? height * ratio : height;
+}
+
+function renderZoneEditor(scene: Scene): void {
+  const editing = zoneEditSession !== null;
+  ui.layoutHeading.textContent = editing ? `Edit Zones — ${scene.name}` : 'Layout';
+  // The editor replaces the normal layout panel rather than stacking below it.
+  ui.layoutNormal.hidden = editing;
+  ui.zoneEditPanel.hidden = !editing;
   if (!editing) {
-    const ratio = Math.max(0.1, Math.min(0.9, node.ratio));
-    const firstWidth = node.direction === 'columns' ? width * ratio : width;
-    const firstHeight = node.direction === 'rows' ? height * ratio : height;
-    renderPreviewNode(node.first, x, y, firstWidth, firstHeight, [...path, 'first'], rects, false);
-    renderPreviewNode(
-      node.second,
-      node.direction === 'columns' ? x + firstWidth : x,
-      node.direction === 'rows' ? y + firstHeight : y,
-      node.direction === 'columns' ? width - firstWidth : width,
-      node.direction === 'rows' ? height - firstHeight : height,
-      [...path, 'second'],
-      rects,
-      false,
-    );
+    renderLayoutAction();
     return;
   }
-  const divider = document.createElement('button');
-  divider.type = 'button';
-  divider.className = `preview-divider ${node.direction}`;
-  divider.setAttribute('role', 'separator');
-  divider.setAttribute('aria-label', 'Adjust layout divider');
-  divider.setAttribute('aria-valuemin', '10');
-  divider.setAttribute('aria-valuemax', '90');
-  divider.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
-  if (node.direction === 'columns') {
-    divider.style.left = `${(x + firstWidth) * 100}%`;
-    divider.style.top = `${y * 100}%`;
-    divider.style.height = `${height * 100}%`;
-  } else {
-    divider.style.left = `${x * 100}%`;
-    divider.style.top = `${(y + firstHeight) * 100}%`;
-    divider.style.width = `${width * 100}%`;
+  renderLayoutPresets(scene.layout);
+  renderZoneSelect(ui.customZoneSelect, scene.layout);
+  const zones = layoutZones(scene.layout);
+  const selectedZoneId = zoneEditSession?.selectedZoneId ?? zones[0]?.id;
+  if (selectedZoneId) ui.customZoneSelect.value = selectedZoneId;
+  const role = zones.find((zone) => zone.id === selectedZoneId)?.role;
+  if (role) ui.customRoleSelect.value = role;
+  ui.mergeZone.disabled = zones.length <= 1;
+  ui.zoneEditSafe.checked = zoneEditSession?.showSafeAreas ?? true;
+}
+
+/**
+ * Edit Zones lives here, next to the layout it edits.  While output is live on
+ * a different scene the operator must switch to it first, so the board never
+ * silently enters calibration for a scene nobody asked for.
+ */
+function renderLayoutAction(): void {
+  ui.layoutNormal.replaceChildren();
+  if (zoneEditNeedsSwitch()) {
+    const target = selectedScene();
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'small-button';
+    button.textContent = `Switch to ${target.name}`;
+    button.addEventListener('click', () => activateScene(target.id));
+    const note = document.createElement('span');
+    note.className = 'muted detail';
+    note.textContent = `The board is live on ${activeScene().name}.`;
+    ui.layoutNormal.append(button, note);
+    return;
   }
-  let draftRatio = ratio;
-  const setDraftFromPointer = (clientX: number, clientY: number): void => {
-    const bounds = ui.layoutPreview.getBoundingClientRect();
-    const parentWidth = Math.max(1, width * bounds.width);
-    const parentHeight = Math.max(1, height * bounds.height);
-    draftRatio =
-      node.direction === 'columns'
-        ? Math.max(0.1, Math.min(0.9, (clientX - bounds.left - x * bounds.width) / parentWidth))
-        : Math.max(0.1, Math.min(0.9, (clientY - bounds.top - y * bounds.height) / parentHeight));
-    divider.setAttribute('aria-valuenow', String(Math.round(draftRatio * 100)));
-    if (node.direction === 'columns') divider.style.left = `${(x + width * draftRatio) * 100}%`;
-    else divider.style.top = `${(y + height * draftRatio) * 100}%`;
-    if (zoneEditSession) {
-      const next = updateSplitRatioAtPath(editorScene().layout, path, draftRatio);
-      if (validateLayout(next).ok) {
-        zoneEditSession = setDraftLayout(zoneEditSession, next);
-        sendLayoutEditPreview();
-      }
-    }
-  };
-  divider.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
-    divider.setPointerCapture(event.pointerId);
-    setDraftFromPointer(event.clientX, event.clientY);
-  });
-  divider.addEventListener('pointermove', (event) => {
-    if (divider.hasPointerCapture(event.pointerId))
-      setDraftFromPointer(event.clientX, event.clientY);
-  });
-  divider.addEventListener('pointerup', (event) => {
-    if (!divider.hasPointerCapture(event.pointerId)) return;
-    divider.releasePointerCapture(event.pointerId);
-    commitDividerRatio(path, draftRatio);
-  });
-  divider.addEventListener('keydown', (event) => {
-    if (
-      event.key !== 'ArrowLeft' &&
-      event.key !== 'ArrowRight' &&
-      event.key !== 'ArrowUp' &&
-      event.key !== 'ArrowDown'
-    )
-      return;
-    event.preventDefault();
-    const decrease = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
-    commitDividerRatio(path, ratio + (decrease ? -0.05 : 0.05));
-  });
-  ui.layoutPreview.append(divider);
-  renderPreviewNode(node.first, x, y, firstWidth, firstHeight, [...path, 'first'], rects, true);
-  renderPreviewNode(
-    node.second,
-    node.direction === 'columns' ? x + firstWidth : x,
-    node.direction === 'rows' ? y + firstHeight : y,
-    node.direction === 'columns' ? width - firstWidth : width,
-    node.direction === 'rows' ? height - firstHeight : height,
-    [...path, 'second'],
-    rects,
-    true,
-  );
+  ui.layoutNormal.append(ui.sceneEdit);
+  ui.sceneEdit.disabled = false;
 }
 
 function renderOutput(): void {
+  renderScenes();
   const display = findById(displays, selectedDisplayId);
   const width = display?.width ?? 1920;
   const height = display?.height ?? 1080;
   const scene = editorScene();
   const rects = resolveZoneRects(scene.layout, width, height);
-  const previewWidth = 640;
-  const previewHeight = Math.max(120, Math.round((previewWidth * height) / Math.max(1, width)));
+  const previewHeight = Math.max(120, Math.round((640 * height) / Math.max(1, width)));
   ui.layoutPreview.style.height = `${Math.min(240, previewHeight)}px`;
-  ui.layoutPreview.replaceChildren();
-  const rectsById = new Map(
-    rects.map((rect) => [rect.id, { width: rect.width, height: rect.height }]),
-  );
-  renderPreviewNode(scene.layout, 0, 0, 1, 1, [], rectsById);
-  if (zoneEditSession?.showSafeAreas) {
-    const safe = document.createElement('div');
-    safe.className = 'preview-safe-area';
-    safe.setAttribute('aria-hidden', 'true');
-    ui.layoutPreview.append(safe);
-  }
-  const preset = layoutPresetId(scene.layout);
-  for (const button of ui.layoutPresets.querySelectorAll<HTMLButtonElement>('button[data-layout]'))
-    button.classList.toggle('active', button.dataset['layout'] === preset);
-  ui.layoutDetail.textContent = `${width} × ${height} · ${rects.map((rect) => `${rect.role} ${rect.width}×${rect.height}`).join(' · ')}`;
-  ui.customTools.hidden = zoneEditSession === null;
-  ui.zoneEditPanel.hidden = zoneEditSession === null;
-  ui.customZoneSelect.replaceChildren();
-  for (const zone of layoutZones(scene.layout)) {
-    const option = document.createElement('option');
-    option.value = zone.id;
-    option.textContent = `${zone.id} · ${zone.role}`;
-    ui.customZoneSelect.append(option);
-  }
-  const customZone =
-    zoneEditSession?.selectedZoneId ||
-    ui.customZoneSelect.value ||
-    layoutZones(scene.layout)[0]?.id;
-  if (customZone) ui.customZoneSelect.value = customZone;
-  const selectedRole = layoutZones(scene.layout).find((zone) => zone.id === customZone)?.role;
-  if (selectedRole) ui.customRoleSelect.value = selectedRole;
-  ui.zoneEditSafe.checked = zoneEditSession?.showSafeAreas ?? true;
+  renderLayoutPreview(ui.layoutPreview, {
+    layout: scene.layout,
+    outputWidth: width,
+    outputHeight: height,
+    editing: zoneEditSession !== null,
+    selectedZoneId: zoneEditSession?.selectedZoneId ?? null,
+    showSafeAreas: zoneEditSession?.showSafeAreas ?? false,
+    onSelectZone: (zoneId) => {
+      if (!zoneEditSession) return;
+      zoneEditSession = selectEditZone(zoneEditSession, zoneId);
+      renderOutput();
+      sendLayoutEditPreview();
+    },
+    onRatioPreview: previewDividerRatio,
+    onRatioCommit: commitDividerRatio,
+  });
+  ui.layoutDetail.textContent = `${width} × ${height} · ${rects
+    .map((rect) => `${zoneRoleLabel(rect.role)} ${rect.width}×${rect.height}`)
+    .join(' · ')}`;
+  renderZoneEditor(scene);
+
   const current = team();
   ui.outputGroup.replaceChildren();
   if (current) {
@@ -1896,6 +2031,7 @@ function renderOutput(): void {
   ui.outputStart.hidden = output.active;
   ui.outputStop.hidden = !output.active;
   ui.outputStart.disabled = selectedDisplayId === null || output.active;
+  ui.outputStart.textContent = `Start Output · ${selectedScene().name}`;
   ui.outputStop.disabled = !output.active;
   ui.displaySelect.disabled = output.active;
   updateGlobalStatus();
@@ -1997,6 +2133,7 @@ function stopOutput(): void {
   zoneEditSession = null;
   manualSession = null;
   activeSceneId = null;
+  selectedSceneId = show.data.defaultSceneId;
   output.stop('user');
   void ipc.closePresentation().catch(() => undefined);
   renderMedia();
@@ -2288,9 +2425,7 @@ function renderAll(): void {
   renderMedia();
   renderPlayers();
   renderDisplays();
-  renderScenes();
   renderOutput();
-  updateGlobalStatus();
 }
 
 async function checkForUpdate(force = false): Promise<void> {
@@ -2441,165 +2576,68 @@ function wire(): void {
     'click',
     () => void ipc.identifyDisplays().catch((error) => setMessage(String(error))),
   );
-  ui.sceneNew.addEventListener('click', () => {
-    const name = window.prompt('Scene name:', 'New Scene')?.trim();
-    if (!name || sceneNameTaken(show.data.scenes, name)) {
-      if (name) setMessage('Scene names must be unique.');
-      return;
-    }
-    const scene: Scene = {
-      id: nextSceneId(show.data.scenes, name),
-      name,
-      layout: layoutPreset('full'),
-      background: { kind: 'black' },
-    };
-    show.data = { ...show.data, ...addScene(sceneSet(), scene) };
-    selectedSceneId = scene.id;
-    markShowDirty();
-    renderScenes();
-    renderOutput();
-  });
-  ui.sceneDuplicate.addEventListener('click', () => {
-    const source = selectedScene();
-    const name = window.prompt('Name for the duplicate:', `${source.name} Copy`)?.trim();
-    if (!name || sceneNameTaken(show.data.scenes, name)) {
-      if (name) setMessage('Scene names must be unique.');
-      return;
-    }
-    const scene = { ...cloneScene(source), id: nextSceneId(show.data.scenes, name), name };
-    show.data = { ...show.data, ...addScene(sceneSet(), scene) };
-    selectedSceneId = scene.id;
-    markShowDirty();
-    renderScenes();
-    renderOutput();
-  });
-  ui.sceneRename.addEventListener('click', () => {
-    const current = selectedScene();
-    const name = window.prompt('Scene name:', current.name)?.trim();
-    if (!name || (sceneNameTaken(show.data.scenes, name, current.id) && name !== current.name)) {
-      if (name) setMessage('Scene names must be unique.');
-      return;
-    }
-    show.data = { ...show.data, ...renameScene(sceneSet(), current.id, name) };
-    markShowDirty();
-    renderScenes();
-    renderOutput();
-  });
-  ui.sceneDelete.addEventListener('click', () => {
-    const current = selectedScene();
-    if (output.active && current.id === activeSceneId) {
-      setMessage('Stop output before deleting the live scene.');
-      return;
-    }
-    if (!window.confirm(`Delete the scene “${current.name}”?`)) return;
-    const next = removeScene(sceneSet(), current.id);
-    if (!next) return;
-    show.data = { ...show.data, ...next };
-    selectedSceneId = next.scenes[0]?.id ?? null;
-    markShowDirty();
-    renderScenes();
-    renderOutput();
-  });
-  ui.sceneDefault.addEventListener('click', () => {
-    const current = selectedScene();
-    show.data = { ...show.data, ...setDefaultScene(sceneSet(), current.id) };
-    markShowDirty();
-    renderScenes();
-  });
+  ui.sceneNew.addEventListener('click', () => void newSceneFromMenu());
+  ui.sceneDuplicate.addEventListener('click', () => void duplicateSceneFromMenu());
+  ui.sceneRename.addEventListener('click', () => void renameSceneFromMenu());
+  ui.sceneDelete.addEventListener('click', () => void deleteSceneFromMenu());
+  ui.sceneDefault.addEventListener('click', () =>
+    applySceneSet(setDefaultScene(sceneSet(), selectedScene().id)),
+  );
+  ui.sceneMoveLeft.addEventListener('click', () =>
+    applySceneSet(moveScene(sceneSet(), selectedScene().id, -1)),
+  );
+  ui.sceneMoveRight.addEventListener('click', () =>
+    applySceneSet(moveScene(sceneSet(), selectedScene().id, 1)),
+  );
   ui.sceneEdit.addEventListener('click', () => beginZonesEdit());
   ui.zoneEditCancel.addEventListener('click', () => cancelZonesEdit());
   ui.zoneEditDone.addEventListener('click', () => doneZonesEdit());
   ui.zoneEditSafe.addEventListener('change', () => {
     if (!zoneEditSession) return;
+    // Preview only: the toggle is never persisted with the scene.
     zoneEditSession = setEditSafeAreas(zoneEditSession, ui.zoneEditSafe.checked);
     renderOutput();
     sendLayoutEditPreview();
   });
-  ui.layoutPresets.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-layout]');
-    if (!button) return;
-    const id = button.dataset['layout'];
-    if (zoneEditSession) return;
-    let next: LayoutNode | null = null;
-    if (id === 'custom') {
-      if (layoutPresetId(selectedScene().layout) !== 'custom')
-        next = splitZone(layoutPreset('full'), 'program', 'columns', 'blank');
-    } else if (id === 'full' || id === 'half-half' || id === 'program-2-3' || id === 'board-1-3') {
-      next = layoutPreset(id);
-    }
-    if (next && validateLayout(next).ok) {
-      const scene = updateSelectedScene((current) => ({ ...current, layout: next! }));
-      if (output.active && scene.id === activeSceneId) {
-        output.applyScene(scene, liveBoardData(scene));
-        output.setTheme(outputTheme(scene));
-      }
-    }
-    renderOutput();
-  });
   ui.customZoneSelect.addEventListener('change', () => {
-    if (zoneEditSession)
-      zoneEditSession = selectEditZone(zoneEditSession, ui.customZoneSelect.value);
+    if (!zoneEditSession) return;
+    zoneEditSession = selectEditZone(zoneEditSession, ui.customZoneSelect.value);
     renderOutput();
     sendLayoutEditPreview();
   });
   ui.splitColumns.addEventListener('click', () => {
-    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
-    if (!id) return;
-    const next = splitZone(
-      editorScene().layout,
-      id,
-      'columns',
-      id === 'program' ? 'live-board' : 'blank',
+    if (!zoneEditSession || !id) return;
+    setDraftLayoutChecked(
+      splitZone(editorScene().layout, id, 'columns', id === 'program' ? 'live-board' : 'blank'),
+      'That split would leave too many zones.',
     );
-    if (validateLayout(next).ok) {
-      zoneEditSession = setDraftLayout(zoneEditSession, next);
-      renderOutput();
-      sendLayoutEditPreview();
-    }
   });
   ui.splitRows.addEventListener('click', () => {
-    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
-    if (!id) return;
-    const next = splitZone(editorScene().layout, id, 'rows', 'blank');
-    if (validateLayout(next).ok) {
-      zoneEditSession = setDraftLayout(zoneEditSession, next);
-      renderOutput();
-      sendLayoutEditPreview();
-    }
+    if (!zoneEditSession || !id) return;
+    setDraftLayoutChecked(
+      splitZone(editorScene().layout, id, 'rows', 'blank'),
+      'That split would leave too many zones.',
+    );
   });
   ui.customRoleSelect.addEventListener('change', () => {
-    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
     const role = ui.customRoleSelect.value;
-    if (!id || !['program', 'live-board', 'media', 'blank'].includes(role)) return;
-    const next = setZoneRole(
-      editorScene().layout,
-      id,
-      role as 'program' | 'live-board' | 'media' | 'blank',
+    if (!zoneEditSession || !id) return;
+    if (!['program', 'live-board', 'media', 'blank'].includes(role)) return;
+    setDraftLayoutChecked(
+      setZoneRole(editorScene().layout, id, role as ZoneRole),
+      'A layout must keep exactly one Program zone.',
     );
-    if (!validateLayout(next).ok) {
-      renderOutput();
-      setMessage('A layout must keep exactly one Program zone.');
-      return;
-    }
-    zoneEditSession = setDraftLayout(zoneEditSession, next);
-    renderOutput();
-    sendLayoutEditPreview();
   });
   ui.mergeZone.addEventListener('click', () => {
-    if (!zoneEditSession) return;
     const id = ui.customZoneSelect.value;
-    if (!id) return;
-    const next = mergeZone(editorScene().layout, id);
-    if (!validateLayout(next).ok) {
-      setMessage('That merge would remove the only Program zone.');
-      return;
-    }
-    zoneEditSession = setDraftLayout(zoneEditSession, next);
-    renderOutput();
-    sendLayoutEditPreview();
+    if (!zoneEditSession || !id) return;
+    setDraftLayoutChecked(
+      mergeZone(editorScene().layout, id),
+      'That merge would remove the only Program zone.',
+    );
   });
   ui.outputGroup.addEventListener('change', () => {
     setLiveBoardGroupId(ui.outputGroup.value || null);

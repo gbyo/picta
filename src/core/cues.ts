@@ -15,6 +15,9 @@ export interface CueQueueState {
   current: Cue | null;
 }
 
+/** What one cue in a sequence actually did. */
+export type CueOutcome = 'played' | 'failed' | 'cancelled';
+
 export interface CueQueueHandlers {
   onState?(state: CueQueueState): void;
   onSkipped?(cue: Cue, index: number, reason: 'failed' | 'cancelled'): void;
@@ -35,6 +38,7 @@ export class CueQueue {
   #active = false;
   #generation = 0;
   #runPromise: Promise<void> | null = null;
+  #outcomes: CueOutcome[] = [];
 
   constructor(runner: CueRunner, handlers: CueQueueHandlers = {}) {
     this.#runner = runner;
@@ -54,21 +58,24 @@ export class CueQueue {
     return this.#active;
   }
 
-  play(cues: readonly Cue[]): Promise<void> {
+  /** Resolves with one outcome per cue that was reached. */
+  async play(cues: readonly Cue[]): Promise<CueOutcome[]> {
     this.cancel(false);
     this.#items = cues.slice();
     this.#index = -1;
+    this.#outcomes = [];
     this.#active = this.#items.length > 0;
     this.#generation += 1;
     this.#publish();
     if (!this.#active) {
       this.#handlers.onFinished?.();
-      return Promise.resolve();
+      return this.#outcomes;
     }
-    const generation = this.#generation;
-    const promise = this.#run(generation);
+    const outcomes = this.#outcomes;
+    const promise = this.#run(this.#generation);
     this.#runPromise = promise;
-    return promise;
+    await promise;
+    return outcomes;
   }
 
   /** End the current cue and the rest of the queue. */
@@ -76,9 +83,11 @@ export class CueQueue {
     if (!this.#active && this.#runPromise === null) return;
     this.#generation += 1;
     this.#runner.cancel?.();
+    const current = this.#items[this.#index];
+    // Record before clearing: the in-flight run exits without reporting.
+    if (this.#active && current) this.#outcomes[this.#index] = 'cancelled';
     this.#active = false;
     if (notify) {
-      const current = this.#items[this.#index];
       if (current) this.#handlers.onSkipped?.(current, this.#index, 'cancelled');
       this.#handlers.onFinished?.();
     }
@@ -119,14 +128,16 @@ export class CueQueue {
         return;
       }
       this.#publish();
+      const index = this.#index;
       let played = false;
       try {
-        played = await this.#runner.run(cue, this.#index, this.#items.length);
+        played = await this.#runner.run(cue, index, this.#items.length);
       } catch {
         played = false;
       }
       if (generation !== this.#generation || !this.#active) return;
-      if (!played) this.#handlers.onSkipped?.(cue, this.#index, 'failed');
+      this.#outcomes[index] = played ? 'played' : 'failed';
+      if (!played) this.#handlers.onSkipped?.(cue, index, 'failed');
     }
   }
 

@@ -1195,6 +1195,98 @@ h2 {
   font-weight: 800;
 }
 
+.manual-row {
+  grid-template-columns: 22px 3em minmax(0, 1fr) auto;
+}
+
+.manual-row:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.manual-row:disabled {
+  opacity: 0.55;
+}
+
+.manual-row.playing {
+  border-color: var(--accent);
+  background: var(--surface-tint);
+}
+
+.manual-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.manual-title {
+  margin: 4px 0 0;
+  font-size: 19px;
+  letter-spacing: 0.04em;
+}
+
+.manual-number {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.manual-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-position,
+.manual-state {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manual-check {
+  color: var(--success);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+/* The runtime scene switch: only present while output is live, and reachable
+   from whichever page the operator happens to be on. */
+.scene-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.scene-strip-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.scene-strip .scene-buttons {
+  margin-top: 0;
+}
+
+.scene-strip .scene-button {
+  min-width: 96px;
+  min-height: 38px;
+}
+
+.scene-default-mark {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .live-heading {
   align-items: end;
   margin-bottom: 20px;
@@ -1300,14 +1392,14 @@ h2 {
   box-shadow: var(--shadow-sm);
 }
 
-.scene-button[aria-current='true'] {
+.scene-button[aria-pressed='true'] {
   border-color: var(--accent);
   background: var(--surface-tint);
   color: var(--text);
   font-weight: 700;
 }
 
-.scene-button[aria-pressed='true']::after {
+.scene-button.scene-live::after {
   content: 'Live';
   display: block;
   margin-top: 2px;
@@ -2446,7 +2538,7 @@ kbd {
   box-shadow: none;
 }
 
-.scene-button[aria-current='true'],
+.scene-button[aria-pressed='true'],
 .preset-card.active {
   border-color: #888c92;
   background: #e1e3e5;

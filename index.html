@@ -74,6 +74,15 @@
             </button>
           </div>
         </header>
+        <section id="scene-strip" class="scene-strip" aria-label="Scene" hidden>
+          <span class="scene-strip-label">Scene</span>
+          <div
+            id="scene-buttons"
+            class="scene-buttons"
+            role="toolbar"
+            aria-label="Switch scene"
+          ></div>
+        </section>
         <p id="message" class="message" role="status" aria-live="polite" hidden></p>
 
         <section id="page-home" class="page" data-page-panel="home">
@@ -264,7 +273,7 @@
                 <p id="team-detail" class="muted"></p>
                 <p id="team-file-name" class="muted"></p>
               </div>
-              <details class="resource-menu">
+              <details id="team-menu" class="resource-menu">
                 <summary class="button secondary-button">Team file</summary>
                 <div class="menu-panel">
                   <button type="button" id="team-new-menu">New team</button
@@ -277,58 +286,76 @@
               </details>
             </div>
             <div id="custom-sport-editor" class="custom-sport-editor" hidden></div>
-            <div id="roster-view" class="roster-layout">
-              <section class="content-card roster-main">
-                <div class="card-heading">
+            <div id="roster-view">
+              <section id="manual-session" class="manual-session" aria-label="Manual lineup" hidden>
+                <div class="manual-heading">
                   <div>
-                    <p class="section-kicker">People</p>
-                    <h2>Roster</h2>
+                    <p class="section-kicker">Introducing</p>
+                    <h2 id="manual-title" class="manual-title"></h2>
                   </div>
-                  <span class="muted">Click a player to edit</span>
+                  <p id="manual-count" class="muted" aria-live="polite"></p>
                 </div>
-                <form id="add-player" class="add-player">
-                  <input
-                    id="new-number"
-                    class="field-number"
-                    type="text"
-                    placeholder="#"
-                    aria-label="Jersey number"
-                    maxlength="3"
-                    autocomplete="off"
-                  /><input
-                    id="new-name"
-                    type="text"
-                    placeholder="Player name"
-                    aria-label="Player name"
-                    autocomplete="off"
-                  /><input
-                    id="new-position"
-                    class="field-position"
-                    type="text"
-                    placeholder="Position"
-                    aria-label="Position"
-                    maxlength="8"
-                    autocomplete="off"
-                  /><button type="submit" class="button secondary-button">Add player</button>
-                </form>
-                <div id="roster-list" class="roster-list"></div>
+                <div id="manual-rows" class="manual-rows"></div>
+                <div class="row gap">
+                  <button type="button" id="manual-undo" class="button secondary-button grow">
+                    Undo last</button
+                  ><button type="button" id="manual-end" class="button stop-button grow">
+                    End lineup
+                  </button>
+                </div>
               </section>
-              <aside id="player-inspector" class="inspector" hidden></aside>
-              <section class="content-card groups-card">
-                <div class="card-heading">
-                  <div>
-                    <p class="section-kicker">Presentation</p>
-                    <h2>Groups</h2>
+              <div id="roster-setup" class="roster-layout">
+                <section class="content-card roster-main">
+                  <div class="card-heading">
+                    <div>
+                      <p class="section-kicker">People</p>
+                      <h2>Roster</h2>
+                    </div>
+                    <span class="muted">Click a player to edit</span>
                   </div>
-                  <select
-                    id="group-select"
-                    class="control compact-control"
-                    aria-label="Roster group"
-                  ></select>
-                </div>
-                <div id="manual-session" class="manual-session" hidden></div>
-                <div id="group-editor" class="group-editor"></div>
-              </section>
+                  <form id="add-player" class="add-player">
+                    <input
+                      id="new-number"
+                      class="field-number"
+                      type="text"
+                      placeholder="#"
+                      aria-label="Jersey number"
+                      maxlength="3"
+                      autocomplete="off"
+                    /><input
+                      id="new-name"
+                      type="text"
+                      placeholder="Player name"
+                      aria-label="Player name"
+                      autocomplete="off"
+                    /><input
+                      id="new-position"
+                      class="field-position"
+                      type="text"
+                      placeholder="Position"
+                      aria-label="Position"
+                      maxlength="8"
+                      autocomplete="off"
+                    /><button type="submit" class="button secondary-button">Add player</button>
+                  </form>
+                  <div id="roster-list" class="roster-list"></div>
+                </section>
+                <aside id="player-inspector" class="inspector" hidden></aside>
+                <section class="content-card groups-card">
+                  <div class="card-heading">
+                    <div>
+                      <p class="section-kicker">Presentation</p>
+                      <h2>Groups</h2>
+                    </div>
+                    <select
+                      id="group-select"
+                      class="control compact-control"
+                      aria-label="Roster group"
+                    ></select>
+                  </div>
+                  <div id="group-editor" class="group-editor"></div>
+                </section>
+              </div>
             </div>
           </div>
         </section>
@@ -362,16 +389,17 @@
         </section>
 
         <section id="page-scenes" class="page" data-page-panel="scenes" hidden>
-          <section id="scene-strip" class="scene-browser" aria-label="Scenes">
+          <section class="scene-browser" aria-label="Scenes">
             <div class="scene-browser-top">
               <div>
                 <p class="section-kicker">Scenes</p>
-                <h2>Scene list</h2>
+                <h2 id="scene-current">Scene list</h2>
+                <p id="scene-hint" class="muted detail"></p>
               </div>
               <button type="button" id="scene-new" class="button primary-button">New scene</button>
             </div>
             <div
-              id="scene-buttons"
+              id="scene-picker"
               class="scene-buttons"
               role="toolbar"
               aria-label="Show scenes"
@@ -379,9 +407,12 @@
             <div class="scene-actions">
               <button type="button" id="scene-duplicate" class="text-button">Duplicate</button
               ><button type="button" id="scene-rename" class="text-button">Rename</button
+              ><button type="button" id="scene-default" class="text-button">Make default</button
+              ><button type="button" id="scene-move-left" class="text-button">Move left</button
+              ><button type="button" id="scene-move-right" class="text-button">Move right</button
               ><button type="button" id="scene-delete" class="text-button danger-button">
-                Delete</button
-              ><button type="button" id="scene-default" class="text-button">Make default</button>
+                Delete
+              </button>
             </div>
           </section>
           <div class="scene-workspace">
@@ -389,11 +420,13 @@
               <div class="card-heading">
                 <div>
                   <p class="section-kicker">Canvas</p>
-                  <h2>Layout preview</h2>
+                  <h2 id="layout-heading">Layout preview</h2>
                 </div>
-                <button type="button" id="scene-edit" class="button secondary-button">
-                  Edit zones
-                </button>
+                <div id="layout-normal" class="row gap">
+                  <button type="button" id="scene-edit" class="button secondary-button">
+                    Edit zones
+                  </button>
+                </div>
               </div>
               <div
                 id="layout-preview"
@@ -597,6 +630,41 @@
           <button type="button" id="team-dialog-cancel" class="button secondary-button">
             Cancel</button
           ><button type="submit" class="button primary-button">Create team</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="scene-dialog" class="confirm form-dialog">
+      <form method="dialog" id="scene-dialog-form">
+        <p class="section-kicker">Scene</p>
+        <h2 id="scene-dialog-title">New Scene</h2>
+        <div class="dialog-fields">
+          <label
+            >Name<input id="scene-dialog-name" type="text" autocomplete="off" maxlength="60"
+          /></label>
+        </div>
+        <p id="scene-dialog-error" class="dialog-error" role="alert" hidden></p>
+        <div class="confirm-actions">
+          <button type="submit" value="cancel" class="button secondary-button">Cancel</button
+          ><button
+            type="submit"
+            value="confirm"
+            id="scene-dialog-confirm"
+            class="button primary-button"
+          >
+            Create
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="scene-delete-dialog" class="confirm">
+      <form method="dialog">
+        <p class="section-kicker">Scene</p>
+        <h2>Delete scene</h2>
+        <p id="scene-delete-text"></p>
+        <div class="confirm-actions">
+          <button type="submit" value="cancel" class="button secondary-button" autofocus>
+            Cancel</button
+          ><button type="submit" value="delete" class="button stop-button">Delete</button>
         </div>
       </form>
     </dialog>
