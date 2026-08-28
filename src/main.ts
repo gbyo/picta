@@ -211,6 +211,7 @@ const ui = {
   mediaDuration: need<HTMLSelectElement>('media-duration'),
   mediaTransition: need<HTMLSelectElement>('media-transition'),
   mediaSizing: need<HTMLSelectElement>('media-sizing'),
+  mediaTransport: need<HTMLDivElement>('media-transport'),
   mediaPrevious: need<HTMLButtonElement>('media-previous'),
   mediaNext: need<HTMLButtonElement>('media-next'),
   noTeam: need<HTMLDivElement>('no-team'),
@@ -1083,6 +1084,9 @@ function renderMedia(): void {
   ui.mediaDuration.value = String(data.imageDurationSeconds);
   ui.mediaTransition.value = data.transition;
   ui.mediaSizing.value = data.imageSizing;
+  // Previous/Next drive the live program; off air they are a pair of dead
+  // buttons on a page the operator uses to prepare.
+  ui.mediaTransport.hidden = !output.active;
   ui.mediaPrevious.disabled = !output.active;
   ui.mediaNext.disabled = !output.active;
   renderSummaries();
@@ -2222,6 +2226,11 @@ async function startOutput(): Promise<void> {
     const started = await output.begin(mediaSet(), settings, liveBoardData(scene));
     if (!started) {
       activeSceneId = null;
+      // The presentation window is already on the display.  Nothing can start
+      // in it and Stop Output is hidden while output is inactive, so close it
+      // here rather than stranding a blank window on the wall.
+      await ipc.closePresentation().catch(() => undefined);
+      renderOutput();
       setMessage('No usable media could be started.');
       return;
     }
@@ -2815,20 +2824,27 @@ function wire(): void {
     } else if (event.payload === 'check-updates') void checkForUpdate(true);
   });
   window.addEventListener('keydown', (event) => {
+    const target = event.target as HTMLElement | null;
     if (
       event.repeat ||
       event.metaKey ||
       event.ctrlKey ||
       event.altKey ||
-      (event.target as HTMLElement | null)?.matches('input, textarea, select')
+      target?.matches('input, textarea, select')
     )
       return;
+    // A modal dialog owns the keyboard while it is up.  Escape there means
+    // "close this dialog", never "stop the output behind it".
+    if (document.querySelector('dialog[open]')) return;
     if (!output.active) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       if (output.cueActive) cancelActiveCue();
       else stopOutput();
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === ' ') {
+      // Space activates whatever control has focus.  Taking it globally would
+      // make every focused button skip media instead of doing its own job.
+      if (event.key === ' ' && target?.closest('button, summary, a[href], [role="button"]')) return;
       event.preventDefault();
       if (event.key === 'ArrowLeft') output.previous();
       else output.next();
