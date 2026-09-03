@@ -1,0 +1,10 @@
+# Check out every text file with LF on all platforms. Git on Windows defaults
+# to core.autocrlf=true, which rewrites the working tree to CRLF; Prettier is
+# configured with the default endOfLine: "lf", so without this the Windows CI
+# job fails `npm run fmt:check` on every file in the repo.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.ico binary
+*.icns binary
