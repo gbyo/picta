@@ -9,6 +9,8 @@ export const EVENT_SHOW = 'picta://present-show';
 export const EVENT_CLEAR = 'picta://present-clear';
 export const EVENT_RESULT = 'picta://present-result';
 export const EVENT_READY = 'picta://present-ready';
+/** Correlated readiness handshake for one presentation start attempt. */
+export const EVENT_READY_REQUEST = 'picta://present-ready-request';
 export const EVENT_KEY = 'picta://present-key';
 export const EVENT_MENU = 'picta://menu';
 export const EVENT_TAKEOVER = 'picta://present-takeover';
@@ -37,14 +39,42 @@ export interface ShowResult {
   ok: boolean;
 }
 
+export interface ClearMessage {
+  /** Identifies the output run whose renderer state is being cleared. */
+  sessionToken?: number;
+}
+
 export type PlaybackEvent =
-  | { token: number; event: 'ready' | 'started' | 'ended' | 'failed'; ok: boolean; zoneId?: string }
-  | { token: number; event: 'cancelled'; ok: true; zoneId?: string };
+  | {
+      token: number;
+      event: 'ready' | 'started' | 'ended' | 'failed';
+      ok: boolean;
+      zoneId?: string;
+      /** Identifies the output run, preventing late events from an old run. */
+      sessionToken?: number;
+    }
+  | {
+      token: number;
+      event: 'cancelled';
+      ok: true;
+      zoneId?: string;
+      sessionToken?: number;
+    };
 
 export interface ResultMessage {
   token: number;
   ok: boolean;
   zoneId?: string;
+  /** Identifies the output run, preventing late events from an old run. */
+  sessionToken?: number;
+}
+
+export interface ReadyRequest {
+  token: number;
+}
+
+export interface ReadyMessage {
+  token: number;
 }
 
 export interface KeyMessage {
@@ -95,6 +125,8 @@ export interface TakeoverRequest {
 
 export interface BackgroundMediaMessage {
   token: number;
+  /** Identifies the output run, preventing late events from an old run. */
+  sessionToken?: number;
   zoneId?: string;
   src: string;
   type?: 'image' | 'video';
@@ -107,9 +139,16 @@ export interface BackgroundMediaMessage {
 export interface CueMessage {
   cue: Cue;
   token?: number;
+  /** Identifies the output run for cue playback events. */
+  sessionToken?: number;
   src?: string;
   /** Optional asset-protocol source for player photos. */
   photoSrc?: string;
+}
+
+export interface CueEndMessage {
+  /** Identifies the output run whose cue is being dismissed. */
+  sessionToken?: number;
 }
 
 export interface ThemeMessage {

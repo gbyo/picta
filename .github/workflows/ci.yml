@@ -6,6 +6,10 @@ on:
   pull_request:
 
 jobs:
+  # The Linux job remains the required full validation, including the native
+  # Rust checks that need WebKitGTK. The smaller platform matrix catches
+  # frontend and packaging-facing differences without tripling clippy/build
+  # time on every pull request.
   check:
     runs-on: ubuntu-latest
     steps:
@@ -39,3 +43,33 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  platform-smoke:
+    name: Platform smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Frontend formatting, typecheck, and tests
+        run: npm run verify
+      - name: Frontend production build
+        run: npm run build
+      - name: Rust formatting and unit tests
+        shell: bash
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+          cargo test --manifest-path src-tauri/Cargo.toml

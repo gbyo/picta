@@ -20,6 +20,7 @@ import {
   EVENT_LAYOUT_EDIT_UPDATE,
   EVENT_PLAYBACK,
   EVENT_READY,
+  EVENT_READY_REQUEST,
   EVENT_RESULT,
   EVENT_SHOW,
   EVENT_THEME,
@@ -27,10 +28,13 @@ import {
   EVENT_TAKEOVER_END,
   type BackgroundMediaMessage,
   type BoardMessage,
+  type ClearMessage,
+  type CueEndMessage,
   type CueMessage,
   type LayoutMessage,
   type LayoutEditPreviewMessage,
   type PlaybackEvent,
+  type ReadyRequest,
   type ShowRequest,
   type ThemeMessage,
   type TakeoverRequest,
@@ -56,6 +60,7 @@ const layoutRoot = document.getElementById('layout-root') as HTMLDivElement;
 const fullCue = document.getElementById('full-cue') as HTMLDivElement;
 const editPreview = document.getElementById('edit-preview') as HTMLDivElement;
 let zones = new Map<string, ZoneRenderer>();
+let latestSessionToken = 0;
 let latestToken = 0;
 let retiredTimer: number | null = null;
 
@@ -240,20 +245,40 @@ function stopVideo(renderer: ZoneRenderer): void {
   renderer.videoToken = null;
 }
 
-function sendResult(token: number, ok: boolean, zoneId?: string): void {
-  void emit(EVENT_RESULT, { token, ok, ...(zoneId ? { zoneId } : {}) });
+function sendResult(token: number, ok: boolean, zoneId?: string, sessionToken?: number): void {
+  void emit(EVENT_RESULT, {
+    token,
+    ok,
+    ...(zoneId ? { zoneId } : {}),
+    ...(sessionToken === undefined ? {} : { sessionToken }),
+  });
 }
 
 function sendPlayback(event: PlaybackEvent): void {
   void emit(EVENT_PLAYBACK, event);
 }
 
+function acceptRequest(request: BackgroundMediaMessage): boolean {
+  const sessionToken = request.sessionToken ?? 0;
+  if (
+    sessionToken < latestSessionToken ||
+    (sessionToken === latestSessionToken && request.token < latestToken)
+  )
+    return false;
+  latestSessionToken = sessionToken;
+  latestToken = request.token;
+  return true;
+}
+
+function requestIsCurrent(request: BackgroundMediaMessage): boolean {
+  return (request.sessionToken ?? 0) === latestSessionToken && request.token === latestToken;
+}
+
 async function showImage(request: BackgroundMediaMessage): Promise<void> {
   const renderer = rendererForZone(request.zoneId);
   if (!renderer) return;
+  if (!acceptRequest(request)) return;
   stopVideo(renderer);
-  if (request.token < latestToken) return;
-  latestToken = request.token;
   const target = other(renderer.visible);
   const image = renderer.images[target];
   const previous = renderer.images[renderer.visible];
@@ -264,16 +289,17 @@ async function showImage(request: BackgroundMediaMessage): Promise<void> {
     await image.decode();
   } catch {
     retireImage(image);
-    sendResult(request.token, false, request.zoneId);
+    sendResult(request.token, false, request.zoneId, request.sessionToken);
     sendPlayback({
       token: request.token,
       event: 'failed',
       ok: false,
       ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+      ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
     });
     return;
   }
-  if (request.token < latestToken) {
+  if (!requestIsCurrent(request)) {
     retireImage(image);
     return;
   }
@@ -290,19 +316,24 @@ async function showImage(request: BackgroundMediaMessage): Promise<void> {
     retiredTimer = null;
     if (renderer.visible !== retired) retireImage(renderer.images[retired]);
   }, duration + 60);
-  sendResult(request.token, true, request.zoneId);
+  sendResult(request.token, true, request.zoneId, request.sessionToken);
   sendPlayback({
     token: request.token,
     event: 'ready',
     ok: true,
     ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+    ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
   });
 }
 
-function showVideo(request: BackgroundMediaMessage, fullTarget: HTMLElement | null = null): void {
+function showVideo(
+  request: BackgroundMediaMessage,
+  fullTarget: HTMLElement | null = null,
+  trackBackgroundToken = true,
+): void {
   const renderer = fullTarget ? null : rendererForZone(request.zoneId);
   const host = fullTarget ?? renderer?.root;
-  if (!host) return;
+  if (!host || (trackBackgroundToken && !acceptRequest(request))) return;
   if (renderer) {
     stopVideo(renderer);
     for (const image of Object.values(renderer.images)) retireImage(image);
@@ -327,12 +358,13 @@ function showVideo(request: BackgroundMediaMessage, fullTarget: HTMLElement | nu
     finished = true;
     if (readyTimer !== null) window.clearTimeout(readyTimer);
     readyTimer = null;
-    sendResult(request.token, false, request.zoneId);
+    sendResult(request.token, false, request.zoneId, request.sessionToken);
     sendPlayback({
       token: request.token,
       event: 'failed',
       ok: false,
       ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+      ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
     });
     video.pause();
     video.removeAttribute('src');
@@ -347,24 +379,27 @@ function showVideo(request: BackgroundMediaMessage, fullTarget: HTMLElement | nu
       if (finished) return;
       if (readyTimer !== null) window.clearTimeout(readyTimer);
       readyTimer = null;
-      video.classList.add('visible');
-      sendResult(request.token, true, request.zoneId);
-      sendPlayback({
-        token: request.token,
-        event: 'ready',
-        ok: true,
-        ...(request.zoneId ? { zoneId: request.zoneId } : {}),
-      });
       void video
         .play()
-        .then(() =>
+        .then(() => {
+          if (finished) return;
+          video.classList.add('visible');
+          sendResult(request.token, true, request.zoneId, request.sessionToken);
+          sendPlayback({
+            token: request.token,
+            event: 'ready',
+            ok: true,
+            ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+            ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
+          });
           sendPlayback({
             token: request.token,
             event: 'started',
             ok: true,
             ...(request.zoneId ? { zoneId: request.zoneId } : {}),
-          }),
-        )
+            ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
+          });
+        })
         .catch(fail);
     },
     { once: true },
@@ -379,6 +414,7 @@ function showVideo(request: BackgroundMediaMessage, fullTarget: HTMLElement | nu
       event: 'ended',
       ok: true,
       ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+      ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
     });
   });
   video.addEventListener('error', fail, { once: true });
@@ -499,6 +535,12 @@ function applyCardMode(card: HTMLElement, host: HTMLElement): void {
 }
 
 function renderCue(message: CueMessage): void {
+  const sessionToken = message.sessionToken ?? 0;
+  if (sessionToken < latestSessionToken) return;
+  if (sessionToken > latestSessionToken) {
+    latestSessionToken = sessionToken;
+    latestToken = 0;
+  }
   const cue = message.cue;
   if (cue.target === 'full-board') {
     for (const renderer of zones.values()) stopVideo(renderer);
@@ -552,6 +594,7 @@ function renderCue(message: CueMessage): void {
       showVideo(
         {
           token: message.token ?? latestToken + 1,
+          ...(message.sessionToken === undefined ? {} : { sessionToken: message.sessionToken }),
           src: message.src,
           type: 'video',
           sizing: 'fit',
@@ -560,22 +603,29 @@ function renderCue(message: CueMessage): void {
           muted: false,
         },
         fullCue,
+        false,
       );
     } else {
-      showVideo({
-        token: message.token ?? latestToken + 1,
-        src: message.src,
-        type: 'video',
-        sizing: 'fit',
-        transition: 'none',
-        fadeMs: 0,
-        muted: false,
-      });
+      showVideo(
+        {
+          token: message.token ?? latestToken + 1,
+          ...(message.sessionToken === undefined ? {} : { sessionToken: message.sessionToken }),
+          src: message.src,
+          type: 'video',
+          sizing: 'fit',
+          transition: 'none',
+          fadeMs: 0,
+          muted: false,
+        },
+        undefined,
+        false,
+      );
     }
   }
 }
 
-function endCue(): void {
+function endCue(message?: CueEndMessage): void {
+  if ((message?.sessionToken ?? 0) !== latestSessionToken) return;
   fullCue.hidden = true;
   clearElementMedia(fullCue);
   fullCue.replaceChildren();
@@ -585,7 +635,10 @@ function endCue(): void {
   }
 }
 
-function clear(): void {
+function clear(message?: ClearMessage): void {
+  const sessionToken = message?.sessionToken ?? 0;
+  if (sessionToken < latestSessionToken) return;
+  latestSessionToken = sessionToken;
   latestToken += 1;
   if (retiredTimer !== null) window.clearTimeout(retiredTimer);
   retiredTimer = null;
@@ -596,7 +649,7 @@ function clear(): void {
     renderer.cueCard = null;
     renderer.board?.replaceChildren();
   }
-  endCue();
+  endCue({ sessionToken });
   endEditPreview();
 }
 
@@ -622,7 +675,7 @@ window.addEventListener('contextmenu', (event) => event.preventDefault());
 async function main(): Promise<void> {
   await listen<ShowRequest>(EVENT_SHOW, (event) => queueMedia({ ...event.payload, type: 'image' }));
   await listen<BackgroundMediaMessage>(EVENT_BACKGROUND, (event) => queueMedia(event.payload));
-  await listen(EVENT_CLEAR, () => clear());
+  await listen<ClearMessage>(EVENT_CLEAR, (event) => clear(event.payload));
   await listen<LayoutMessage>(EVENT_LAYOUT, (event) => setLayout(event.payload));
   await listen<LayoutEditPreviewMessage>(EVENT_LAYOUT_EDIT_BEGIN, (event) =>
     renderEditPreview(event.payload),
@@ -638,7 +691,7 @@ async function main(): Promise<void> {
     if (board) renderBoard(board, data);
   });
   await listen<CueMessage>(EVENT_CUE, (event) => renderCue(event.payload));
-  await listen(EVENT_CUE_END, () => endCue());
+  await listen<CueEndMessage>(EVENT_CUE_END, (event) => endCue(event.payload));
   // Compatibility with the v1 controller while the app migrates old shows.
   await listen<TakeoverRequest>(EVENT_TAKEOVER, (event) => {
     const request = event.payload;
@@ -655,8 +708,15 @@ async function main(): Promise<void> {
       },
     });
   });
-  await listen(EVENT_TAKEOVER_END, () => endCue());
-  await emit(EVENT_READY, {});
+  await listen(EVENT_TAKEOVER_END, () => endCue({ sessionToken: latestSessionToken }));
+  await listen<ReadyRequest>(EVENT_READY_REQUEST, (event) => {
+    if (typeof event.payload?.token !== 'number') return;
+    void emit(EVENT_READY, { token: event.payload.token });
+  });
+  // Kept for the older Playback adapter. OutputController uses the correlated
+  // request/response handshake above, so this uncorrelated startup notice can
+  // never satisfy a later start by accident.
+  await emit(EVENT_READY, { token: 0 });
 }
 
 void main();

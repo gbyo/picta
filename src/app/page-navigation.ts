@@ -48,7 +48,14 @@ export function isPageName(value: string): value is PageName {
 }
 
 export function pageFromHash(hash: string): PageName {
-  const value = decodeURIComponent(hash.replace(/^#\/?/, '')).toLowerCase();
+  let value: string;
+  try {
+    value = decodeURIComponent(hash.replace(/^#\/?/, '')).toLowerCase();
+  } catch {
+    // The hash is navigation input, not trusted application state.  Malformed
+    // percent escapes must fall through to the normal Home validation path.
+    value = '';
+  }
   return isPageName(value) ? value : 'home';
 }
 

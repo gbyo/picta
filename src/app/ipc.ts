@@ -67,6 +67,18 @@ export function savePrefs(value: unknown): Promise<void> {
   return invoke<void>('save_prefs', { value });
 }
 
+export function loadRecovery(): Promise<unknown> {
+  return invoke<unknown>('load_recovery');
+}
+
+export function saveRecovery(value: unknown): Promise<void> {
+  return invoke<void>('save_recovery', { value });
+}
+
+export function clearRecovery(): Promise<void> {
+  return invoke<void>('clear_recovery');
+}
+
 export function startupFile(): Promise<string | null> {
   return invoke<string | null>('startup_file');
 }

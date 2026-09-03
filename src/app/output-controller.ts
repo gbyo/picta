@@ -17,13 +17,16 @@ import {
   EVENT_LAYOUT_EDIT_UPDATE,
   EVENT_PLAYBACK,
   EVENT_READY,
+  EVENT_READY_REQUEST,
   EVENT_RESULT,
   EVENT_THEME,
   type BackgroundMediaMessage,
   type BoardMessage,
   type CueMessage,
+  type ClearMessage,
   type LayoutEditPreviewMessage,
   type PlaybackEvent,
+  type ReadyMessage,
   type ResultMessage,
   type ThemeMessage,
 } from './events.js';
@@ -34,7 +37,8 @@ import { MediaPlaybackMachine, type MediaPlaybackEvent } from '../core/media-pla
 import { CROSSFADE_MS } from '../core/types.js';
 
 const PRESENTATION = 'presentation';
-const READY_TIMEOUT_MS = 5000;
+export const READY_TIMEOUT_MS = 5000;
+const READY_RETRY_MS = 100;
 
 export interface OutputSettings {
   intervalSeconds: number;
@@ -67,9 +71,17 @@ export interface OutputHandlers {
 export class OutputController {
   #handlers: OutputHandlers;
   #unlisten: UnlistenFn[] = [];
-  #ready = false;
-  #readyWaiters: (() => void)[] = [];
+  #readyAttempt = 0;
+  #readyWaiter: {
+    token: number;
+    resolve: (ready: boolean) => void;
+    timeout: number;
+    retry: number;
+  } | null = null;
   #active = false;
+  #sessionToken = 0;
+  #lastBeginFailure:
+    'presentation-not-ready' | 'presentation-unavailable' | 'no-usable-media' | null = null;
   #set: MediaSet = {
     version: 1,
     name: 'Inline Media',
@@ -120,6 +132,11 @@ export class OutputController {
     return this.#active;
   }
 
+  get lastBeginFailure():
+    'presentation-not-ready' | 'presentation-unavailable' | 'no-usable-media' | null {
+    return this.#lastBeginFailure;
+  }
+
   get cueActive(): boolean {
     return this.#cueQueue.active;
   }
@@ -131,28 +148,29 @@ export class OutputController {
   async init(): Promise<void> {
     this.#unlisten.push(
       await listen<ResultMessage>(EVENT_RESULT, (event) =>
-        this.#onReady(event.payload.token, event.payload.ok, event.payload.zoneId),
+        this.#onReady(
+          event.payload.token,
+          event.payload.ok,
+          event.payload.zoneId,
+          event.payload.sessionToken,
+        ),
       ),
     );
     this.#unlisten.push(
       await listen<PlaybackEvent>(EVENT_PLAYBACK, (event) => this.#onPlayback(event.payload)),
     );
     this.#unlisten.push(
-      await listen(EVENT_READY, () => {
-        this.#ready = true;
-        const waiters = this.#readyWaiters;
-        this.#readyWaiters = [];
-        for (const resolve of waiters) resolve();
-      }),
+      await listen<ReadyMessage>(EVENT_READY, (event) => this.#onPresentationReady(event.payload)),
     );
   }
 
   resetReady(): void {
-    this.#ready = false;
-    this.#readyWaiters = [];
+    this.#readyAttempt += 1;
+    this.#finishReadyWait(false);
   }
 
   async dispose(): Promise<void> {
+    this.resetReady();
     this.stop('user');
     for (const off of this.#unlisten) off();
     this.#unlisten = [];
@@ -160,6 +178,8 @@ export class OutputController {
 
   async begin(set: MediaSet, settings: OutputSettings, board?: BoardData): Promise<boolean> {
     this.stop('user', false);
+    this.#lastBeginFailure = null;
+    const sessionToken = ++this.#sessionToken;
     this.#editing = false;
     this.#set = {
       ...set,
@@ -168,10 +188,26 @@ export class OutputController {
     };
     this.#settings = settings;
     this.#machine = new MediaPlaybackMachine(this.#set);
+    const ready = await this.#waitForPresentation();
+    if (sessionToken !== this.#sessionToken) return false;
+    if (!ready) {
+      this.#cleanupFailedStart();
+      this.#lastBeginFailure = 'presentation-not-ready';
+      this.#handlers.onWarning('The output window did not finish starting.');
+      return false;
+    }
     this.#active = true;
-    await this.#waitForPresentation();
-    await emitTo(PRESENTATION, EVENT_LAYOUT, { layout: settings.layout }).catch(() => undefined);
-    void emitTo(PRESENTATION, EVENT_THEME, this.#theme).catch(() => undefined);
+    try {
+      await emitTo(PRESENTATION, EVENT_LAYOUT, { layout: settings.layout });
+      await emitTo(PRESENTATION, EVENT_THEME, this.#theme);
+    } catch {
+      if (sessionToken !== this.#sessionToken) return false;
+      this.#cleanupFailedStart();
+      this.#lastBeginFailure = 'presentation-unavailable';
+      this.#handlers.onWarning('The output window did not finish starting.');
+      return false;
+    }
+    if (sessionToken !== this.#sessionToken) return false;
     if (board) this.setBoard(board);
     if (this.#set.items.length === 0) {
       this.#handlers.onPosition(0, 0);
@@ -179,6 +215,7 @@ export class OutputController {
     }
     const request = this.#machine.start();
     if (!request || request.type === 'stopped') {
+      this.#lastBeginFailure = 'no-usable-media';
       this.stop('exhausted');
       return false;
     }
@@ -187,7 +224,9 @@ export class OutputController {
   }
 
   stop(reason: OutputStopReason = 'user', notify = true): void {
-    if (!this.#active && !this.#cueQueue.active) return;
+    if (!this.#active && !this.#cueQueue.active && !this.#readyWaiter && !this.#machine) return;
+    this.#sessionToken += 1;
+    this.resetReady();
     this.#cueQueue.cancel(false);
     this.#editing = false;
     this.#cancelEditFrame();
@@ -195,12 +234,17 @@ export class OutputController {
     this.#clearTimer();
     this.#machine?.stop();
     this.#machine = null;
+    this.#settings = null;
     this.#active = false;
-    void emitTo(PRESENTATION, EVENT_CLEAR, {}).catch(() => undefined);
+    const clear: ClearMessage = { sessionToken: this.#sessionToken };
+    void emitTo(PRESENTATION, EVENT_CLEAR, clear).catch(() => undefined);
     if (notify) this.#handlers.onStopped(reason);
   }
 
   abandon(): void {
+    this.#sessionToken += 1;
+    this.#readyAttempt += 1;
+    this.#finishReadyWait(false);
     this.#cueQueue.cancel(false);
     this.#editing = false;
     this.#cancelEditFrame();
@@ -208,6 +252,7 @@ export class OutputController {
     this.#clearTimer();
     this.#machine?.stop();
     this.#machine = null;
+    this.#settings = null;
     this.#active = false;
   }
 
@@ -234,7 +279,9 @@ export class OutputController {
     this.#clearTimer();
     this.#machine?.pause();
     this.#editing = true;
-    void emitTo(PRESENTATION, EVENT_CLEAR, {}).catch(() => undefined);
+    void emitTo(PRESENTATION, EVENT_CLEAR, { sessionToken: this.#sessionToken }).catch(
+      () => undefined,
+    );
     void emitTo(PRESENTATION, EVENT_LAYOUT_EDIT_BEGIN, message).catch(() => undefined);
   }
 
@@ -343,6 +390,7 @@ export class OutputController {
     this.#mediaToken = event.token;
     const request: BackgroundMediaMessage = {
       token: event.token,
+      sessionToken: this.#sessionToken,
       zoneId: programZoneId,
       src: convertFileSrc(event.item.path),
       type: event.item.type,
@@ -351,7 +399,11 @@ export class OutputController {
       fadeMs: CROSSFADE_MS,
       muted: false,
     };
-    void emitTo(PRESENTATION, EVENT_BACKGROUND, request).catch(() => this.stop('display-lost'));
+    const sessionToken = this.#sessionToken;
+    void emitTo(PRESENTATION, EVENT_BACKGROUND, request).catch(() => {
+      if (this.#active && this.#sessionToken === sessionToken && this.#mediaToken === event.token)
+        this.stop('display-lost');
+    });
     for (const zone of layoutZones(this.#settings.layout).filter((item) => item.role === 'media')) {
       void emitTo(PRESENTATION, EVENT_BACKGROUND, {
         ...request,
@@ -361,8 +413,9 @@ export class OutputController {
     }
   }
 
-  #onReady(token: number, ok: boolean, zoneId?: string): void {
-    if (!this.#active || this.#editing || !this.#settings) return;
+  #onReady(token: number, ok: boolean, zoneId?: string, sessionToken?: number): void {
+    if (!this.#active || this.#editing || !this.#settings || sessionToken !== this.#sessionToken)
+      return;
     const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
     if (zoneId && zoneId !== programZoneId) return;
     const machine = this.#machine;
@@ -390,7 +443,14 @@ export class OutputController {
   }
 
   #onPlayback(event: PlaybackEvent): void {
-    if (!this.#active || !this.#machine || this.#editing || !this.#settings) return;
+    if (
+      !this.#active ||
+      !this.#machine ||
+      this.#editing ||
+      !this.#settings ||
+      event.sessionToken !== this.#sessionToken
+    )
+      return;
     const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
     if (event.zoneId && event.zoneId !== programZoneId) return;
     if (
@@ -430,6 +490,7 @@ export class OutputController {
     const message: CueMessage = {
       cue,
       token,
+      sessionToken: this.#sessionToken,
       ...(cue.type === 'video'
         ? { src: this.#cueSources.get(cue.path) ?? convertFileSrc(cue.path) }
         : {}),
@@ -440,7 +501,17 @@ export class OutputController {
         ? { photoSrc: this.#cuePhotos.get(cue.photo.path) ?? convertFileSrc(cue.photo.path) }
         : {}),
     };
-    await emitTo(PRESENTATION, EVENT_CUE, message).catch(() => undefined);
+    const emitted = await emitTo(PRESENTATION, EVENT_CUE, message)
+      .then(() => true)
+      .catch(() => false);
+    if (this.#cueToken !== token || !this.#cueQueue.active || !this.#active) return false;
+    if (!emitted) {
+      void emitTo(PRESENTATION, EVENT_CUE_END, { sessionToken: this.#sessionToken }).catch(
+        () => undefined,
+      );
+      this.#resumeBackground(wasCurrent);
+      return false;
+    }
     if (this.#cueToken !== token || !this.#cueQueue.active) return false;
     const holdMs =
       cue.type === 'video'
@@ -464,7 +535,9 @@ export class OutputController {
     }).finally(() => {
       if (this.#cueToken !== token) return;
       this.#pendingCueResolve = null;
-      void emitTo(PRESENTATION, EVENT_CUE_END, {}).catch(() => undefined);
+      void emitTo(PRESENTATION, EVENT_CUE_END, { sessionToken: this.#sessionToken }).catch(
+        () => undefined,
+      );
       this.#resumeBackground(wasCurrent);
     });
   }
@@ -481,7 +554,9 @@ export class OutputController {
     const resolve = this.#pendingCueResolve;
     this.#pendingCueResolve = null;
     if (resolve) resolve(false);
-    void emitTo(PRESENTATION, EVENT_CUE_END, {}).catch(() => undefined);
+    void emitTo(PRESENTATION, EVENT_CUE_END, { sessionToken: this.#sessionToken }).catch(
+      () => undefined,
+    );
   }
 
   #clearTimer(): void {
@@ -514,21 +589,48 @@ export class OutputController {
     this.#pendingEditMessage = null;
   }
 
-  #waitForPresentation(): Promise<void> {
-    if (this.#ready) return Promise.resolve();
+  #cleanupFailedStart(): void {
+    this.#cueQueue.cancel(false);
+    this.#editing = false;
+    this.#cancelEditFrame();
+    this.#cancelCuePresentation();
+    this.#clearTimer();
+    this.#machine?.stop();
+    this.#machine = null;
+    this.#settings = null;
+    this.#active = false;
+    void emitTo(PRESENTATION, EVENT_CLEAR, { sessionToken: this.#sessionToken }).catch(
+      () => undefined,
+    );
+  }
+
+  #onPresentationReady(message: ReadyMessage): void {
+    if (!message || typeof message.token !== 'number') return;
+    if (message.token !== this.#readyWaiter?.token) return;
+    this.#finishReadyWait(true);
+  }
+
+  #finishReadyWait(ready: boolean): void {
+    const waiter = this.#readyWaiter;
+    if (!waiter) return;
+    this.#readyWaiter = null;
+    window.clearTimeout(waiter.timeout);
+    window.clearInterval(waiter.retry);
+    waiter.resolve(ready);
+  }
+
+  #waitForPresentation(): Promise<boolean> {
+    const token = ++this.#readyAttempt;
     return new Promise((resolve) => {
-      let settled = false;
       const timeout = window.setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        resolve();
+        if (this.#readyWaiter?.token === token) this.#finishReadyWait(false);
       }, READY_TIMEOUT_MS);
-      this.#readyWaiters.push(() => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timeout);
-        resolve();
-      });
+      const retry = window.setInterval(() => {
+        if (this.#readyWaiter?.token !== token) return;
+        void emitTo(PRESENTATION, EVENT_READY_REQUEST, { token }).catch(() => undefined);
+      }, READY_RETRY_MS);
+      this.#readyWaiter = { token, resolve, timeout, retry };
+      void emitTo(PRESENTATION, EVENT_READY_REQUEST, { token }).catch(() => undefined);
     });
   }
 }

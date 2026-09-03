@@ -163,7 +163,9 @@
               <button type="button" class="text-button" data-go-page="roster">Manage roster</button>
               <div class="key-reference">
                 <p class="section-kicker">Live keys</p>
-                <p><kbd>Space</kbd> Next <kbd>←</kbd> Previous <kbd>Esc</kbd> Stop</p>
+                <p>
+                  <kbd>Space</kbd> Next <kbd>←</kbd> Previous <kbd>Esc</kbd> End cue / Stop output
+                </p>
               </div>
             </aside>
           </div>
@@ -576,6 +578,32 @@
           ><button type="submit" value="discard" class="button secondary-button">Don’t save</button
           ><button type="submit" value="save" class="button primary-button" autofocus>
             Save all
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="recovery-dialog" class="confirm">
+      <form method="dialog">
+        <p class="section-kicker">Recovery</p>
+        <h2>Picta found unsaved changes from your last session.</h2>
+        <p>Recover the unsaved show, team, and media work?</p>
+        <div class="confirm-actions">
+          <button
+            type="submit"
+            value="discard"
+            id="recovery-discard"
+            class="button secondary-button"
+          >
+            Discard
+          </button>
+          <button
+            type="submit"
+            value="recover"
+            id="recovery-recover"
+            class="button primary-button"
+            autofocus
+          >
+            Recover
           </button>
         </div>
       </form>

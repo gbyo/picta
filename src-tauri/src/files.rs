@@ -11,13 +11,17 @@
 //! widening Picta's own read scope to arbitrary files on the machine. A
 //! document is data, never configuration for what Picta is allowed to touch.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
+
+use tempfile::NamedTempFile;
 
 use tauri::{Manager, Runtime};
 
 /// Generous for a document that stores only paths, small enough that a
 /// mistaken pick of a huge file cannot stall the app.
 const MAX_PICTA_BYTES: u64 = 8 * 1024 * 1024;
+const RECOVERY_FILE_NAME: &str = "recovery.json";
 
 const IMAGE_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 const VIDEO_EXTENSIONS: [&str; 2] = ["mp4", "webm"];
@@ -52,6 +56,102 @@ fn is_document_path(path: &Path) -> bool {
 
 fn is_allowed_path(path: &Path) -> bool {
     is_document_path(path) || is_media_path(path)
+}
+
+/// Replace a file without ever truncating the previous contents first.
+///
+/// The temporary file is created beside the destination, written completely,
+/// flushed to disk, and then persisted with tempfile's platform-aware atomic
+/// replacement. A failed write or replacement drops the temporary file while
+/// leaving the destination untouched.
+fn replace_temporary(temporary: NamedTempFile, path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+        };
+
+        let (file, temporary_path) = temporary.keep().map_err(|error| error.error)?;
+        drop(file);
+        let from: Vec<u16> = temporary_path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let to: Vec<u16> = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let moved = unsafe {
+            MoveFileExW(
+                from.as_ptr(),
+                to.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if moved == 0 {
+            let error = std::io::Error::last_os_error();
+            let _ = std::fs::remove_file(temporary_path);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        temporary
+            .persist(path)
+            .map(|_| ())
+            .map_err(|error| error.error)
+    }
+}
+
+fn atomic_write(path: &Path, contents: &str) -> Result<(), String> {
+    atomic_write_with(path, contents, replace_temporary)
+}
+
+fn atomic_write_with(
+    path: &Path,
+    contents: &str,
+    replace: impl FnOnce(NamedTempFile, &Path) -> std::io::Result<()>,
+) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temporary = tempfile::Builder::new()
+        .prefix(".picta-write-")
+        .tempfile_in(parent)
+        .map_err(|error| {
+            format!(
+                "Could not create a temporary file for {}: {error}",
+                path.display()
+            )
+        })?;
+
+    temporary
+        .write_all(contents.as_bytes())
+        .map_err(|error| format!("Could not write the new contents: {error}"))?;
+    temporary
+        .flush()
+        .map_err(|error| format!("Could not flush the new contents: {error}"))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|error| format!("Could not flush the new contents to disk: {error}"))?;
+    replace(temporary, path)
+        .map_err(|error| format!("Could not replace {}: {error}", path.display()))?;
+
+    // Directory metadata is what makes the rename durable after a power loss
+    // on Unix. It is not available uniformly on Windows, so this is best effort.
+    #[cfg(unix)]
+    if let Ok(directory) = std::fs::File::open(parent) {
+        let _ = directory.sync_all();
+    }
+
+    Ok(())
 }
 
 pub fn read_picta(path: &str) -> Result<String, String> {
@@ -99,7 +199,7 @@ pub fn write_picta(path: &str, contents: &str) -> Result<(), String> {
     if contents.len() as u64 > MAX_PICTA_BYTES {
         return Err("That Picta file is too large.".to_string());
     }
-    std::fs::write(&path, contents).map_err(|e| format!("Could not save this file: {e}"))
+    atomic_write(&path, contents)
 }
 
 pub fn write_document(path: &str, contents: &str) -> Result<(), String> {
@@ -115,7 +215,7 @@ pub fn write_document(path: &str, contents: &str) -> Result<(), String> {
     if contents.len() as u64 > MAX_PICTA_BYTES {
         return Err("That Picta data file is too large.".to_string());
     }
-    std::fs::write(&path, contents).map_err(|e| format!("Could not save this file: {e}"))
+    atomic_write(&path, contents)
 }
 
 /// Reveal one of Picta's own document files in the platform file manager.
@@ -223,7 +323,64 @@ pub fn save_prefs<R: Runtime>(
             .map_err(|e| format!("Could not create the settings folder: {e}"))?;
     }
     let text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    std::fs::write(path, text).map_err(|e| format!("Could not save settings: {e}"))
+    atomic_write(&path, &text).map_err(|e| format!("Could not save settings: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Machine-local crash recovery
+// ---------------------------------------------------------------------------
+
+fn recovery_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not locate the recovery folder: {e}"))?;
+    Ok(dir.join(RECOVERY_FILE_NAME))
+}
+
+/// Recovery is deliberately a JSON value behind a separate native command. It
+/// is never part of a public `.picta`, `.pictateam`, or `.pictaset` file.
+pub fn load_recovery<R: Runtime>(app: &tauri::AppHandle<R>) -> serde_json::Value {
+    let Ok(path) = recovery_path(app) else {
+        return serde_json::Value::Null;
+    };
+    let Ok(metadata) = std::fs::metadata(&path) else {
+        return serde_json::Value::Null;
+    };
+    if !metadata.is_file() || metadata.len() > MAX_PICTA_BYTES {
+        return serde_json::Value::Null;
+    }
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return serde_json::Value::Null;
+    };
+    // Corrupt recovery is disposable data, never a startup blocker.
+    serde_json::from_str(&text).unwrap_or(serde_json::Value::Null)
+}
+
+pub fn save_recovery<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    value: &serde_json::Value,
+) -> Result<(), String> {
+    let path = recovery_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create the recovery folder: {e}"))?;
+    }
+    let text = serde_json::to_string_pretty(value)
+        .map_err(|e| format!("Could not encode recovery data: {e}"))?;
+    if text.len() as u64 > MAX_PICTA_BYTES {
+        return Err("Recovery data is too large.".to_string());
+    }
+    atomic_write(&path, &text).map_err(|e| format!("Could not save recovery data: {e}"))
+}
+
+pub fn clear_recovery<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let path = recovery_path(app)?;
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("Could not discard recovery data: {error}")),
+    }
 }
 
 /// A `.picta` path passed on the command line, if any.
@@ -250,6 +407,8 @@ pub fn startup_file() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn recognises_picta_files_case_insensitively() {
@@ -308,5 +467,75 @@ mod tests {
     fn missing_paths_report_as_missing() {
         let results = paths_exist(&["/definitely/not/here.png".to_string()]);
         assert_eq!(results, vec![false]);
+    }
+
+    #[test]
+    fn writes_new_picta_documents() {
+        let directory = tempdir().expect("temporary test directory");
+        for extension in DOCUMENT_EXTENSIONS {
+            let path = directory.path().join(format!("new.{extension}"));
+            let text = format!("{{\"extension\":\"{extension}\"}}");
+            write_document(path.to_str().expect("UTF-8 test path"), &text).expect("write document");
+            assert_eq!(fs::read_to_string(&path).expect("read document"), text);
+        }
+        let show = directory.path().join("compat.picta");
+        write_picta(show.to_str().expect("UTF-8 test path"), "compat")
+            .expect("write compatibility document");
+        assert_eq!(
+            fs::read_to_string(show).expect("read compatibility document"),
+            "compat"
+        );
+    }
+
+    #[test]
+    fn replaces_an_existing_document_without_partial_contents() {
+        let directory = tempdir().expect("temporary test directory");
+        let path = directory.path().join("replace.pictaset");
+        fs::write(&path, "old contents").expect("seed document");
+
+        write_document(path.to_str().expect("UTF-8 test path"), "new contents")
+            .expect("replace document");
+        assert_eq!(
+            fs::read_to_string(&path).expect("read replacement"),
+            "new contents"
+        );
+    }
+
+    #[test]
+    fn replacement_failure_keeps_the_original_path_intact() {
+        let directory = tempdir().expect("temporary test directory");
+        let destination = directory.path().join("original.picta");
+        fs::write(&destination, "keep me").expect("seed destination");
+
+        let result = atomic_write_with(&destination, "new", |_temporary, _path| {
+            Err(std::io::Error::other("injected replacement failure"))
+        });
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(&destination).expect("read original document"),
+            "keep me"
+        );
+        assert!(fs::read_dir(directory.path())
+            .expect("read temporary directory")
+            .flatten()
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".picta-write-")));
+    }
+
+    #[test]
+    fn successful_save_leaves_no_temporary_files() {
+        let directory = tempdir().expect("temporary test directory");
+        let path = directory.path().join("clean.pictateam");
+        write_document(path.to_str().expect("UTF-8 test path"), "complete")
+            .expect("write document");
+        assert!(fs::read_dir(directory.path())
+            .expect("read temporary directory")
+            .flatten()
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".picta-write-")));
     }
 }
