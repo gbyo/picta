@@ -37,11 +37,19 @@ async fn identify_displays(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_presentation(
+async fn prepare_presentation(
     app: tauri::AppHandle,
     display_id: String,
 ) -> Result<displays::DisplayInfo, String> {
-    presentation::open(app, display_id).await
+    presentation::prepare(app, display_id).await
+}
+
+#[tauri::command]
+async fn show_presentation(
+    app: tauri::AppHandle,
+    display_id: String,
+) -> Result<displays::DisplayInfo, String> {
+    presentation::show(app, display_id).await
 }
 
 #[tauri::command]
@@ -257,7 +265,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_displays,
             identify_displays,
-            open_presentation,
+            prepare_presentation,
+            show_presentation,
             close_presentation,
             allow_images,
             allow_media,

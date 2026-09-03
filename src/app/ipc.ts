@@ -18,8 +18,12 @@ export function identifyDisplays(): Promise<void> {
   return invoke<void>('identify_displays');
 }
 
-export function openPresentation(displayId: string): Promise<DisplayInfo> {
-  return invoke<DisplayInfo>('open_presentation', { displayId });
+export function preparePresentation(displayId: string): Promise<DisplayInfo> {
+  return invoke<DisplayInfo>('prepare_presentation', { displayId });
+}
+
+export function showPresentation(displayId: string): Promise<DisplayInfo> {
+  return invoke<DisplayInfo>('show_presentation', { displayId });
 }
 
 export function closePresentation(): Promise<void> {

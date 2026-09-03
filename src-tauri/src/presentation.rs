@@ -33,8 +33,8 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-/// Create (or reuse) the presentation window on `display_id` and show it.
-pub async fn open<R: Runtime>(
+/// Create (or reuse), place, and load the presentation while keeping it hidden.
+pub async fn prepare<R: Runtime>(
     app: tauri::AppHandle<R>,
     display_id: String,
 ) -> Result<DisplayInfo, String> {
@@ -62,6 +62,29 @@ pub async fn open<R: Runtime>(
         }
     }
 
+    Ok(target)
+}
+
+/// Reveal a prepared presentation only after its Screen and initial content are ready.
+pub async fn show<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    display_id: String,
+) -> Result<DisplayInfo, String> {
+    let displays = displays::enumerate(&app)?;
+    let target = displays::find(&displays, &display_id)
+        .ok_or_else(|| "That display is no longer connected.".to_string())?
+        .clone();
+    let window = app
+        .get_webview_window(PRESENTATION_WINDOW)
+        .ok_or_else(|| "The presentation was not prepared.".to_string())?;
+
+    // Re-assert placement immediately before revealing. Windows can adjust a
+    // hidden WebView after its content has finished loading.
+    if let Err(message) = place(&window, &target) {
+        let _ = window.hide();
+        let _ = window.destroy();
+        return Err(message);
+    }
     window.show().map_err(err)?;
 
     // Confirm once more after showing: a compositor may have relocated the

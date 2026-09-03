@@ -1,17 +1,17 @@
-/** Opening/saving a v2 show while retaining the public v1 reader. */
+/** Opening legacy and v3 shows; all successful saves write v3. */
 
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { allowMedia, pathsExist, readDocument, writeDocument } from './ipc.js';
 import { parsePicta } from '../core/picta-file.js';
 import {
   migratePictaV1,
-  parsePictaV2,
+  parseShow,
   resolveShowPaths,
-  serializePictaV2,
+  serializePictaV3,
   validateShowEventReferences,
 } from '../core/show-file.js';
 import type { MediaResource, ShowDocument } from '../core/domain.js';
-import { validateScenes } from '../core/scenes.js';
+import { validateScreens } from '../core/screens.js';
 import { openMediaSet, openTeam } from './resource-io.js';
 import type { PathStyle } from '../core/paths.js';
 
@@ -168,15 +168,16 @@ export async function openShowDocument(
       data = resolveShowPaths(migratePictaV1(parsed.value), filePath, style);
       migratedFromV1 = true;
     } else {
-      const parsed = parsePictaV2(text);
+      const parsed = parseShow(text);
       if (!parsed.ok) return { ok: false, message: parsed.message };
       data = resolveShowPaths(parsed.value, filePath, style);
+      migratedFromV1 = version !== 3;
     }
     data = await hydrateLinkedResources(data, style);
     const eventReferenceError = validateShowEventReferences(data.event, data.team?.data);
     if (eventReferenceError) return { ok: false, message: eventReferenceError };
-    const sceneReferenceCheck = validateScenes(data.scenes, data.defaultSceneId, data.team?.data);
-    if (!sceneReferenceCheck.ok) return { ok: false, message: sceneReferenceCheck.message };
+    const screenReferenceCheck = validateScreens(data.screens, data.defaultScreenId);
+    if (!screenReferenceCheck.ok) return { ok: false, message: screenReferenceCheck.message };
     data = { ...data, media: await refreshMedia(data.media) };
     const missing =
       data.media.kind === 'inline'
@@ -202,7 +203,7 @@ export async function saveShowDocument(
   style: PathStyle,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    await writeDocument(filePath, serializePictaV2(data, filePath, style));
+    await writeDocument(filePath, serializePictaV3(data, filePath, style));
     return { ok: true };
   } catch (error) {
     return { ok: false, message: String(error) };

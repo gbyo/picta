@@ -304,13 +304,17 @@ export function resolveParsedPaths(
   return parsed.storedPaths.map((stored) => resolveStoredPath(stored, pictaFilePath, style));
 }
 
-// v2 has its own parser and serializer, but exporting them from this module
+// Modern show formats have their own parser and serializer, but exporting them from this module
 // gives callers one natural place to discover the complete `.picta` API while
 // keeping parsePicta itself permanently v1-compatible.
 export {
   migratePictaV1,
+  parseShow,
   parsePictaV2,
+  parsePictaV3,
   serializePictaV2,
+  serializePictaV3,
   resolveShowPaths,
   PICTA_V2_FORMAT_VERSION,
+  PICTA_V3_FORMAT_VERSION,
 } from './show-file.js';

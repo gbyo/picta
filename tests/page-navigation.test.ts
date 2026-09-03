@@ -51,26 +51,28 @@ describe('controller page navigation', () => {
     );
   });
 
-  it('round-trips page hashes and safely falls back to Home', () => {
+  it('round-trips page hashes and safely falls back to Live', () => {
     for (const page of PAGE_NAMES) expect(pageFromHash(pageHash(page))).toBe(page);
     expect(pageFromHash('#/live')).toBe('live');
-    expect(pageFromHash('#not-a-page')).toBe('home');
-    expect(pageFromHash('')).toBe('home');
+    expect(pageFromHash('#not-a-page')).toBe('live');
+    expect(pageFromHash('')).toBe('live');
+    expect(pageFromHash('#home')).toBe('live');
+    expect(pageFromHash('#output')).toBe('live');
+    expect(pageFromHash('#scenes')).toBe('screens');
   });
 
   it('does not throw for malformed URI escapes in the hash', () => {
     expect(() => pageFromHash('#%')).not.toThrow();
-    expect(pageFromHash('#%')).toBe('home');
-    expect(pageFromHash('#%E0%A4%A')).toBe('home');
+    expect(pageFromHash('#%')).toBe('live');
+    expect(pageFromHash('#%E0%A4%A')).toBe('live');
   });
 
-  it('keeps Home dashboard and Output readiness targets in the rendered document', () => {
+  it('keeps the integrated Live console targets in the rendered document', () => {
     const document = renderedController();
     for (const id of [
-      'home-media-summary',
-      'home-scene-summary',
-      'home-display-summary',
-      'home-live-summary',
+      'score-controls',
+      'score-summary',
+      'screen-panel-content',
       'output-media-readiness',
       'output-team-readiness',
       'output-display-readiness',

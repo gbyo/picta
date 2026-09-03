@@ -1,7 +1,7 @@
 /** Machine-local crash recovery snapshots. Never part of a public document. */
 
 import type { ShowDocument } from '../core/domain.js';
-import { parsePictaV2 } from '../core/show-file.js';
+import { parseShow } from '../core/show-file.js';
 import type { DocumentSession } from './document-lifecycle.js';
 
 export const RECOVERY_FORMAT_VERSION = 1;
@@ -19,14 +19,18 @@ export interface RecoverySnapshot {
 }
 
 export function createRecoverySnapshot(
-  session: DocumentSession,
+  session:
+    | DocumentSession
+    | (Omit<DocumentSession, 'show'> & {
+        show: Omit<DocumentSession['show'], 'data'> & { data: unknown };
+      }),
   savedAt = Date.now(),
 ): RecoverySnapshot {
   return {
     version: RECOVERY_FORMAT_VERSION,
     savedAt,
     showFilePath: session.show.filePath,
-    data: session.show.data,
+    data: session.show.data as ShowDocument,
     mediaFilePath: session.mediaFilePath,
     mediaDirty: session.mediaDirty,
     teamFilePath: session.teamFilePath,
@@ -87,7 +91,7 @@ export function parseRecoverySnapshot(raw: unknown): RecoverySnapshot | null {
 
   const encodedData = JSON.stringify(value['data']);
   if (typeof encodedData !== 'string') return null;
-  const parsed = parsePictaV2(encodedData);
+  const parsed = parseShow(encodedData);
   if (!parsed.ok) return null;
   if (parsed.value.media.kind === 'file') {
     if (mediaFilePath !== parsed.value.media.path) return null;

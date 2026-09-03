@@ -1,0 +1,88 @@
+/* Panel-relative sizing: the preview and physical output scale identically.
+   No pixel caps: a 4K TV receives the same proportions as a 1080p TV. */
+.scoreboard-shell {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1cqh;
+  padding: 2cqh 2cqw;
+  background: #000;
+  color: #fff;
+  font-family: Arial, 'Segoe UI', sans-serif;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.scoreboard-set {
+  text-align: center;
+  font-size: min(5cqw, 4cqh);
+  font-weight: 800;
+  padding: 0.8cqh 0;
+  letter-spacing: 0.04em;
+}
+.scoreboard-team {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 4fr) auto;
+  padding: 1.5cqh 2cqw;
+  border-left: 1.4cqw solid var(--team-color, #555);
+  background: #101217;
+}
+.scoreboard-name {
+  min-width: 0;
+  align-self: center;
+  font-size: min(7cqw, 5.5cqh);
+  line-height: 1.05;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.scoreboard-points {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  font-size: min(calc(76cqw / var(--point-digits, 2)), 26cqh);
+  font-weight: 900;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+}
+.scoreboard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1cqw;
+  font-size: min(5.3cqw, 4cqh);
+  white-space: nowrap;
+}
+.scoreboard-serve {
+  color: #ffe36b;
+  font-weight: 800;
+  font-size: 0.78em;
+}
+@container (min-aspect-ratio: 1.35) {
+  .scoreboard-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 2cqw;
+  }
+  .scoreboard-set {
+    grid-column: 1 / -1;
+    font-size: 5cqh;
+  }
+  .scoreboard-team {
+    padding: 3cqh 2cqw;
+    border-left-width: 0.8cqw;
+  }
+  .scoreboard-name {
+    font-size: min(4cqw, 9cqh);
+  }
+  .scoreboard-points {
+    font-size: min(calc(70cqw / var(--point-digits, 2)), 50cqh);
+  }
+  .scoreboard-footer {
+    font-size: min(3.5cqw, 7cqh);
+  }
+}

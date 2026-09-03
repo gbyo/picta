@@ -17,25 +17,25 @@
           </div>
         </div>
         <nav class="primary-nav" aria-label="Workspace pages">
-          <button type="button" class="nav-item" data-page="home" aria-current="page">
-            <span class="nav-icon" aria-hidden="true">⌂</span><span>Home</span>
+          <p class="nav-label">Live</p>
+          <button
+            type="button"
+            class="nav-item live-nav"
+            id="live-view-tab"
+            data-page="live"
+            aria-current="page"
+          >
+            <span class="nav-icon" aria-hidden="true">●</span><span>Live</span>
           </button>
-          <p class="nav-label">Prepare</p>
+          <p class="nav-label">Setup</p>
           <button type="button" class="nav-item" data-page="media">
             <span class="nav-icon" aria-hidden="true">▣</span><span>Media</span>
           </button>
-          <button type="button" class="nav-item" id="roster-view-tab" data-page="roster">
-            <span class="nav-icon" aria-hidden="true">♙</span><span>Roster</span>
+          <button type="button" class="nav-item" id="roster-view-tab" data-page="team">
+            <span class="nav-icon" aria-hidden="true">♙</span><span>Team</span>
           </button>
-          <button type="button" class="nav-item" data-page="scenes">
-            <span class="nav-icon" aria-hidden="true">◇</span><span>Scenes</span>
-          </button>
-          <p class="nav-label">Operate</p>
-          <button type="button" class="nav-item" id="live-view-tab" data-page="live">
-            <span class="nav-icon" aria-hidden="true">●</span><span>Live</span>
-          </button>
-          <button type="button" class="nav-item" data-page="output">
-            <span class="nav-icon" aria-hidden="true">▰</span><span>Output</span>
+          <button type="button" class="nav-item" data-page="screens">
+            <span class="nav-icon" aria-hidden="true">◇</span><span>Screens</span>
           </button>
         </nav>
         <div class="sidebar-footer">
@@ -48,7 +48,7 @@
           </div>
           <div class="connection-card">
             <span class="status-dot" aria-hidden="true"></span>
-            <p id="global-status" class="global-status" aria-live="polite">Ready</p>
+            <p id="global-status" class="global-status" aria-live="polite">OFF AIR</p>
           </div>
         </div>
       </aside>
@@ -56,10 +56,10 @@
       <main class="workspace">
         <header class="workspace-header">
           <div>
-            <p id="page-eyebrow" class="page-eyebrow">Workspace</p>
-            <h1 id="page-title" class="page-title">Home</h1>
+            <p id="page-eyebrow" class="page-eyebrow">Operate</p>
+            <h1 id="page-title" class="page-title">Live</h1>
             <p id="page-description" class="page-description">
-              Build the show, check the room, and go live.
+              Preview the board, update the match, and control what is on air.
             </p>
           </div>
           <div class="header-actions">
@@ -68,24 +68,24 @@
               type="button"
               class="button secondary-button"
               id="header-output"
-              data-go-page="output"
+              data-go-page="live"
             >
-              Open output
+              Open Live
             </button>
           </div>
         </header>
-        <section id="scene-strip" class="scene-strip" aria-label="Scene" hidden>
-          <span class="scene-strip-label">Scene</span>
+        <section id="scene-strip" class="scene-strip" aria-label="Screen" hidden>
+          <span class="scene-strip-label">Screen</span>
           <div
             id="scene-buttons"
             class="scene-buttons"
             role="toolbar"
-            aria-label="Switch scene"
+            aria-label="Switch Screen"
           ></div>
         </section>
         <p id="message" class="message" role="status" aria-live="polite" hidden></p>
 
-        <section id="page-home" class="page" data-page-panel="home">
+        <section id="page-home" class="page" hidden aria-hidden="true">
           <section class="show-overview" aria-labelledby="show-overview-title">
             <div>
               <p class="section-kicker">Current show</p>
@@ -172,6 +172,10 @@
         </section>
 
         <section id="page-media" class="page" data-page-panel="media" hidden>
+          <p id="media-lock-notice" class="message" hidden>
+            Playback order is locked while output is live. Stop output to reorder, remove, or clear
+            media.
+          </p>
           <div class="page-toolbar">
             <div>
               <p class="resource-label">Media source</p>
@@ -245,15 +249,9 @@
               >
             </section>
           </details>
-          <div id="media-transport" class="live-inline-actions" hidden>
-            <span>Program on air</span
-            ><button type="button" id="media-previous" class="button secondary-button">
-              Previous</button
-            ><button type="button" id="media-next" class="button secondary-button">Next</button>
-          </div>
         </section>
 
-        <section id="page-roster" class="page" data-page-panel="roster" hidden>
+        <section id="page-roster" class="page" data-page-panel="team" hidden>
           <div id="no-team" class="empty-state">
             <div class="empty-illustration" aria-hidden="true">♙</div>
             <p class="section-kicker">Roster</p>
@@ -362,21 +360,39 @@
           </div>
         </section>
 
-        <section id="page-live" class="page" data-page-panel="live" hidden>
+        <section id="page-live" class="page live-console" data-page-panel="live" hidden>
+          <section class="score-deck" aria-labelledby="score-deck-title">
+            <div class="segmented" role="group" aria-label="Live controls">
+              <button type="button" id="live-mode-score" class="selected" aria-pressed="true">
+                Score
+              </button>
+              <button type="button" id="live-mode-stats" aria-pressed="false">Stats</button>
+            </div>
+            <h2 id="score-deck-title" class="visually-hidden">Volleyball score</h2>
+            <div id="score-summary" class="score-summary" aria-live="polite"></div>
+            <div id="score-controls" class="score-controls"></div>
+          </section>
+          <div id="media-transport" class="live-inline-actions" hidden>
+            <button type="button" id="media-previous" class="button secondary-button">
+              Previous
+            </button>
+            <strong id="live-media-label">Current media</strong>
+            <button type="button" id="media-next" class="button secondary-button">Next</button>
+          </div>
           <div id="live-empty" class="empty-state">
             <div class="empty-illustration" aria-hidden="true">●</div>
             <p class="section-kicker">Live statistics</p>
             <h2>No team loaded</h2>
-            <p>Create or open a team in Roster to use this page.</p>
-            <button type="button" class="button primary-button" data-go-page="roster">
-              Go to roster
+            <p>Stats needs a team roster. Score and media controls are still available.</p>
+            <button type="button" class="button primary-button" data-go-page="team">
+              Open Team
             </button>
           </div>
           <div id="live-view" hidden>
             <div class="live-heading">
               <div>
                 <p class="section-kicker">Statistics</p>
-                <h2>Live board</h2>
+                <h2>Player stats</h2>
               </div>
               <label class="select-label"
                 >Active group<select
@@ -390,21 +406,21 @@
           </div>
         </section>
 
-        <section id="page-scenes" class="page" data-page-panel="scenes" hidden>
-          <section class="scene-browser" aria-label="Scenes">
+        <section id="page-scenes" class="page" data-page-panel="screens" hidden>
+          <section class="scene-browser" aria-label="Screens">
             <div class="scene-browser-top">
               <div>
-                <p class="section-kicker">Scenes</p>
-                <h2 id="scene-current">Scene list</h2>
+                <p class="section-kicker">Screens</p>
+                <h2 id="scene-current">Screen list</h2>
                 <p id="scene-hint" class="muted detail"></p>
               </div>
-              <button type="button" id="scene-new" class="button primary-button">New scene</button>
+              <button type="button" id="scene-new" class="button primary-button">New Screen</button>
             </div>
             <div
               id="scene-picker"
               class="scene-buttons"
               role="toolbar"
-              aria-label="Show scenes"
+              aria-label="Saved Screens"
             ></div>
             <div class="scene-actions">
               <button type="button" id="scene-duplicate" class="text-button">Duplicate</button
@@ -425,8 +441,8 @@
                   <h2 id="layout-heading">Layout preview</h2>
                 </div>
                 <div id="layout-normal" class="row gap">
-                  <button type="button" id="scene-edit" class="button secondary-button">
-                    Edit zones
+                  <button type="button" id="scene-edit" class="button secondary-button" hidden>
+                    Change template
                   </button>
                 </div>
               </div>
@@ -438,7 +454,7 @@
               <p id="layout-detail" class="muted detail"></p>
               <div id="zone-edit-panel" class="zone-edit-panel" hidden>
                 <div class="row">
-                  <strong>Edit zones</strong
+                  <strong>Imported layout tools</strong
                   ><label class="checkbox-label"
                     ><input type="checkbox" id="zone-edit-safe" checked /> Safe area</label
                   >
@@ -447,23 +463,23 @@
                   <select
                     id="custom-zone-select"
                     class="control"
-                    aria-label="Selected layout zone"
+                    aria-label="Selected panel"
                   ></select
                   ><button type="button" id="split-columns" class="button secondary-button">
                     Split left / right</button
                   ><button type="button" id="split-rows" class="button secondary-button">
                     Split top / bottom</button
-                  ><select id="custom-role-select" class="control" aria-label="Zone role">
-                    <option value="program">Program</option>
-                    <option value="live-board">Live Board</option>
+                  ><select id="custom-role-select" class="control" aria-label="Panel content">
+                    <option value="program">Media</option>
+                    <option value="live-board">Stats</option>
                     <option value="media">Media</option>
                     <option value="blank">Blank</option></select
                   ><button type="button" id="merge-zone" class="button secondary-button">
-                    Merge selected
+                    Remove selected
                   </button>
                 </div>
                 <p class="muted detail">
-                  Drag a divider or select a zone. Nothing changes until you choose Done.
+                  Imported layouts retain their geometry until reset to a template.
                 </p>
                 <div class="row gap">
                   <button type="button" id="zone-edit-cancel" class="button secondary-button grow">
@@ -475,6 +491,18 @@
               </div>
             </section>
             <aside class="scene-settings">
+              <section class="content-card screen-panel-inspector">
+                <p class="section-kicker">Selected panel</p>
+                <label>Panel<select id="screen-panel-select" class="control"></select></label>
+                <label
+                  >Content<select id="screen-panel-content" class="control">
+                    <option value="media">Media</option>
+                    <option value="score">Score</option>
+                    <option value="stats">Stats</option>
+                    <option value="blank">Blank</option>
+                  </select></label
+                >
+              </section>
               <section class="content-card">
                 <p class="section-kicker">Layout</p>
                 <h2>Presets</h2>
@@ -482,7 +510,7 @@
                 <p id="layout-presets-hint" class="muted detail"></p>
               </section>
               <section class="content-card scene-options">
-                <p class="section-kicker">Scene options</p>
+                <p class="section-kicker">Screen options</p>
                 <label>Live board<select id="output-group" class="control"></select></label
                 ><label
                   >Background<select id="output-background" class="control">
@@ -496,7 +524,7 @@
           </div>
         </section>
 
-        <section id="page-output" class="page" data-page-panel="output" hidden>
+        <section id="page-output" class="page live-output-console" hidden>
           <div class="output-hero">
             <span class="muted">Output status</span>
             <div id="output-state-badge" class="output-state-badge">OFF AIR</div>
@@ -518,9 +546,9 @@
               <p id="display-detail" class="muted detail"></p>
             </section>
             <section class="content-card readiness-card">
-              <p class="section-kicker">Active scene</p>
+              <p class="section-kicker">Selected Screen</p>
               <h2 id="output-scene-name">Default</h2>
-              <div class="mini-screen" id="output-mini-preview"><span>Program</span></div>
+              <div class="mini-screen" id="output-mini-preview" aria-label="Output preview"></div>
               <dl class="readiness-list">
                 <div>
                   <dt>Media</dt>
@@ -535,7 +563,7 @@
                   <dd id="output-display-readiness">Choose one</dd>
                 </div>
               </dl>
-              <button type="button" class="text-button" data-go-page="scenes">Edit scene</button>
+              <button type="button" class="text-button" data-go-page="screens">Edit Screen</button>
             </section>
           </div>
           <div class="take-live-card">
@@ -546,7 +574,7 @@
             </div>
             <div class="output-actions">
               <button type="button" id="output-start" class="button take-live-button">
-                Start output</button
+                Go Live</button
               ><button type="button" id="output-stop" class="button stop-button" hidden>
                 Stop output
               </button>
@@ -652,8 +680,8 @@
     </dialog>
     <dialog id="scene-dialog" class="confirm form-dialog">
       <form method="dialog" id="scene-dialog-form">
-        <p class="section-kicker">Scene</p>
-        <h2 id="scene-dialog-title">New Scene</h2>
+        <p class="section-kicker">Screen</p>
+        <h2 id="scene-dialog-title">New Screen</h2>
         <div class="dialog-fields">
           <label
             >Name<input id="scene-dialog-name" type="text" autocomplete="off" maxlength="60"
@@ -675,8 +703,8 @@
     </dialog>
     <dialog id="scene-delete-dialog" class="confirm">
       <form method="dialog">
-        <p class="section-kicker">Scene</p>
-        <h2>Delete scene</h2>
+        <p class="section-kicker">Screen</p>
+        <h2>Delete Screen</h2>
         <p id="scene-delete-text"></p>
         <div class="confirm-actions">
           <button type="submit" value="cancel" class="button secondary-button" autofocus>

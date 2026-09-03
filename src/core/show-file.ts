@@ -1,16 +1,31 @@
-/** `.picta` v2 parsing, serialization and in-memory v1 migration. */
+/** `.picta` v3 parsing, serialization and in-memory legacy migration. */
 
-import type { MediaItem, MediaResource, ShowDocument, Team, TeamResource } from './domain.js';
+import type {
+  LayoutNode,
+  MediaItem,
+  MediaResource,
+  Scene,
+  Screen,
+  ShowDocument,
+  Team,
+  TeamResource,
+  VolleyballScoreState,
+} from './domain.js';
 import { defaultMediaSet } from './media.js';
 import { legacyLayoutToTree } from './layouts.js';
 import { parseMediaSet, resolveMediaSetPaths, serializeMediaSet } from './media-set-file.js';
 import { resolveStoredPath, storedPathFor, type PathStyle } from './paths.js';
 import { validateScenes } from './scenes.js';
+import { defaultVolleyballScore } from './score.js';
+import { defaultVolleyballScreens, flattenLegacyLayout, validateScreens } from './screens.js';
 import { parseTeam, resolveTeamPaths, serializeTeam, TEAM_FORMAT_VERSION } from './team-file.js';
 import type { ParsedPicta } from './picta-file.js';
 
 export const PICTA_V2_FORMAT_VERSION = 2;
-export const PICTA_V2_MAX_SUPPORTED_VERSION = 2;
+export const PICTA_V3_FORMAT_VERSION = 3;
+export const PICTA_V2_MAX_SUPPORTED_VERSION = 3;
+export const PICTA_FORMAT_VERSION = PICTA_V3_FORMAT_VERSION;
+export const PICTA_MAX_SUPPORTED_VERSION = PICTA_V3_FORMAT_VERSION;
 
 export type ShowParseErrorKind =
   | 'invalid-json'
@@ -21,10 +36,21 @@ export type ShowParseErrorKind =
   | 'invalid-team'
   | 'invalid-event'
   | 'invalid-scenes'
+  | 'invalid-screens'
+  | 'invalid-score'
   | 'invalid-field';
 
 export type ShowParseResult =
   { ok: true; value: ShowDocument } | { ok: false; kind: ShowParseErrorKind; message: string };
+
+export interface LegacyShowDocumentV2 {
+  version: 2;
+  media: MediaResource;
+  team?: TeamResource;
+  event: { stats: Record<string, Record<string, number>>; liveGroups: Record<string, string[]> };
+  scenes: Scene[];
+  defaultSceneId: string;
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -78,7 +104,40 @@ function parseTeamResource(value: unknown): TeamResource | string {
   return { kind: 'inline', data: parsed.value };
 }
 
-function parseEvent(value: unknown): ShowDocument['event'] | string {
+function parseScore(value: unknown, team?: Team): VolleyballScoreState | string {
+  if (value === undefined) return defaultVolleyballScore(team);
+  if (!isObject(value) || value['sport'] !== 'volleyball')
+    return 'The show has invalid score state.';
+  const side = (raw: unknown): raw is { name: string; primaryColor: string } =>
+    isObject(raw) && validPath(raw['name']) && typeof raw['primaryColor'] === 'string';
+  if (!side(value['home']) || !side(value['away'])) return 'The show has invalid score teams.';
+  const whole = (raw: unknown, minimum: number) =>
+    typeof raw === 'number' && Number.isInteger(raw) && raw >= minimum;
+  if (
+    !whole(value['homePoints'], 0) ||
+    !whole(value['awayPoints'], 0) ||
+    !whole(value['homeSets'], 0) ||
+    !whole(value['awaySets'], 0) ||
+    !whole(value['setNumber'], 1) ||
+    ![null, 'home', 'away'].includes(value['serving'] as null | string) ||
+    !['best-of-3', 'best-of-5'].includes(String(value['matchFormat']))
+  )
+    return 'The show has invalid score state.';
+  return {
+    sport: 'volleyball',
+    home: { name: value['home'].name.trim(), primaryColor: value['home'].primaryColor },
+    away: { name: value['away'].name.trim(), primaryColor: value['away'].primaryColor },
+    homePoints: value['homePoints'] as number,
+    awayPoints: value['awayPoints'] as number,
+    homeSets: value['homeSets'] as number,
+    awaySets: value['awaySets'] as number,
+    setNumber: value['setNumber'] as number,
+    serving: value['serving'] as 'home' | 'away' | null,
+    matchFormat: value['matchFormat'] as 'best-of-3' | 'best-of-5',
+  };
+}
+
+function parseEvent(value: unknown, team?: Team): ShowDocument['event'] | string {
   if (!isObject(value)) return 'The show has invalid event state.';
   const rawStats = value['stats'] ?? {};
   const rawGroups = value['liveGroups'] ?? {};
@@ -106,7 +165,9 @@ function parseEvent(value: unknown): ShowDocument['event'] | string {
       return 'The show has invalid live group state.';
     liveGroups[groupId] = [...new Set(rawIds.map((id) => String(id)))];
   }
-  return { stats, liveGroups };
+  const score = parseScore(value['score'], team);
+  if (typeof score === 'string') return score;
+  return { stats, liveGroups, score };
 }
 
 export function validateShowEventReferences(
@@ -131,6 +192,57 @@ export function validateShowEventReferences(
   return null;
 }
 
+function screenContentRole(
+  kind: Screen['panels'][number]['content']['kind'],
+): 'program' | 'live-board' | 'media' | 'blank' {
+  if (kind === 'score' || kind === 'stats') return 'live-board';
+  return kind === 'media' ? 'program' : 'blank';
+}
+
+/**
+ * Temporary projection for the pre-v3 controller editor. The v3 file and
+ * presentation renderer use Screens directly; this is not serialized.
+ */
+function legacySceneForScreen(screen: Screen): Scene {
+  const zones = screen.panels.map((item) => ({
+    type: 'zone' as const,
+    id: item.id,
+    role: screenContentRole(item.content.kind),
+  }));
+  let layout: LayoutNode = zones[0] ?? { type: 'zone', id: 'blank', role: 'blank' };
+  if (zones.length === 2) {
+    const [first, second] = screen.panels;
+    const horizontal = Boolean(
+      first && second && first.rect.height === 1 && second.rect.height === 1,
+    );
+    layout = {
+      type: 'split',
+      direction: horizontal ? 'columns' : 'rows',
+      ratio: horizontal ? first!.rect.width : first!.rect.height,
+      first: zones[0]!,
+      second: zones[1]!,
+    };
+  }
+  const stats = screen.panels.find((item) => item.content.kind === 'stats');
+  return {
+    id: screen.id,
+    name: screen.name,
+    layout,
+    ...(stats?.content.kind === 'stats' && stats.content.groupId
+      ? { liveBoardGroupId: stats.content.groupId }
+      : {}),
+    background: { ...screen.background },
+  };
+}
+
+function withLegacyProjection(core: Omit<ShowDocument, 'scenes' | 'defaultSceneId'>): ShowDocument {
+  return {
+    ...core,
+    scenes: core.screens.map(legacySceneForScreen),
+    defaultSceneId: core.defaultScreenId,
+  };
+}
+
 export function parsePictaV2(text: string): ShowParseResult {
   let raw: unknown;
   try {
@@ -147,6 +259,7 @@ export function parsePictaV2(text: string): ShowParseResult {
       'unsupported-version',
       `This show uses version ${version}. Update Picta to open it.`,
     );
+  if (version === PICTA_V3_FORMAT_VERSION) return parsePictaV3(text);
   if (version !== PICTA_V2_FORMAT_VERSION)
     return fail(
       'unsupported-version',
@@ -156,7 +269,7 @@ export function parsePictaV2(text: string): ShowParseResult {
   if (typeof media === 'string') return fail('invalid-media', media);
   const team = raw['team'] === undefined ? undefined : parseTeamResource(raw['team']);
   if (typeof team === 'string') return fail('invalid-team', team);
-  const event = parseEvent(raw['event'] ?? {});
+  const event = parseEvent(raw['event'] ?? {}, team?.data);
   if (typeof event === 'string') return fail('invalid-event', event);
   const referenceError = validateShowEventReferences(event, team?.data);
   if (referenceError) return fail('invalid-event', referenceError);
@@ -181,17 +294,76 @@ export function parsePictaV2(text: string): ShowParseResult {
   }
   const sceneCheck = validateScenes(scenesValue, defaultSceneId, team?.data);
   if (!sceneCheck.ok) return fail('invalid-scenes', sceneCheck.message);
+  const screens = sceneCheck.scenes.map<Screen>((scene) => {
+    const panels = flattenLegacyLayout(scene.layout, scene.liveBoardGroupId);
+    const mediaPanel = panels.find((item) => item.content.kind === 'media');
+    return {
+      id: scene.id,
+      name: scene.name,
+      panels,
+      background: { ...scene.background },
+      ...(mediaPanel ? { cueTargetPanelId: mediaPanel.id } : {}),
+      ...(panels.length > 2 ? { importedLayout: true } : {}),
+    };
+  });
   return {
     ok: true,
-    value: {
-      version: 2,
+    value: withLegacyProjection({
+      version: 3,
       media,
       ...(team === undefined ? {} : { team }),
       event,
-      scenes: sceneCheck.scenes,
-      defaultSceneId: sceneCheck.defaultSceneId,
-    },
+      screens,
+      defaultScreenId: sceneCheck.defaultSceneId,
+    }),
   };
+}
+
+export function parsePictaV3(text: string): ShowParseResult {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return fail('invalid-json', 'This show file is not valid JSON.');
+  }
+  if (!isObject(raw)) return fail('not-an-object', 'This does not look like a Picta show.');
+  if (raw['version'] !== PICTA_V3_FORMAT_VERSION)
+    return fail(
+      'unsupported-version',
+      `This parser expects Picta show version ${PICTA_V3_FORMAT_VERSION}.`,
+    );
+  const media = parseMediaResource(raw['media']);
+  if (typeof media === 'string') return fail('invalid-media', media);
+  const team = raw['team'] === undefined ? undefined : parseTeamResource(raw['team']);
+  if (typeof team === 'string') return fail('invalid-team', team);
+  const event = parseEvent(raw['event'] ?? {}, team?.data);
+  if (typeof event === 'string') return fail('invalid-event', event);
+  const referenceError = validateShowEventReferences(event, team?.data);
+  if (referenceError) return fail('invalid-event', referenceError);
+  const checked = validateScreens(raw['screens'], raw['defaultScreenId']);
+  if (!checked.ok) return fail('invalid-screens', checked.message);
+  return {
+    ok: true,
+    value: withLegacyProjection({
+      version: 3,
+      media,
+      ...(team === undefined ? {} : { team }),
+      event,
+      screens: checked.screens,
+      defaultScreenId: checked.defaultScreenId,
+    }),
+  };
+}
+
+export function parseShow(text: string): ShowParseResult {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return fail('invalid-json', 'This show file is not valid JSON.');
+  }
+  if (!isObject(raw)) return fail('not-an-object', 'This does not look like a Picta show.');
+  return raw['version'] === 3 ? parsePictaV3(text) : parsePictaV2(text);
 }
 
 function serializeInlineMedia(
@@ -225,7 +397,11 @@ function serializeTeamResource(
     : { kind: 'file', path: storedPathFor(resource.path, filePath, style) };
 }
 
-export function serializePictaV2(show: ShowDocument, filePath: string, style: PathStyle): string {
+export function serializePictaV2(
+  show: LegacyShowDocumentV2 | ShowDocument,
+  filePath: string,
+  style: PathStyle,
+): string {
   const body: Record<string, unknown> = {
     version: PICTA_V2_FORMAT_VERSION,
     media: serializeMediaResource(show.media, filePath, style),
@@ -236,6 +412,23 @@ export function serializePictaV2(show: ShowDocument, filePath: string, style: Pa
     },
     scenes: show.scenes,
     defaultSceneId: show.defaultSceneId,
+  };
+  return `${JSON.stringify(body, null, 2)}\n`;
+}
+
+/** New and updated shows are always written as v3. */
+export function serializePictaV3(show: ShowDocument, filePath: string, style: PathStyle): string {
+  const body: Record<string, unknown> = {
+    version: PICTA_V3_FORMAT_VERSION,
+    media: serializeMediaResource(show.media, filePath, style),
+    ...(show.team === undefined ? {} : { team: serializeTeamResource(show.team, filePath, style) }),
+    event: {
+      stats: show.event.stats,
+      liveGroups: show.event.liveGroups,
+      score: show.event.score ?? defaultVolleyballScore(show.team?.data),
+    },
+    screens: show.screens,
+    defaultScreenId: show.defaultScreenId,
   };
   return `${JSON.stringify(body, null, 2)}\n`;
 }
@@ -317,20 +510,45 @@ export function migratePictaV1(parsed: ParsedPicta): ShowDocument {
       ],
     };
   }
-  return {
-    version: 2,
+  const legacyLayout = legacyLayoutToTree(parsed.layout);
+  const legacyScene: Scene = {
+    id: 'screen-1',
+    name: 'Imported Screen',
+    layout: legacyLayout,
+    ...(team === undefined ? {} : { liveBoardGroupId: 'on-court' }),
+    background: { kind: 'black' },
+  };
+  const panels = flattenLegacyLayout(legacyLayout, team === undefined ? undefined : 'on-court');
+  const importedScreen: Screen = {
+    id: legacyScene.id,
+    name: legacyScene.name,
+    panels,
+    background: { kind: 'black' },
+    ...(panels.find((item) => item.content.kind === 'media')
+      ? { cueTargetPanelId: panels.find((item) => item.content.kind === 'media')!.id }
+      : {}),
+  };
+  return withLegacyProjection({
+    version: 3,
     media: { kind: 'inline', data: media },
     ...(team === undefined ? {} : { team: { kind: 'inline', data: team } }),
-    event: { stats, liveGroups: liveIds.length > 0 ? { 'on-court': liveIds } : {} },
-    scenes: [
-      {
-        id: 'scene-1',
-        name: 'Default',
-        layout: legacyLayoutToTree(parsed.layout),
-        ...(team === undefined ? {} : { liveBoardGroupId: 'on-court' }),
-        background: { kind: 'black' },
-      },
-    ],
-    defaultSceneId: 'scene-1',
-  };
+    event: {
+      stats,
+      liveGroups: liveIds.length > 0 ? { 'on-court': liveIds } : {},
+      score: defaultVolleyballScore(team),
+    },
+    screens: [importedScreen],
+    defaultScreenId: importedScreen.id,
+  });
+}
+
+/** Default document for a new volleyball-oriented show. */
+export function defaultShowDocument(): ShowDocument {
+  const screenSet = defaultVolleyballScreens();
+  return withLegacyProjection({
+    version: 3,
+    media: { kind: 'inline', data: defaultMediaSet('Inline Media') },
+    event: { stats: {}, liveGroups: {}, score: defaultVolleyballScore() },
+    ...screenSet,
+  });
 }
