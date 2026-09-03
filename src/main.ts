@@ -53,13 +53,8 @@ import {
   openShowDocument,
   saveShowDocument,
 } from './app/show-io.js';
-import {
-  PAGE_NAMES,
-  pageFromHash,
-  pageHash,
-  renderPage,
-  type PageName,
-} from './app/page-navigation.js';
+import { defaultShowDocument } from './core/show-file.js';
+import { pageFromHash, pageHash, renderPage, type PageName } from './app/page-navigation.js';
 import {
   appendMedia,
   defaultMediaSet,
@@ -75,6 +70,7 @@ import type {
   LayoutNode,
   MediaItem,
   MediaSet,
+  PanelContent,
   Player,
   Scene,
   ShowDocument,
@@ -115,10 +111,7 @@ import {
 } from './core/monitors.js';
 import { basename, dirname, resolvePath, type PathStyle } from './core/paths.js';
 import {
-  LAYOUT_PRESETS,
   layoutPreset,
-  layoutPresetId,
-  layoutPresetLabel,
   layoutZones,
   mergeZone,
   resolveZoneRects,
@@ -165,6 +158,29 @@ import {
 import { INTERVAL_CHOICES } from './core/types.js';
 import { shouldCheckNow, shouldNotify, updateNoticeText } from './core/update.js';
 import {
+  applyScoreAction,
+  createScoreHistory,
+  defaultVolleyballScore,
+  higherScoringSide,
+  matchWinner,
+  regulationSetWinner,
+  setPointTarget,
+  undoScore,
+  type ScoreAction,
+  type ScoreHistory,
+} from './core/score.js';
+import { renderScoreDeck } from './app/live-ui.js';
+import { runSaveTransaction } from './app/save-transaction.js';
+import { renderScreenPreview } from './app/screen-preview.js';
+import { attachPointerReorder } from './app/pointer-reorder.js';
+import {
+  cloneScreen,
+  SCREEN_TEMPLATES,
+  screenFromTemplate,
+  screenTemplateId,
+  updatePanelContent,
+} from './core/screens.js';
+import {
   discardRecoverySnapshot,
   readRecoverySnapshot,
   writeRecoverySnapshot,
@@ -185,7 +201,7 @@ function need<T extends HTMLElement>(id: string): T {
 const ui = {
   globalStatus: need<HTMLParagraphElement>('global-status'),
   navItems: [...document.querySelectorAll<HTMLButtonElement>('.nav-item[data-page]')],
-  workspace: need<HTMLElement>('page-home').parentElement as HTMLElement,
+  workspace: need<HTMLElement>('page-live').parentElement as HTMLElement,
   saveState: need<HTMLElement>('save-state'),
   headerOutput: need<HTMLButtonElement>('header-output'),
   homePrimaryAction: need<HTMLButtonElement>('home-primary-action'),
@@ -235,6 +251,8 @@ const ui = {
   mediaTransport: need<HTMLDivElement>('media-transport'),
   mediaPrevious: need<HTMLButtonElement>('media-previous'),
   mediaNext: need<HTMLButtonElement>('media-next'),
+  mediaLockNotice: need<HTMLParagraphElement>('media-lock-notice'),
+  liveMediaLabel: need<HTMLElement>('live-media-label'),
   noTeam: need<HTMLDivElement>('no-team'),
   teamLoaded: need<HTMLDivElement>('team-loaded'),
   teamName: need<HTMLElement>('team-name'),
@@ -262,6 +280,10 @@ const ui = {
   playerInspector: need<HTMLElement>('player-inspector'),
   liveGroupSelect: need<HTMLSelectElement>('live-group-select'),
   liveTable: need<HTMLDivElement>('live-table'),
+  liveModeScore: need<HTMLButtonElement>('live-mode-score'),
+  liveModeStats: need<HTMLButtonElement>('live-mode-stats'),
+  scoreSummary: need<HTMLDivElement>('score-summary'),
+  scoreControls: need<HTMLDivElement>('score-controls'),
   displaySelect: need<HTMLSelectElement>('display-select'),
   displayDetail: need<HTMLParagraphElement>('display-detail'),
   identify: need<HTMLButtonElement>('identify'),
@@ -282,6 +304,8 @@ const ui = {
   zoneEditSafe: need<HTMLInputElement>('zone-edit-safe'),
   outputGroup: need<HTMLSelectElement>('output-group'),
   outputBackground: need<HTMLSelectElement>('output-background'),
+  screenPanelSelect: need<HTMLSelectElement>('screen-panel-select'),
+  screenPanelContent: need<HTMLSelectElement>('screen-panel-content'),
   outputStart: need<HTMLButtonElement>('output-start'),
   outputStop: need<HTMLButtonElement>('output-stop'),
   outputStateBadge: need<HTMLDivElement>('output-state-badge'),
@@ -344,13 +368,7 @@ interface ShowState {
 }
 
 function newShowData(): ShowDocument {
-  const scenes = defaultSceneSet();
-  return {
-    version: 2,
-    media: { kind: 'inline', data: defaultMediaSet('Inline Media') },
-    event: { stats: {}, liveGroups: {} },
-    ...scenes,
-  };
+  return defaultShowDocument();
 }
 
 let style: PathStyle = 'posix';
@@ -365,9 +383,15 @@ let selectedPlayerId: string | null = null;
 let selectedRosterGroupId: string | null = null;
 let selectedLiveGroupId: string | null = null;
 let selectedSceneId: string | null = show.data.defaultSceneId;
+let selectedScreenPanelId: string | null = null;
 let activeSceneId: string | null = null;
 let zoneEditSession: ZoneEditSession | null = null;
 let manualSession: ManualGroupSession | null = null;
+let liveMode: 'score' | 'stats' = 'score';
+let scoreHistory: ScoreHistory = createScoreHistory(
+  show.data.event.score ?? defaultVolleyballScore(),
+);
+let currentMediaPosition = 0;
 let displays: DisplayInfo[] = [];
 let selectedDisplayId: string | null = null;
 let lostDisplayHint: Prefs['displayHint'] = null;
@@ -395,6 +419,7 @@ function adoptDocumentSession(next: DocumentSession): void {
   teamFilePath = next.teamFilePath;
   teamDirty = next.teamDirty;
   invalidateMediaPreflight();
+  scoreHistory = createScoreHistory(show.data.event.score ?? defaultVolleyballScore(team()));
 }
 
 function scheduleRecoveryPersistence(): void {
@@ -507,6 +532,52 @@ function selectedScene(): Scene {
   );
 }
 
+function selectedScreen() {
+  return (
+    show.data.screens.find(
+      (screen) => screen.id === (selectedSceneId ?? show.data.defaultScreenId),
+    ) ?? show.data.screens[0]!
+  );
+}
+
+function layoutForScreen(screen: ReturnType<typeof selectedScreen>): LayoutNode {
+  const role = (kind: (typeof screen.panels)[number]['content']['kind']): ZoneRole =>
+    kind === 'media' ? 'program' : kind === 'blank' ? 'blank' : 'live-board';
+  const first = screen.panels[0];
+  if (!first) return layoutPreset('full');
+  const firstNode = { type: 'zone' as const, id: first.id, role: role(first.content.kind) };
+  const second = screen.panels[1];
+  if (!second) return firstNode;
+  return {
+    type: 'split',
+    direction: first.rect.height === 1 && second.rect.height === 1 ? 'columns' : 'rows',
+    ratio: first.rect.height === 1 ? first.rect.width : first.rect.height,
+    first: firstNode,
+    second: { type: 'zone', id: second.id, role: role(second.content.kind) },
+  };
+}
+
+function replaceSelectedScreen(screen: ReturnType<typeof selectedScreen>): void {
+  show.data = {
+    ...show.data,
+    screens: show.data.screens.map((item) => (item.id === screen.id ? cloneScreen(screen) : item)),
+    scenes: show.data.scenes.map((scene) =>
+      scene.id === screen.id
+        ? {
+            ...scene,
+            name: screen.name,
+            background: { ...screen.background },
+            layout: layoutForScreen(screen),
+          }
+        : scene,
+    ),
+  };
+  markShowDirty();
+  if (output.active && activeSceneId === screen.id)
+    output.applyScreen(screen, liveBoardData(activeScene()), scoreHistory.present);
+  renderOutput();
+}
+
 function activeScene(): Scene {
   return (
     sceneById(show.data.scenes, activeSceneId ?? selectedSceneId ?? show.data.defaultSceneId) ??
@@ -576,6 +647,78 @@ function markShowDirty(): void {
   scheduleRecoveryPersistence();
 }
 
+function commitScoreAction(action: ScoreAction): void {
+  const next = applyScoreAction(scoreHistory, action);
+  if (next === scoreHistory) return;
+  scoreHistory = next;
+  show.data = { ...show.data, event: { ...show.data.event, score: scoreHistory.present } };
+  markShowDirty();
+  if (output.active) output.setScore(scoreHistory.present);
+  renderLiveConsole();
+  renderOutput();
+}
+
+function undoScoreAction(): void {
+  const next = undoScore(scoreHistory);
+  if (next === scoreHistory) return;
+  scoreHistory = next;
+  show.data = { ...show.data, event: { ...show.data.event, score: scoreHistory.present } };
+  markShowDirty();
+  if (output.active) output.setScore(scoreHistory.present);
+  renderLiveConsole();
+  renderOutput();
+}
+
+async function confirmEndSet(): Promise<void> {
+  const score = scoreHistory.present;
+  if (matchWinner(score)) {
+    setMessage(
+      'The match is complete. Undo the last action or reset before starting another match.',
+    );
+    return;
+  }
+  const winner = higherScoringSide(score);
+  if (!winner) {
+    setMessage('The set is tied. Change the score before ending the set.');
+    return;
+  }
+  const winnerName = score[winner].name;
+  const confirmed = await askConfirm(actionDialogElements(), {
+    kicker: 'Volleyball score',
+    title: `End Set ${score.setNumber}?`,
+    text: `${winnerName} wins ${score.homePoints}–${score.awayPoints}.${regulationSetWinner(score) ? '' : ` This is below the standard ${setPointTarget(score)}-point, win-by-two finish. Confirm only for a correction or local rules.`}`,
+    confirmLabel: 'End Set',
+  });
+  if (confirmed) commitScoreAction({ type: 'end-set', winner });
+}
+
+async function confirmResetScore(): Promise<void> {
+  const confirmed = await askConfirm(actionDialogElements(), {
+    kicker: 'Volleyball score',
+    title: 'Reset match score?',
+    text: 'Points, sets won, set number, and serving side will be reset.',
+    confirmLabel: 'Reset score',
+    destructive: true,
+  });
+  if (confirmed) commitScoreAction({ type: 'reset' });
+}
+
+function renderLiveConsole(): void {
+  renderScoreDeck({ summary: ui.scoreSummary, controls: ui.scoreControls }, scoreHistory, {
+    onAction: commitScoreAction,
+    onEndSet: () => void confirmEndSet(),
+    onUndo: undoScoreAction,
+    onReset: () => void confirmResetScore(),
+  });
+  ui.liveModeScore.classList.toggle('selected', liveMode === 'score');
+  ui.liveModeScore.setAttribute('aria-pressed', String(liveMode === 'score'));
+  ui.liveModeStats.classList.toggle('selected', liveMode === 'stats');
+  ui.liveModeStats.setAttribute('aria-pressed', String(liveMode === 'stats'));
+  ui.scoreControls.hidden = liveMode !== 'score';
+  ui.liveEmpty.hidden = liveMode !== 'stats' || team() !== undefined;
+  ui.liveView.hidden = liveMode !== 'stats' || team() === undefined;
+}
+
 function markResourceDirty(kind: 'media' | 'team'): void {
   if (kind === 'media') {
     mediaDirty = true;
@@ -602,7 +745,7 @@ function reconcileEventForTeam(data: ShowDocument['event'], current: Team): Show
     liveGroups[groupId] =
       group.maxPlayers === undefined ? filtered : filtered.slice(0, group.maxPlayers);
   }
-  return { stats, liveGroups };
+  return { stats, liveGroups, score: data.score ?? defaultVolleyballScore(current) };
 }
 
 function setMessage(value: string | null): void {
@@ -681,7 +824,9 @@ function activateScene(sceneId: string): void {
   selectedSceneId = scene.id;
   if (output.active) {
     activeSceneId = scene.id;
-    output.applyScene(scene, liveBoardData(scene));
+    const screen = show.data.screens.find((item) => item.id === scene.id);
+    if (screen) output.applyScreen(screen, liveBoardData(scene), show.data.event.score);
+    else output.applyScene(scene, liveBoardData(scene));
     output.setTheme(outputTheme(scene));
   }
   renderOutput();
@@ -705,7 +850,8 @@ function renderScenes(): void {
     {
       scenes: show.data.scenes,
       activeSceneId,
-      // The quick-switch strip only earns its space while output is live.
+      selectedSceneId: selectedScene().id,
+      showWhenOffAir: activePage === 'live',
       live: output.active,
       onSwitch: (sceneId) => activateScene(sceneId),
     },
@@ -736,7 +882,22 @@ function renderScenes(): void {
 }
 
 function applySceneSet(next: SceneSet): void {
-  show.data = { ...show.data, ...next };
+  const existing = new Map(show.data.screens.map((screen) => [screen.id, screen]));
+  const screens = next.scenes.map((scene) => {
+    const current = existing.get(scene.id);
+    return current
+      ? { ...cloneScreen(current), name: scene.name, background: { ...scene.background } }
+      : screenFromTemplate('half-left-right', scene.name, scene.id, [
+          { kind: 'media' },
+          { kind: 'score' },
+        ]);
+  });
+  show.data = {
+    ...show.data,
+    ...next,
+    screens,
+    defaultScreenId: next.defaultSceneId,
+  };
   markShowDirty();
   renderOutput();
 }
@@ -751,7 +912,7 @@ async function newSceneFromMenu(): Promise<void> {
   const scene: Scene = {
     id: nextSceneId(show.data.scenes, name),
     name,
-    layout: layoutPreset('full'),
+    layout: layoutPreset('half-half'),
     background: { kind: 'black' },
   };
   selectedSceneId = scene.id;
@@ -767,6 +928,12 @@ async function duplicateSceneFromMenu(): Promise<void> {
   });
   if (!name) return;
   const scene = { ...cloneScene(source), id: nextSceneId(show.data.scenes, name), name };
+  const sourceScreen = show.data.screens.find((screen) => screen.id === source.id);
+  if (sourceScreen)
+    show.data = {
+      ...show.data,
+      screens: [...show.data.screens, { ...cloneScreen(sourceScreen), id: scene.id, name }],
+    };
   selectedSceneId = scene.id;
   applySceneSet(addScene(sceneSet(), scene));
 }
@@ -895,7 +1062,7 @@ function beginZonesEdit(): void {
   }
   // Done, Cancel and the zone tools all live on the Scenes page. Never leave
   // the board in calibration mode with no visible way out.
-  if (activePage !== 'scenes') selectPage('scenes');
+  if (activePage !== 'screens') selectPage('screens');
   zoneEditSession = beginZoneEdit(selectedScene());
   if (output.active) {
     const { width, height } = currentOutputDimensions();
@@ -953,7 +1120,13 @@ function liveBoardData(scene: Scene = activeScene()): BoardData {
 
 const output = new OutputController({
   onPosition: (position, total) => {
+    currentMediaPosition = total > 0 ? position : 0;
     if (total > 0) setMessage(`Showing media ${position} of ${total}.`);
+    const item = mediaSet().items[position - 1];
+    ui.liveMediaLabel.textContent = item
+      ? `${basename(item.path, style)} · ${position}/${total}`
+      : 'No media loaded';
+    renderSummaries();
     updateGlobalStatus();
   },
   onStopped: (reason) => {
@@ -1004,7 +1177,7 @@ function manualGroupName(session: ManualGroupSession): string {
  */
 function updateGlobalStatus(): void {
   if (!output.active) {
-    ui.globalStatus.textContent = `Ready · ${selectedScene().name}`;
+    ui.globalStatus.textContent = 'OFF AIR';
     ui.globalStatus.classList.remove('live');
     return;
   }
@@ -1018,21 +1191,26 @@ function updateGlobalStatus(): void {
     : manualSession
       ? `${manualGroupName(manualSession)} ${manualShownCount(manualSession)}/${manualSession.playerIds.length}`
       : (display && displayLabel(display)) || 'Output';
-  ui.globalStatus.textContent = `● LIVE · ${activeScene().name} · ${detail}`;
+  ui.globalStatus.textContent = `● ON AIR · ${display ? displayLabel(display) : detail}`;
   ui.globalStatus.classList.add('live');
 }
 
 type HistoryMode = 'push' | 'replace' | 'none';
 
-function selectPage(page: PageName, historyMode: HistoryMode = 'push'): void {
+function selectPage(
+  requestedPage: PageName | 'home' | 'roster' | 'scenes' | 'output',
+  historyMode: HistoryMode = 'push',
+): void {
+  const page = pageFromHash(`#${requestedPage}`);
   const changed = activePage !== page;
   activePage = page;
   renderPage(document, page);
   if (historyMode === 'replace') history.replaceState({ page }, '', pageHash(page));
   else if (historyMode === 'push' && (changed || window.location.hash !== pageHash(page)))
     history.pushState({ page }, '', pageHash(page));
-  ui.headerOutput.disabled = page === 'output';
-  ui.headerOutput.textContent = page === 'output' ? 'Output open' : 'Open output';
+  ui.headerOutput.disabled = page === 'live';
+  ui.headerOutput.textContent = page === 'live' ? 'Live open' : 'Open Live';
+  renderScenes();
   if (changed) ui.workspace.scrollTo({ top: 0, behavior: 'instant' });
   if (changed && page === 'live') {
     const current = team();
@@ -1058,9 +1236,10 @@ function renderSummaries(): void {
   const preflight =
     mediaPreflightResult?.total === media.items.length ? mediaPreflightResult : null;
   const currentTeam = team();
-  const scene = selectedScene();
+  const scene = output.active ? activeScene() : selectedScene();
+  const screen = show.data.screens.find((item) => item.id === scene.id) ?? show.data.screens[0];
   const display = findById(displays, selectedDisplayId);
-  const hasBoard = layoutZones(scene.layout).some((zone) => zone.role === 'live-board');
+  const hasBoard = screen?.panels.some((panel) => panel.content.kind === 'stats') ?? false;
   const boardReady = currentTeam !== undefined && liveGroupId(scene) !== null;
   const showName = show.filePath
     ? basename(show.filePath, style).replace(/\.picta$/i, '')
@@ -1095,7 +1274,17 @@ function renderSummaries(): void {
   ui.outputStateBadge.textContent = output.active ? 'ON AIR' : 'OFF AIR';
   ui.outputStateBadge.classList.toggle('live', output.active);
   ui.outputSceneName.textContent = scene.name;
-  ui.outputMiniPreview.textContent = `${layoutZones(scene.layout).length} zone${layoutZones(scene.layout).length === 1 ? '' : 's'} · ${layoutPresetId(scene.layout) === 'custom' ? 'Custom' : 'Preset'}`;
+  ui.outputMiniPreview.style.aspectRatio = `${display?.width ?? 1920} / ${display?.height ?? 1080}`;
+  const previewItem = media.items[Math.max(0, (currentMediaPosition || 1) - 1)] ?? media.items[0];
+  if (screen)
+    renderScreenPreview(ui.outputMiniPreview, screen, {
+      score: scoreHistory.present,
+      stats: liveBoardData(scene),
+      ...(previewItem ? { mediaLabel: basename(previewItem.path, style) } : {}),
+      ...(previewItem?.type === 'image' && !previewItem.missing
+        ? { mediaSrc: convertFileSrc(previewItem.path) }
+        : {}),
+    });
   ui.outputMediaReadiness.textContent =
     media.items.length === 0
       ? 'None'
@@ -1109,13 +1298,13 @@ function renderSummaries(): void {
     : 'Not used';
   ui.outputDisplayReadiness.textContent = display ? displayLabel(display) : 'Not selected';
   if (output.active) {
-    ui.outputActionTitle.textContent = 'Output active';
+    ui.outputActionTitle.textContent = 'On air';
     ui.outputActionCopy.textContent = `${scene.name} · ${display ? displayLabel(display) : 'Output display'}`;
   } else if (!display) {
     ui.outputActionTitle.textContent = 'No display selected';
     ui.outputActionCopy.textContent = 'Select an output display.';
   } else {
-    ui.outputActionTitle.textContent = 'Ready';
+    ui.outputActionTitle.textContent = 'Off air';
     ui.outputActionCopy.textContent = `${scene.name} · ${displayLabel(display)}`;
   }
 }
@@ -1130,32 +1319,7 @@ function renderMedia(): void {
   data.items.forEach((item, index) => {
     const row = document.createElement('article');
     row.className = 'media-item';
-    row.draggable = true;
     row.dataset['mediaId'] = item.id;
-    row.addEventListener('dragstart', (event) => {
-      event.dataTransfer?.setData('application/x-picta-media', item.id);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-      row.classList.add('dragging');
-    });
-    row.addEventListener('dragover', (event) => {
-      if (!event.dataTransfer?.types.includes('application/x-picta-media')) return;
-      event.preventDefault();
-      row.classList.add('drag-over');
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', (event) => {
-      const sourceId = event.dataTransfer?.getData('application/x-picta-media');
-      const from = data.items.findIndex((candidate) => candidate.id === sourceId);
-      row.classList.remove('drag-over');
-      if (from < 0 || from === index) return;
-      event.preventDefault();
-      updateMedia({ ...data, items: moveMediaItem(data.items, from, index) });
-    });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('dragging');
-      for (const candidate of ui.mediaList.querySelectorAll('.drag-over'))
-        candidate.classList.remove('drag-over');
-    });
     const preview = document.createElement('div');
     preview.className = 'media-preview';
     if (item.type === 'image' && !item.missing) {
@@ -1198,7 +1362,7 @@ function renderMedia(): void {
       () => {
         if (index > 0) updateMedia({ ...data, items: moveMediaItem(data.items, index, index - 1) });
       },
-      index === 0,
+      output.active || index === 0,
     );
     action(
       '↓',
@@ -1206,13 +1370,30 @@ function renderMedia(): void {
         if (index < data.items.length - 1)
           updateMedia({ ...data, items: moveMediaItem(data.items, index, index + 1) });
       },
-      index === data.items.length - 1,
+      output.active || index === data.items.length - 1,
     );
-    action('Remove', () =>
-      updateMedia({ ...data, items: data.items.filter((_, itemIndex) => itemIndex !== index) }),
+    action(
+      'Remove',
+      () =>
+        updateMedia({ ...data, items: data.items.filter((_, itemIndex) => itemIndex !== index) }),
+      output.active,
     );
     body.append(name, meta, actions);
     row.append(preview, body);
+    if (!output.active)
+      attachPointerReorder({
+        element: row,
+        container: ui.mediaList,
+        itemSelector: '.media-item',
+        dataKey: 'mediaId',
+        id: item.id,
+        onMove: (sourceId, targetId) => {
+          const from = data.items.findIndex((candidate) => candidate.id === sourceId);
+          const to = data.items.findIndex((candidate) => candidate.id === targetId);
+          if (from >= 0 && to >= 0)
+            updateMedia({ ...data, items: moveMediaItem(data.items, from, to) });
+        },
+      });
     ui.mediaList.append(row);
   });
   const missing = data.items.filter((item) => item.missing).length;
@@ -1221,6 +1402,8 @@ function renderMedia(): void {
       ? 'No media'
       : `${data.items.length} item${data.items.length === 1 ? '' : 's'}`;
   ui.mediaClear.hidden = data.items.length === 0;
+  ui.mediaClear.disabled = output.active;
+  ui.mediaDropzone.disabled = output.active;
   ui.mediaEmpty.hidden = data.items.length !== 0;
   ui.mediaMissing.hidden = missing === 0;
   ui.mediaMissingText.textContent = `${missing} media file${missing === 1 ? '' : 's'} could not be found.`;
@@ -1240,6 +1423,7 @@ function renderMedia(): void {
   // Previous/Next drive the live program; off air they are a pair of dead
   // buttons on a page the operator uses to prepare.
   ui.mediaTransport.hidden = !output.active;
+  ui.mediaLockNotice.hidden = !output.active;
   ui.mediaPrevious.disabled = !output.active;
   ui.mediaNext.disabled = !output.active;
   renderSummaries();
@@ -1261,6 +1445,10 @@ async function showMediaNow(item: MediaItem): Promise<void> {
 }
 
 async function addMedia(paths: readonly string[]): Promise<void> {
+  if (output.active) {
+    setMessage('Stop output before adding, removing, or reordering media.');
+    return;
+  }
   const supported = paths.filter(isSupportedMediaPath);
   if (supported.length === 0) {
     setMessage('Picta supports PNG, JPEG, WebP, MP4 and WebM.');
@@ -1514,31 +1702,7 @@ function renderGroupEditor(current: Team): void {
     if (!player) continue;
     const row = document.createElement('div');
     row.className = 'group-row';
-    row.draggable = true;
     row.dataset['playerId'] = player.id;
-    row.addEventListener('dragstart', (event) => {
-      event.dataTransfer?.setData('application/x-picta-group-player', player.id);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-      row.classList.add('dragging');
-    });
-    row.addEventListener('dragover', (event) => {
-      if (!event.dataTransfer?.types.includes('application/x-picta-group-player')) return;
-      event.preventDefault();
-      row.classList.add('drag-over');
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', (event) => {
-      const sourceId = event.dataTransfer?.getData('application/x-picta-group-player');
-      const from = group.playerIds.indexOf(sourceId ?? '');
-      row.classList.remove('drag-over');
-      if (from < 0 || from === index) return;
-      event.preventDefault();
-      updateTeam(reorderGroupPlayer(current, group.id, from, index));
-    });
-    row.addEventListener('dragend', () => {
-      for (const candidate of ui.groupEditor.querySelectorAll('.dragging, .drag-over'))
-        candidate.classList.remove('dragging', 'drag-over');
-    });
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
     handle.textContent = '☰';
@@ -1569,6 +1733,18 @@ function renderGroupEditor(current: Team): void {
     );
     button('Remove', () => updateTeam(removePlayerFromGroup(current, group.id, player.id)));
     row.append(handle, number, name, actions);
+    attachPointerReorder({
+      element: row,
+      container: ui.groupEditor,
+      itemSelector: '.group-row',
+      dataKey: 'playerId',
+      id: player.id,
+      onMove: (sourceId, targetId) => {
+        const from = group.playerIds.indexOf(sourceId);
+        const to = group.playerIds.indexOf(targetId);
+        if (from >= 0 && to >= 0) updateTeam(reorderGroupPlayer(current, group.id, from, to));
+      },
+    });
     ui.groupEditor.append(row);
   }
   const available = current.players.filter((player) => !group.playerIds.includes(player.id));
@@ -1734,30 +1910,7 @@ function renderRosterList(current: Team): void {
     const row = document.createElement('div');
     row.className = 'roster-row';
     row.tabIndex = 0;
-    row.draggable = true;
     row.dataset['playerId'] = player.id;
-    row.addEventListener('dragstart', (event) => {
-      event.dataTransfer?.setData('application/x-picta-roster-player', player.id);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-      row.classList.add('dragging');
-    });
-    row.addEventListener('dragover', (event) => {
-      if (!event.dataTransfer?.types.includes('application/x-picta-roster-player')) return;
-      event.preventDefault();
-      row.classList.add('drag-over');
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', (event) => {
-      const sourceId = event.dataTransfer?.getData('application/x-picta-roster-player');
-      row.classList.remove('drag-over');
-      if (!sourceId || sourceId === player.id) return;
-      event.preventDefault();
-      updateTeam(reorderRosterPlayer(current, sourceId, player.id));
-    });
-    row.addEventListener('dragend', () => {
-      for (const candidate of ui.rosterList.querySelectorAll('.dragging, .drag-over'))
-        candidate.classList.remove('dragging', 'drag-over');
-    });
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
     handle.textContent = '☰';
@@ -1787,6 +1940,14 @@ function renderRosterList(current: Team): void {
     showButton.addEventListener('click', () => void showPlayerCard(player));
     actions.append(inspect, showButton);
     row.append(handle, number, name, position, actions);
+    attachPointerReorder({
+      element: row,
+      container: ui.rosterList,
+      itemSelector: '.roster-row',
+      dataKey: 'playerId',
+      id: player.id,
+      onMove: (sourceId, targetId) => updateTeam(reorderRosterPlayer(current, sourceId, targetId)),
+    });
     row.addEventListener('click', (event) => {
       if ((event.target as HTMLElement).closest('button')) return;
       selectedPlayerId = player.id;
@@ -2087,6 +2248,7 @@ function renderPlayers(): void {
   if (!current) {
     ui.liveTable.replaceChildren();
     renderSummaries();
+    renderLiveConsole();
     return;
   }
   ui.rosterView.hidden = false;
@@ -2101,6 +2263,7 @@ function renderPlayers(): void {
   // Last: a running lineup collapses the setup UI the calls above just drew.
   renderManualSession(current);
   renderSummaries();
+  renderLiveConsole();
 }
 
 function updateOutputBoard(): void {
@@ -2157,14 +2320,6 @@ function previewDividerRatio(path: LayoutPath, ratio: number): void {
   sendLayoutEditPreview();
 }
 
-/** Rebuild the Start-from presets.  They only exist inside Edit Zones. */
-const PRESET_NOTES: Record<(typeof LAYOUT_PRESETS)[number], string> = {
-  full: 'Program fills the screen',
-  'half-half': 'Program and live board',
-  'program-2-3': '2/3 program + 1/3 board',
-  'board-1-3': '1/3 board + 2/3 program',
-};
-
 /**
  * Presets are drawn from the layout module rather than the markup, so the panel
  * can never offer a layout the app does not have.  They stay visible when the
@@ -2174,29 +2329,37 @@ const PRESET_NOTES: Record<(typeof LAYOUT_PRESETS)[number], string> = {
  */
 function renderLayoutPresets(layout: LayoutNode): void {
   ui.layoutPresets.replaceChildren();
-  const editing = zoneEditSession !== null;
-  const current = layoutPresetId(layout);
-  for (const id of LAYOUT_PRESETS) {
+  const screen = selectedScreen();
+  const current = screenTemplateId(screen);
+  const labels = {
+    full: ['Full', 'One full-screen panel'],
+    'half-left-right': ['50 / 50', 'Left and right panels'],
+    '65-35-left-right': ['65 / 35', 'Wide left panel'],
+    '35-65-left-right': ['35 / 65', 'Wide right panel'],
+    'half-top-bottom': ['50 / 50 top-bottom', 'Top and bottom panels'],
+  } as const;
+  for (const id of SCREEN_TEMPLATES) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'preset-card';
     const name = document.createElement('strong');
-    name.textContent = layoutPresetLabel(id);
+    name.textContent = labels[id][0];
     const note = document.createElement('small');
-    note.textContent = PRESET_NOTES[id];
+    note.textContent = labels[id][1];
     button.append(name, note);
     button.setAttribute('aria-pressed', String(id === current));
     if (id === current) button.classList.add('active');
-    button.disabled = !editing;
-    // A preset changes the draft only; Cancel still restores the original.
-    button.addEventListener('click', () => setDraftLayoutChecked(layoutPreset(id)));
+    button.addEventListener('click', () => {
+      const contents = screen.panels.map((panel) => panel.content);
+      replaceSelectedScreen(screenFromTemplate(id, screen.name, screen.id, contents));
+    });
     ui.layoutPresets.append(button);
   }
-  ui.layoutPresetsHint.textContent = editing
-    ? 'Choosing one replaces the draft. Cancel still restores the scene.'
-    : current === 'custom'
-      ? 'This scene uses a custom layout. Choose Edit zones to change it.'
-      : 'Choose Edit zones to change the layout.';
+  ui.layoutPresetsHint.textContent =
+    current === 'imported'
+      ? 'Imported layout. Choose a template to reset it.'
+      : 'Choose a template, then assign content to each panel.';
+  void layout;
 }
 
 function renderZoneEditor(scene: Scene): void {
@@ -2269,9 +2432,49 @@ function renderOutput(): void {
     onRatioPreview: previewDividerRatio,
     onRatioCommit: commitDividerRatio,
   });
-  ui.layoutDetail.textContent = `${width} × ${height} · ${rects
-    .map((rect) => `${zoneRoleLabel(rect.role)} ${rect.width}×${rect.height}`)
-    .join(' · ')}`;
+  if (!zoneEditSession) {
+    ui.layoutPreview.style.height = 'auto';
+    ui.layoutPreview.style.aspectRatio = `${width} / ${height}`;
+    const screen = selectedScreen();
+    const previewItem = mediaSet().items[Math.max(0, (currentMediaPosition || 1) - 1)];
+    selectedScreenPanelId =
+      screen.panels.find((panel) => panel.id === selectedScreenPanelId)?.id ??
+      screen.panels[0]?.id ??
+      null;
+    renderScreenPreview(ui.layoutPreview, screen, {
+      score: scoreHistory.present,
+      stats: liveBoardData(scene),
+      ...(selectedScreenPanelId ? { selectedPanelId: selectedScreenPanelId } : {}),
+      onSelectPanel: (panelId) => {
+        selectedScreenPanelId = panelId;
+        renderOutput();
+      },
+      ...(previewItem ? { mediaLabel: basename(previewItem.path, style) } : {}),
+      ...(previewItem?.type === 'image' && !previewItem.missing
+        ? { mediaSrc: convertFileSrc(previewItem.path) }
+        : {}),
+    });
+    ui.screenPanelSelect.replaceChildren();
+    screen.panels.forEach((panel, index) => {
+      const option = document.createElement('option');
+      option.value = panel.id;
+      option.textContent = `Panel ${index + 1}`;
+      ui.screenPanelSelect.append(option);
+    });
+    if (selectedScreenPanelId) ui.screenPanelSelect.value = selectedScreenPanelId;
+    const selectedPanel = screen.panels.find((panel) => panel.id === selectedScreenPanelId);
+    if (selectedPanel) ui.screenPanelContent.value = selectedPanel.content.kind;
+    ui.layoutDetail.textContent = `${width} × ${height} · ${screen.panels
+      .map(
+        (panel) =>
+          `${panel.content.kind[0]?.toUpperCase()}${panel.content.kind.slice(1)} ${Math.round(panel.rect.width * 100)}% × ${Math.round(panel.rect.height * 100)}%`,
+      )
+      .join(' · ')}`;
+  } else {
+    ui.layoutDetail.textContent = `${width} × ${height} · ${rects
+      .map((rect) => `${zoneRoleLabel(rect.role)} ${rect.width}×${rect.height}`)
+      .join(' · ')}`;
+  }
   renderZoneEditor(scene);
 
   const current = team();
@@ -2295,7 +2498,7 @@ function renderOutput(): void {
   ui.outputStart.hidden = output.active;
   ui.outputStop.hidden = !output.active;
   ui.outputStart.disabled = selectedDisplayId === null || output.active;
-  ui.outputStart.textContent = `Start Output · ${selectedScene().name}`;
+  ui.outputStart.textContent = `Go Live · ${selectedScene().name}`;
   ui.outputStop.disabled = !output.active;
   ui.displaySelect.disabled = output.active;
   updateGlobalStatus();
@@ -2375,7 +2578,7 @@ async function startOutput(): Promise<void> {
       ),
     };
     output.resetReady();
-    const placed = await ipc.openPresentation(display.id);
+    const placed = await ipc.preparePresentation(display.id);
     presentationOpened = true;
     prefs = { ...prefs, displayHint: hintFor(placed) };
     writePrefs(prefs);
@@ -2385,11 +2588,17 @@ async function startOutput(): Promise<void> {
       transition: outputMedia.transition,
       imageSizing: outputMedia.imageSizing,
       layout: scene.layout,
+      screen: show.data.screens.find((screen) => screen.id === scene.id) ?? show.data.screens[0]!,
     };
     selectedSceneId = scene.id;
     activeSceneId = scene.id;
     output.setTheme(outputTheme(scene));
-    const started = await output.begin(outputMedia, settings, liveBoardData(scene));
+    const started = await output.begin(
+      outputMedia,
+      settings,
+      liveBoardData(scene),
+      show.data.event.score,
+    );
     if (!started) {
       activeSceneId = null;
       // The presentation window is already on the display.  Nothing can start
@@ -2405,6 +2614,7 @@ async function startOutput(): Promise<void> {
       );
       return;
     }
+    await ipc.showPresentation(display.id);
     renderMedia();
     renderPlayers();
     renderOutput();
@@ -2412,7 +2622,12 @@ async function startOutput(): Promise<void> {
     if (preflightNotice) setMessage(preflightNotice);
     startWatching();
   } catch (error) {
-    if (presentationOpened && !output.active) await ipc.closePresentation().catch(() => undefined);
+    if (presentationOpened) {
+      output.abandon();
+      activeSceneId = null;
+      await ipc.closePresentation().catch(() => undefined);
+      renderOutput();
+    }
     setMessage(String(error));
   } finally {
     busy = false;
@@ -2430,6 +2645,18 @@ function stopOutput(): void {
   renderPlayers();
   renderOutput();
   startWatching();
+}
+
+async function confirmStopOutput(): Promise<void> {
+  if (!output.active) return;
+  const confirmed = await askConfirm(actionDialogElements(), {
+    kicker: 'On air',
+    title: 'Stop output?',
+    text: 'The selected display will immediately go blank.',
+    confirmLabel: 'Stop Output',
+    destructive: true,
+  });
+  if (confirmed) stopOutput();
 }
 
 interface NewTeamDetails {
@@ -2489,8 +2716,9 @@ async function createNewTeam(): Promise<void> {
   show.data = {
     ...show.data,
     team: { kind: 'inline', data },
-    event: { stats: {}, liveGroups: {} },
+    event: { stats: {}, liveGroups: {}, score: defaultVolleyballScore(data) },
   };
+  scoreHistory = createScoreHistory(show.data.event.score!);
   markShowDirty();
   teamFilePath = null;
   teamDirty = true;
@@ -2594,64 +2822,80 @@ async function openMediaSetFile(path?: string): Promise<void> {
   writePrefs(prefs);
 }
 
-async function saveShow(): Promise<boolean> {
-  const path = show.filePath ?? (await chooseShowToSave(prefs.lastDirectory, 'Untitled.picta'));
-  if (!path) return false;
-  const result = await saveShowDocument(path, show.data, style);
-  if (!result.ok) {
-    await messageDialog(result.message, { title: 'Picta', kind: 'error' });
+async function saveShow(asNew = false): Promise<boolean> {
+  const suggested = show.filePath ? basename(show.filePath, style) : 'Untitled.picta';
+  const outcome = await runSaveTransaction(
+    show.filePath,
+    asNew,
+    () => chooseShowToSave(prefs.lastDirectory, suggested),
+    (path) => saveShowDocument(path, show.data, style),
+  );
+  if (outcome.status === 'cancelled') return false;
+  if (outcome.status === 'failed') {
+    await messageDialog(
+      'message' in outcome.result ? String(outcome.result.message) : 'The show could not be saved.',
+      { title: 'Picta', kind: 'error' },
+    );
     return false;
   }
-  show.filePath = path;
+  show.filePath = outcome.path;
   show.dirty = false;
   syncTitle();
-  prefs = { ...prefs, lastDirectory: dirname(path, style) };
+  prefs = { ...prefs, lastDirectory: dirname(outcome.path, style) };
   writePrefs(prefs);
   scheduleRecoveryPersistence();
   return true;
 }
-async function saveMedia(): Promise<boolean> {
+async function saveMedia(asNew = false): Promise<boolean> {
   const data = mediaSet();
-  const path =
-    mediaFilePath ??
-    (await chooseMediaSetToSave(
-      prefs.lastDirectory,
-      `${data.name.replace(/[^\w.-]+/g, '-')}.pictaset`,
-    ));
-  if (!path) return false;
-  const wasLinked = show.data.media.kind === 'file' && show.data.media.path === path;
-  const result = await saveMediaSet(path, data, style);
-  if (!result.ok) {
-    await messageDialog(result.message, { title: 'Picta', kind: 'error' });
+  const outcome = await runSaveTransaction(
+    mediaFilePath,
+    asNew,
+    () =>
+      chooseMediaSetToSave(prefs.lastDirectory, `${data.name.replace(/[^\w.-]+/g, '-')}.pictaset`),
+    (path) => saveMediaSet(path, data, style),
+  );
+  if (outcome.status === 'cancelled') return false;
+  if (outcome.status === 'failed') {
+    await messageDialog(
+      'message' in outcome.result
+        ? String(outcome.result.message)
+        : 'The media set could not be saved.',
+      { title: 'Picta', kind: 'error' },
+    );
     return false;
   }
-  mediaFilePath = path;
+  const wasLinked = show.data.media.kind === 'file' && show.data.media.path === outcome.path;
+  mediaFilePath = outcome.path;
   mediaDirty = false;
-  show.data = { ...show.data, media: { kind: 'file', path, data } };
+  show.data = { ...show.data, media: { kind: 'file', path: outcome.path, data } };
   if (!wasLinked) markShowDirty();
   renderMedia();
   scheduleRecoveryPersistence();
   return true;
 }
-async function saveTeamResource(): Promise<boolean> {
+async function saveTeamResource(asNew = false): Promise<boolean> {
   const current = team();
   if (!current) return true;
-  const path =
-    teamFilePath ??
-    (await chooseTeamToSave(
-      prefs.lastDirectory,
-      `${current.name.replace(/[^\w.-]+/g, '-')}.pictateam`,
-    ));
-  if (!path) return false;
-  const wasLinked = show.data.team?.kind === 'file' && show.data.team.path === path;
-  const result = await saveTeam(path, current, style);
-  if (!result.ok) {
-    await messageDialog(result.message, { title: 'Picta', kind: 'error' });
+  const outcome = await runSaveTransaction(
+    teamFilePath,
+    asNew,
+    () =>
+      chooseTeamToSave(prefs.lastDirectory, `${current.name.replace(/[^\w.-]+/g, '-')}.pictateam`),
+    (path) => saveTeam(path, current, style),
+  );
+  if (outcome.status === 'cancelled') return false;
+  if (outcome.status === 'failed') {
+    await messageDialog(
+      'message' in outcome.result ? String(outcome.result.message) : 'The team could not be saved.',
+      { title: 'Picta', kind: 'error' },
+    );
     return false;
   }
-  teamFilePath = path;
+  const wasLinked = show.data.team?.kind === 'file' && show.data.team.path === outcome.path;
+  teamFilePath = outcome.path;
   teamDirty = false;
-  show.data = { ...show.data, team: { kind: 'file', path, data: current } };
+  show.data = { ...show.data, team: { kind: 'file', path: outcome.path, data: current } };
   if (!wasLinked) markShowDirty();
   renderPlayers();
   scheduleRecoveryPersistence();
@@ -2757,7 +3001,8 @@ async function openShowFile(path?: string): Promise<void> {
   const result = outcome.value;
   prefs = { ...prefs, lastDirectory: dirname(result.filePath, style) };
   writePrefs(prefs);
-  if (result.migratedFromV1) setMessage('Opened a v1 show. Save it to write the new v2 format.');
+  if (result.migratedFromV1)
+    setMessage('Opened an older show. Save it to write the new v3 format.');
   else if (result.missingResources.length > 0)
     setMessage(
       `Could not load ${result.missingResources
@@ -2778,6 +3023,7 @@ function renderAll(): void {
   renderPlayers();
   renderDisplays();
   renderOutput();
+  renderLiveConsole();
 }
 
 async function checkForUpdate(force = false): Promise<void> {
@@ -2809,7 +3055,7 @@ function wirePageNavigation(): void {
     if (!item) continue;
     item.addEventListener('click', () => {
       const page = item.dataset['page'];
-      if (page && PAGE_NAMES.includes(page as PageName)) selectPage(page as PageName);
+      if (page) selectPage(pageFromHash(`#${page}`));
     });
     item.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
@@ -2818,8 +3064,8 @@ function wirePageNavigation(): void {
       const next = (index + direction + ui.navItems.length) % ui.navItems.length;
       const nextItem = ui.navItems[next];
       const page = nextItem?.dataset['page'];
-      if (nextItem && page && PAGE_NAMES.includes(page as PageName)) {
-        selectPage(page as PageName);
+      if (nextItem && page) {
+        selectPage(pageFromHash(`#${page}`));
         nextItem.focus();
       }
     });
@@ -2827,7 +3073,7 @@ function wirePageNavigation(): void {
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-go-page]')) {
     button.addEventListener('click', () => {
       const page = button.dataset['goPage'];
-      if (page && PAGE_NAMES.includes(page as PageName)) selectPage(page as PageName);
+      if (page) selectPage(pageFromHash(`#${page}`));
     });
   }
   ui.homePrimaryAction.addEventListener('click', () => selectPage('media'));
@@ -2839,6 +3085,15 @@ function wirePageNavigation(): void {
 
 function wire(): void {
   wirePageNavigation();
+  ui.liveModeScore.addEventListener('click', () => {
+    liveMode = 'score';
+    renderLiveConsole();
+  });
+  ui.liveModeStats.addEventListener('click', () => {
+    liveMode = 'stats';
+    if (team()) renderLive(team()!);
+    renderLiveConsole();
+  });
   ui.mediaDropzone.addEventListener(
     'click',
     () => void chooseMedia(prefs.lastDirectory).then(addMedia),
@@ -2867,10 +3122,10 @@ function wire(): void {
     () => void openMediaSetFile(),
   );
   need<HTMLButtonElement>('media-save-set').addEventListener('click', () => void saveMedia());
-  need<HTMLButtonElement>('media-save-set-as').addEventListener('click', () => {
-    mediaFilePath = null;
-    void saveMedia();
-  });
+  need<HTMLButtonElement>('media-save-set-as').addEventListener(
+    'click',
+    () => void saveMedia(true),
+  );
   need<HTMLButtonElement>('media-reveal-set').addEventListener('click', () => {
     if (mediaFilePath)
       void ipc.revealPath(mediaFilePath).catch((error) => setMessage(String(error)));
@@ -2881,10 +3136,10 @@ function wire(): void {
   need<HTMLButtonElement>('team-open').addEventListener('click', () => void openTeamFile());
   need<HTMLButtonElement>('team-open-menu').addEventListener('click', () => void openTeamFile());
   need<HTMLButtonElement>('team-save').addEventListener('click', () => void saveTeamResource());
-  need<HTMLButtonElement>('team-save-as').addEventListener('click', () => {
-    teamFilePath = null;
-    void saveTeamResource();
-  });
+  need<HTMLButtonElement>('team-save-as').addEventListener(
+    'click',
+    () => void saveTeamResource(true),
+  );
   need<HTMLButtonElement>('team-reveal').addEventListener('click', () => {
     if (teamFilePath) void ipc.revealPath(teamFilePath).catch((error) => setMessage(String(error)));
     else setMessage('Save this team first to reveal it.');
@@ -2942,6 +3197,21 @@ function wire(): void {
     applySceneSet(moveScene(sceneSet(), selectedScene().id, 1)),
   );
   ui.sceneEdit.addEventListener('click', () => beginZonesEdit());
+  ui.screenPanelSelect.addEventListener('change', () => {
+    selectedScreenPanelId = ui.screenPanelSelect.value || null;
+    renderOutput();
+  });
+  ui.screenPanelContent.addEventListener('change', () => {
+    const kind = ui.screenPanelContent.value;
+    if (!selectedScreenPanelId || !['media', 'score', 'stats', 'blank'].includes(kind)) return;
+    const content: PanelContent =
+      kind === 'stats'
+        ? selectedLiveGroupId
+          ? { kind: 'stats', groupId: selectedLiveGroupId }
+          : { kind: 'stats' }
+        : { kind: kind as 'media' | 'score' | 'blank' };
+    replaceSelectedScreen(updatePanelContent(selectedScreen(), selectedScreenPanelId, content));
+  });
   ui.zoneEditCancel.addEventListener('click', () => cancelZonesEdit());
   ui.zoneEditDone.addEventListener('click', () => doneZonesEdit());
   ui.zoneEditSafe.addEventListener('change', () => {
@@ -3007,7 +3277,7 @@ function wire(): void {
     }
   });
   ui.outputStart.addEventListener('click', () => void startOutput());
-  ui.outputStop.addEventListener('click', () => stopOutput());
+  ui.outputStop.addEventListener('click', () => void confirmStopOutput());
   ui.cuePrevious.addEventListener('click', () => output.previousCue());
   ui.cueNext.addEventListener('click', () => output.nextCue());
   ui.cueEnd.addEventListener('click', () => cancelActiveCue());
@@ -3027,7 +3297,6 @@ function wire(): void {
     if (!output.active) return;
     if (event.payload.key === 'Escape') {
       if (output.cueActive) cancelActiveCue();
-      else stopOutput();
     } else if (event.payload.key === 'ArrowLeft') output.previous();
     else if (event.payload.key === 'ArrowRight' || event.payload.key === ' ') output.next();
   });
@@ -3036,8 +3305,7 @@ function wire(): void {
     else if (event.payload === 'open') void openShowFile();
     else if (event.payload === 'save') void saveShow();
     else if (event.payload === 'save-as') {
-      show.filePath = null;
-      void saveShow();
+      void saveShow(true);
     } else if (event.payload === 'check-updates') void checkForUpdate(true);
   });
   window.addEventListener('keydown', (event) => {
@@ -3055,9 +3323,10 @@ function wire(): void {
     if (document.querySelector('dialog[open]')) return;
     if (!output.active) return;
     if (event.key === 'Escape') {
-      event.preventDefault();
-      if (output.cueActive) cancelActiveCue();
-      else stopOutput();
+      if (output.cueActive) {
+        event.preventDefault();
+        cancelActiveCue();
+      }
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === ' ') {
       // Space activates whatever control has focus.  Taking it globally would
       // make every focused button skip media instead of doing its own job.
@@ -3083,7 +3352,7 @@ function wire(): void {
       if (activePage !== 'media') selectPage('media');
       void openMediaSetFile(setPath);
     } else if (teamPath) {
-      if (activePage !== 'roster') selectPage('roster');
+      if (activePage !== 'team') selectPage('team');
       void openTeamFile(teamPath);
     } else if (paths.some(isSupportedMediaPath)) {
       if (activePage !== 'media') selectPage('media');
@@ -3178,8 +3447,17 @@ renderPage(document, activePage);
 if (appWindow) {
   void main().catch((error: unknown) => setMessage(`Picta could not start: ${String(error)}`));
 } else {
-  // The browser preview is intentionally read-only apart from page navigation.
+  // Keep the browser preview self-contained while still exercising the two
+  // operator decks used most often during responsive checks.
   renderAll();
   wirePageNavigation();
+  ui.liveModeScore.addEventListener('click', () => {
+    liveMode = 'score';
+    renderLiveConsole();
+  });
+  ui.liveModeStats.addEventListener('click', () => {
+    liveMode = 'stats';
+    renderLiveConsole();
+  });
   selectPage(activePage, 'replace');
 }

@@ -7,6 +7,7 @@
  */
 
 import type { MediaSet, ShowDocument, Team } from '../core/domain.js';
+import { defaultVolleyballScore } from '../core/score.js';
 import type { ResourceOpenResult } from './resource-io.js';
 import type { ShowOpenResult } from './show-io.js';
 
@@ -75,9 +76,9 @@ export async function runLatestOpen<T>(
   return { status: 'committed', value };
 }
 
-export function newDocumentSession(data: ShowDocument): DocumentSession {
+export function newDocumentSession(data: ShowDocument | unknown): DocumentSession {
   return {
-    show: { filePath: null, data, dirty: false },
+    show: { filePath: null, data: data as ShowDocument, dirty: false },
     mediaFilePath: null,
     mediaDirty: false,
     teamFilePath: null,
@@ -124,7 +125,7 @@ export function replaceTeamInSession(
       data: {
         ...current.show.data,
         team: { kind: 'file', path: result.filePath, data: result.data },
-        event: { stats: {}, liveGroups: {} },
+        event: { stats: {}, liveGroups: {}, score: defaultVolleyballScore(result.data) },
       },
     },
     teamFilePath: result.filePath,

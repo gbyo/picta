@@ -1,3 +1,5 @@
+@import './scoreboard.css';
+
 /*
  * The output is a board graphic, not a controller.  It uses solid surfaces,
  * strong type and zone-local measurements.  There are no controls, gradients
@@ -337,4 +339,16 @@ body {
   .video-layer {
     transition-duration: 0ms !important;
   }
+}
+
+.screen-layout {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.panel {
+  overflow: hidden;
+  border: 0;
+  container-type: size;
 }

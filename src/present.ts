@@ -7,6 +7,7 @@
  */
 
 import { emit, listen } from '@tauri-apps/api/event';
+import { renderScoreboard } from './app/scoreboard-ui.js';
 import {
   EVENT_BACKGROUND,
   EVENT_BOARD,
@@ -15,6 +16,9 @@ import {
   EVENT_CUE_END,
   EVENT_KEY,
   EVENT_LAYOUT,
+  EVENT_SCREEN,
+  EVENT_SCREEN_READY,
+  EVENT_SCORE,
   EVENT_LAYOUT_EDIT_BEGIN,
   EVENT_LAYOUT_EDIT_END,
   EVENT_LAYOUT_EDIT_UPDATE,
@@ -35,11 +39,21 @@ import {
   type LayoutEditPreviewMessage,
   type PlaybackEvent,
   type ReadyRequest,
+  type ScreenMessage,
+  type ScoreMessage,
   type ShowRequest,
   type ThemeMessage,
   type TakeoverRequest,
 } from './app/events.js';
-import type { BoardData, Cue, LayoutNode, ZoneRole } from './core/domain.js';
+import type {
+  BoardData,
+  Cue,
+  LayoutNode,
+  PanelContent,
+  ScreenPanel,
+  VolleyballScoreState,
+  ZoneRole,
+} from './core/domain.js';
 import type { BoardRow as LegacyBoardRow } from './core/lineup.js';
 import { legacyLayoutToTree, safeAreaForRect, zoneRoleLabel } from './core/layouts.js';
 
@@ -48,6 +62,7 @@ type LayerName = 'a' | 'b';
 interface ZoneRenderer {
   root: HTMLDivElement;
   role: ZoneRole;
+  contentKind: PanelContent['kind'] | 'legacy';
   images: Record<LayerName, HTMLImageElement>;
   visible: LayerName;
   video: HTMLVideoElement | null;
@@ -62,6 +77,7 @@ const editPreview = document.getElementById('edit-preview') as HTMLDivElement;
 let zones = new Map<string, ZoneRenderer>();
 let latestSessionToken = 0;
 let latestToken = 0;
+let latestCueToken = 0;
 let retiredTimer: number | null = null;
 
 function clearElementMedia(element: HTMLElement): void {
@@ -91,7 +107,11 @@ function setZoneMetrics(root: HTMLDivElement): void {
   else window.addEventListener('resize', update);
 }
 
-function createZone(id: string, role: ZoneRole): ZoneRenderer {
+function createZone(
+  id: string,
+  role: ZoneRole,
+  contentKind: PanelContent['kind'] | 'legacy' = 'legacy',
+): ZoneRenderer {
   const root = document.createElement('div');
   root.className = `layout-zone zone-${role}`;
   root.dataset['zoneId'] = id;
@@ -108,6 +128,7 @@ function createZone(id: string, role: ZoneRole): ZoneRenderer {
   const renderer: ZoneRenderer = {
     root,
     role,
+    contentKind,
     images: { a: imageA, b: imageB },
     visible: 'a',
     video: null,
@@ -115,7 +136,7 @@ function createZone(id: string, role: ZoneRole): ZoneRenderer {
     board: null,
     cueCard: null,
   };
-  if (role === 'live-board') {
+  if (role === 'live-board' || contentKind === 'score' || contentKind === 'stats') {
     const shell = document.createElement('section');
     shell.className = 'board-shell';
     shell.setAttribute('aria-hidden', 'true');
@@ -124,6 +145,58 @@ function createZone(id: string, role: ZoneRole): ZoneRenderer {
   }
   setZoneMetrics(root);
   return renderer;
+}
+
+function roleForContent(content: PanelContent): ZoneRole {
+  if (content.kind === 'media') return 'program';
+  if (content.kind === 'score' || content.kind === 'stats') return 'live-board';
+  return 'blank';
+}
+
+function positionPanel(renderer: ZoneRenderer, panel: ScreenPanel): void {
+  renderer.root.className = `layout-zone panel panel-${panel.content.kind}`;
+  renderer.root.dataset['panelId'] = panel.id;
+  renderer.root.style.position = 'absolute';
+  renderer.root.style.left = `${panel.rect.x * 100}%`;
+  renderer.root.style.top = `${panel.rect.y * 100}%`;
+  renderer.root.style.width = `${panel.rect.width * 100}%`;
+  renderer.root.style.height = `${panel.rect.height * 100}%`;
+}
+
+function setScreen(message: ScreenMessage): void {
+  if (message.sessionToken < latestSessionToken) return;
+  if (message.sessionToken > latestSessionToken) {
+    latestSessionToken = message.sessionToken;
+    latestToken = 0;
+    latestCueToken = 0;
+  }
+  const previous = zones;
+  const next = new Map<string, ZoneRenderer>();
+  layoutRoot.className = 'screen-layout';
+  for (const panel of message.screen.panels) {
+    const existing = previous.get(panel.id);
+    const renderer =
+      existing && existing.contentKind === panel.content.kind
+        ? existing
+        : createZone(panel.id, roleForContent(panel.content), panel.content.kind);
+    positionPanel(renderer, panel);
+    next.set(panel.id, renderer);
+    // append() moves an existing media host without reconstructing its video.
+    layoutRoot.append(renderer.root);
+  }
+  for (const [id, renderer] of previous) {
+    if (next.has(id) && next.get(id) === renderer) continue;
+    stopVideo(renderer);
+    for (const image of Object.values(renderer.images)) retireImage(image);
+    renderer.root.remove();
+  }
+  zones = next;
+  window.requestAnimationFrame(() => {
+    const panelIds = message.screen.panels
+      .filter((panel) => zones.get(panel.id)?.root.isConnected)
+      .map((panel) => panel.id);
+    void emit(EVENT_SCREEN_READY, { sessionToken: message.sessionToken, panelIds });
+  });
 }
 
 function createNode(node: LayoutNode): HTMLElement {
@@ -166,11 +239,23 @@ function programRenderer(): ZoneRenderer | undefined {
 }
 
 function boardRenderer(): ZoneRenderer | undefined {
-  return [...zones.values()].find((renderer) => renderer.role === 'live-board');
+  return [...zones.values()].find(
+    (renderer) => renderer.contentKind === 'stats' || renderer.contentKind === 'legacy',
+  );
+}
+
+function scoreRenderer(): ZoneRenderer | undefined {
+  return [...zones.values()].find((renderer) => renderer.contentKind === 'score');
 }
 
 function rendererForZone(zoneId?: string): ZoneRenderer | undefined {
   return (zoneId ? zones.get(zoneId) : undefined) ?? programRenderer();
+}
+
+function rendererForRequest(request: BackgroundMediaMessage): ZoneRenderer | undefined {
+  return (
+    (request.panelId ? zones.get(request.panelId) : undefined) ?? rendererForZone(request.zoneId)
+  );
 }
 
 function renderEditPreview(message: LayoutEditPreviewMessage): void {
@@ -245,12 +330,13 @@ function stopVideo(renderer: ZoneRenderer): void {
   renderer.videoToken = null;
 }
 
-function sendResult(token: number, ok: boolean, zoneId?: string, sessionToken?: number): void {
+function sendResult(request: BackgroundMediaMessage, ok: boolean): void {
   void emit(EVENT_RESULT, {
-    token,
+    token: request.token,
     ok,
-    ...(zoneId ? { zoneId } : {}),
-    ...(sessionToken === undefined ? {} : { sessionToken }),
+    ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+    ...(request.panelId ? { panelId: request.panelId } : {}),
+    ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
   });
 }
 
@@ -275,7 +361,7 @@ function requestIsCurrent(request: BackgroundMediaMessage): boolean {
 }
 
 async function showImage(request: BackgroundMediaMessage): Promise<void> {
-  const renderer = rendererForZone(request.zoneId);
+  const renderer = rendererForRequest(request);
   if (!renderer) return;
   if (!acceptRequest(request)) return;
   stopVideo(renderer);
@@ -289,12 +375,13 @@ async function showImage(request: BackgroundMediaMessage): Promise<void> {
     await image.decode();
   } catch {
     retireImage(image);
-    sendResult(request.token, false, request.zoneId, request.sessionToken);
+    sendResult(request, false);
     sendPlayback({
       token: request.token,
       event: 'failed',
       ok: false,
       ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+      ...(request.panelId ? { panelId: request.panelId } : {}),
       ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
     });
     return;
@@ -316,12 +403,13 @@ async function showImage(request: BackgroundMediaMessage): Promise<void> {
     retiredTimer = null;
     if (renderer.visible !== retired) retireImage(renderer.images[retired]);
   }, duration + 60);
-  sendResult(request.token, true, request.zoneId, request.sessionToken);
+  sendResult(request, true);
   sendPlayback({
     token: request.token,
     event: 'ready',
     ok: true,
     ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+    ...(request.panelId ? { panelId: request.panelId } : {}),
     ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
   });
 }
@@ -331,7 +419,7 @@ function showVideo(
   fullTarget: HTMLElement | null = null,
   trackBackgroundToken = true,
 ): void {
-  const renderer = fullTarget ? null : rendererForZone(request.zoneId);
+  const renderer = fullTarget ? null : rendererForRequest(request);
   const host = fullTarget ?? renderer?.root;
   if (!host || (trackBackgroundToken && !acceptRequest(request))) return;
   if (renderer) {
@@ -358,12 +446,13 @@ function showVideo(
     finished = true;
     if (readyTimer !== null) window.clearTimeout(readyTimer);
     readyTimer = null;
-    sendResult(request.token, false, request.zoneId, request.sessionToken);
+    sendResult(request, false);
     sendPlayback({
       token: request.token,
       event: 'failed',
       ok: false,
       ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+      ...(request.panelId ? { panelId: request.panelId } : {}),
       ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
     });
     video.pause();
@@ -384,12 +473,13 @@ function showVideo(
         .then(() => {
           if (finished) return;
           video.classList.add('visible');
-          sendResult(request.token, true, request.zoneId, request.sessionToken);
+          sendResult(request, true);
           sendPlayback({
             token: request.token,
             event: 'ready',
             ok: true,
             ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+            ...(request.panelId ? { panelId: request.panelId } : {}),
             ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
           });
           sendPlayback({
@@ -397,6 +487,7 @@ function showVideo(
             event: 'started',
             ok: true,
             ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+            ...(request.panelId ? { panelId: request.panelId } : {}),
             ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
           });
         })
@@ -414,6 +505,7 @@ function showVideo(
       event: 'ended',
       ok: true,
       ...(request.zoneId ? { zoneId: request.zoneId } : {}),
+      ...(request.panelId ? { panelId: request.panelId } : {}),
       ...(request.sessionToken === undefined ? {} : { sessionToken: request.sessionToken }),
     });
   });
@@ -463,6 +555,13 @@ function renderBoard(renderer: ZoneRenderer, data: BoardData): void {
     empty.textContent = '';
     shell.append(empty);
   }
+}
+
+function renderScore(renderer: ZoneRenderer, score: VolleyballScoreState): void {
+  const shell = renderer.board;
+  if (!shell) return;
+  shell.className = 'scoreboard-shell';
+  renderScoreboard(shell, score);
 }
 
 function legacyBoard(rows: LegacyBoardRow[]): BoardData {
@@ -541,25 +640,30 @@ function renderCue(message: CueMessage): void {
     latestSessionToken = sessionToken;
     latestToken = 0;
   }
+  if (typeof message.token === 'number') {
+    if (message.token < latestCueToken) return;
+    latestCueToken = message.token;
+  }
   const cue = message.cue;
+  const targetRenderer = message.panelId ? zones.get(message.panelId) : programRenderer();
   if (cue.target === 'full-board') {
     for (const renderer of zones.values()) stopVideo(renderer);
   } else {
-    const renderer = programRenderer();
+    const renderer = targetRenderer;
     if (renderer) stopVideo(renderer);
   }
   if (cue.type === 'player-card') {
     const card = makeCard(cue, message.photoSrc);
     applyCardMode(
       card,
-      cue.target === 'full-board' ? fullCue : (programRenderer()?.root ?? layoutRoot),
+      cue.target === 'full-board' ? fullCue : (targetRenderer?.root ?? layoutRoot),
     );
     if (cue.target === 'full-board') {
       clearElementMedia(fullCue);
       fullCue.replaceChildren(card);
       fullCue.hidden = false;
     } else {
-      const renderer = programRenderer();
+      const renderer = targetRenderer;
       if (!renderer) return;
       renderer.cueCard?.remove();
       renderer.cueCard = card;
@@ -578,7 +682,7 @@ function renderCue(message: CueMessage): void {
       fullCue.replaceChildren(image);
       fullCue.hidden = false;
     } else {
-      const renderer = programRenderer();
+      const renderer = targetRenderer;
       if (!renderer) return;
       renderer.cueCard?.remove();
       renderer.cueCard = image;
@@ -601,6 +705,7 @@ function renderCue(message: CueMessage): void {
           transition: 'none',
           fadeMs: 0,
           muted: false,
+          ...(message.panelId ? { panelId: message.panelId } : {}),
         },
         fullCue,
         false,
@@ -616,6 +721,7 @@ function renderCue(message: CueMessage): void {
           transition: 'none',
           fadeMs: 0,
           muted: false,
+          ...(message.panelId ? { panelId: message.panelId } : {}),
         },
         undefined,
         false,
@@ -626,6 +732,7 @@ function renderCue(message: CueMessage): void {
 
 function endCue(message?: CueEndMessage): void {
   if ((message?.sessionToken ?? 0) !== latestSessionToken) return;
+  if (message?.cueToken !== undefined && message.cueToken !== latestCueToken) return;
   fullCue.hidden = true;
   clearElementMedia(fullCue);
   fullCue.replaceChildren();
@@ -649,7 +756,7 @@ function clear(message?: ClearMessage): void {
     renderer.cueCard = null;
     renderer.board?.replaceChildren();
   }
-  endCue({ sessionToken });
+  endCue({ sessionToken, cueToken: latestCueToken });
   endEditPreview();
 }
 
@@ -677,6 +784,7 @@ async function main(): Promise<void> {
   await listen<BackgroundMediaMessage>(EVENT_BACKGROUND, (event) => queueMedia(event.payload));
   await listen<ClearMessage>(EVENT_CLEAR, (event) => clear(event.payload));
   await listen<LayoutMessage>(EVENT_LAYOUT, (event) => setLayout(event.payload));
+  await listen<ScreenMessage>(EVENT_SCREEN, (event) => setScreen(event.payload));
   await listen<LayoutEditPreviewMessage>(EVENT_LAYOUT_EDIT_BEGIN, (event) =>
     renderEditPreview(event.payload),
   );
@@ -689,6 +797,11 @@ async function main(): Promise<void> {
     const data = event.payload.data ?? legacyBoard(event.payload.rows ?? []);
     const board = boardRenderer();
     if (board) renderBoard(board, data);
+  });
+  await listen<ScoreMessage>(EVENT_SCORE, (event) => {
+    if (event.payload.sessionToken !== latestSessionToken) return;
+    const renderer = scoreRenderer();
+    if (renderer) renderScore(renderer, event.payload.data);
   });
   await listen<CueMessage>(EVENT_CUE, (event) => renderCue(event.payload));
   await listen<CueEndMessage>(EVENT_CUE_END, (event) => endCue(event.payload));
@@ -708,7 +821,9 @@ async function main(): Promise<void> {
       },
     });
   });
-  await listen(EVENT_TAKEOVER_END, () => endCue({ sessionToken: latestSessionToken }));
+  await listen(EVENT_TAKEOVER_END, () =>
+    endCue({ sessionToken: latestSessionToken, cueToken: latestCueToken }),
+  );
   await listen<ReadyRequest>(EVENT_READY_REQUEST, (event) => {
     if (typeof event.payload?.token !== 'number') return;
     void emit(EVENT_READY, { token: event.payload.token });

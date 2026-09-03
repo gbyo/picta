@@ -12,6 +12,9 @@ import {
   EVENT_CUE,
   EVENT_CUE_END,
   EVENT_LAYOUT,
+  EVENT_SCREEN,
+  EVENT_SCREEN_READY,
+  EVENT_SCORE,
   EVENT_LAYOUT_EDIT_BEGIN,
   EVENT_LAYOUT_EDIT_END,
   EVENT_LAYOUT_EDIT_UPDATE,
@@ -28,9 +31,18 @@ import {
   type PlaybackEvent,
   type ReadyMessage,
   type ResultMessage,
+  type ScreenReadyMessage,
+  type ScoreMessage,
   type ThemeMessage,
 } from './events.js';
-import type { BoardData, Cue, LayoutNode, MediaSet } from '../core/domain.js';
+import type {
+  BoardData,
+  Cue,
+  LayoutNode,
+  MediaSet,
+  Screen,
+  VolleyballScoreState,
+} from '../core/domain.js';
 import { layoutZones, zoneIdForRole } from '../core/layouts.js';
 import { CueQueue, type CueOutcome, type CueQueueState } from '../core/cues.js';
 import { MediaPlaybackMachine, type MediaPlaybackEvent } from '../core/media-playback.js';
@@ -38,6 +50,8 @@ import { CROSSFADE_MS } from '../core/types.js';
 
 const PRESENTATION = 'presentation';
 export const READY_TIMEOUT_MS = 5000;
+export const SCREEN_READY_TIMEOUT_MS = 5000;
+export const INITIAL_CONTENT_TIMEOUT_MS = 10000;
 const READY_RETRY_MS = 100;
 
 export interface OutputSettings {
@@ -45,6 +59,8 @@ export interface OutputSettings {
   transition: 'none' | 'crossfade';
   imageSizing: 'fit' | 'fill';
   layout: LayoutNode;
+  /** v3 output uses this flat composition. `layout` remains migration compatibility. */
+  screen?: Screen;
 }
 
 export type OutputStopReason = 'user' | 'exhausted' | 'display-lost';
@@ -78,10 +94,27 @@ export class OutputController {
     timeout: number;
     retry: number;
   } | null = null;
+  #screenWaiter: {
+    sessionToken: number;
+    expectedPanelIds: Set<string>;
+    resolve: (ready: boolean) => void;
+    timeout: number;
+  } | null = null;
+  #initialMediaWaiter: {
+    sessionToken: number;
+    token: number;
+    resolve: (ready: boolean) => void;
+    timeout: number;
+  } | null = null;
   #active = false;
   #sessionToken = 0;
   #lastBeginFailure:
-    'presentation-not-ready' | 'presentation-unavailable' | 'no-usable-media' | null = null;
+    | 'presentation-not-ready'
+    | 'screen-not-ready'
+    | 'initial-content-not-ready'
+    | 'presentation-unavailable'
+    | 'no-usable-media'
+    | null = null;
   #set: MediaSet = {
     version: 1,
     name: 'Inline Media',
@@ -133,7 +166,12 @@ export class OutputController {
   }
 
   get lastBeginFailure():
-    'presentation-not-ready' | 'presentation-unavailable' | 'no-usable-media' | null {
+    | 'presentation-not-ready'
+    | 'screen-not-ready'
+    | 'initial-content-not-ready'
+    | 'presentation-unavailable'
+    | 'no-usable-media'
+    | null {
     return this.#lastBeginFailure;
   }
 
@@ -151,7 +189,7 @@ export class OutputController {
         this.#onReady(
           event.payload.token,
           event.payload.ok,
-          event.payload.zoneId,
+          event.payload.panelId ?? event.payload.zoneId,
           event.payload.sessionToken,
         ),
       ),
@@ -161,6 +199,11 @@ export class OutputController {
     );
     this.#unlisten.push(
       await listen<ReadyMessage>(EVENT_READY, (event) => this.#onPresentationReady(event.payload)),
+    );
+    this.#unlisten.push(
+      await listen<ScreenReadyMessage>(EVENT_SCREEN_READY, (event) =>
+        this.#onScreenReady(event.payload),
+      ),
     );
   }
 
@@ -176,7 +219,12 @@ export class OutputController {
     this.#unlisten = [];
   }
 
-  async begin(set: MediaSet, settings: OutputSettings, board?: BoardData): Promise<boolean> {
+  async begin(
+    set: MediaSet,
+    settings: OutputSettings,
+    board?: BoardData,
+    score?: VolleyballScoreState,
+  ): Promise<boolean> {
     this.stop('user', false);
     this.#lastBeginFailure = null;
     const sessionToken = ++this.#sessionToken;
@@ -198,7 +246,23 @@ export class OutputController {
     }
     this.#active = true;
     try {
-      await emitTo(PRESENTATION, EVENT_LAYOUT, { layout: settings.layout });
+      if (settings.screen) {
+        const screenReady = this.#waitForScreen(
+          sessionToken,
+          settings.screen.panels.map((panel) => panel.id),
+        );
+        await emitTo(PRESENTATION, EVENT_SCREEN, { sessionToken, screen: settings.screen });
+        const mounted = await screenReady;
+        if (sessionToken !== this.#sessionToken) return false;
+        if (!mounted) {
+          this.#lastBeginFailure = 'screen-not-ready';
+          this.#handlers.onWarning('The Screen did not finish loading. Nothing was shown.');
+          this.#cleanupFailedStart();
+          return false;
+        }
+      } else {
+        await emitTo(PRESENTATION, EVENT_LAYOUT, { layout: settings.layout });
+      }
       await emitTo(PRESENTATION, EVENT_THEME, this.#theme);
     } catch {
       if (sessionToken !== this.#sessionToken) return false;
@@ -209,24 +273,40 @@ export class OutputController {
     }
     if (sessionToken !== this.#sessionToken) return false;
     if (board) this.setBoard(board);
-    if (this.#set.items.length === 0) {
+    if (score) this.setScore(score);
+    const hasMediaPanel = settings.screen
+      ? settings.screen.panels.some((panel) => panel.content.kind === 'media')
+      : true;
+    if (this.#set.items.length === 0 || !hasMediaPanel) {
       this.#handlers.onPosition(0, 0);
       return true;
     }
     const request = this.#machine.start();
-    if (!request || request.type === 'stopped') {
+    if (!request || request.type !== 'request') {
       this.#lastBeginFailure = 'no-usable-media';
       this.stop('exhausted');
       return false;
     }
+    const initialReadyPromise = settings.screen
+      ? this.#waitForInitialMedia(sessionToken, request.token)
+      : null;
     this.#dispatchMedia(request);
-    return true;
+    if (!initialReadyPromise) return true;
+    const initialReady = await initialReadyPromise;
+    if (sessionToken !== this.#sessionToken) return false;
+    if (initialReady) return true;
+    this.#lastBeginFailure = 'initial-content-not-ready';
+    this.#handlers.onWarning('Initial media did not finish loading. Nothing was shown.');
+    this.#cleanupFailedStart();
+    return false;
   }
 
   stop(reason: OutputStopReason = 'user', notify = true): void {
     if (!this.#active && !this.#cueQueue.active && !this.#readyWaiter && !this.#machine) return;
     this.#sessionToken += 1;
     this.resetReady();
+    this.#finishScreenWait(false);
+    this.#finishInitialMediaWait(false);
     this.#cueQueue.cancel(false);
     this.#editing = false;
     this.#cancelEditFrame();
@@ -245,6 +325,8 @@ export class OutputController {
     this.#sessionToken += 1;
     this.#readyAttempt += 1;
     this.#finishReadyWait(false);
+    this.#finishScreenWait(false);
+    this.#finishInitialMediaWait(false);
     this.#cueQueue.cancel(false);
     this.#editing = false;
     this.#cancelEditFrame();
@@ -323,6 +405,47 @@ export class OutputController {
     void emitTo(PRESENTATION, EVENT_BOARD, message).catch(() => undefined);
   }
 
+  setScore(data: VolleyballScoreState): void {
+    if (!this.#active) return;
+    const message: ScoreMessage = { sessionToken: this.#sessionToken, data };
+    void emitTo(PRESENTATION, EVENT_SCORE, message).catch(() => undefined);
+  }
+
+  /** Switch compositions without touching the media playback machine. */
+  applyScreen(screen: Screen, board?: BoardData, score?: VolleyballScoreState): void {
+    if (!this.#active || this.#editing || !this.#settings) return;
+    const previousMedia = this.#settings.screen?.panels.find(
+      (panel) => panel.content.kind === 'media',
+    )?.id;
+    const nextMedia = screen.panels.find((panel) => panel.content.kind === 'media')?.id;
+    const mediaHostChanged = previousMedia !== nextMedia;
+    if (mediaHostChanged) {
+      this.#clearTimer();
+      this.#machine?.pause();
+    }
+    this.#settings = { ...this.#settings, screen };
+    const sessionToken = this.#sessionToken;
+    void emitTo(PRESENTATION, EVENT_SCREEN, {
+      sessionToken,
+      screen,
+    })
+      .then(() => {
+        if (
+          !this.#active ||
+          sessionToken !== this.#sessionToken ||
+          this.#settings?.screen !== screen
+        )
+          return;
+        if (board) this.setBoard(board);
+        if (score) this.setScore(score);
+        if (nextMedia && this.#set.items.length > 0 && !this.#machine?.state.active) {
+          const request = this.#machine?.resume();
+          if (request) this.#dispatchMedia(request);
+        }
+      })
+      .catch(() => this.#handlers.onWarning('The Screen could not be switched.'));
+  }
+
   next(): void {
     this.#step(1);
   }
@@ -373,6 +496,11 @@ export class OutputController {
 
   #step(direction: 1 | -1): void {
     if (!this.#active || !this.#machine) return;
+    if (
+      this.#settings?.screen &&
+      !this.#settings.screen.panels.some((panel) => panel.content.kind === 'media')
+    )
+      return;
     if (this.#cueQueue.active) this.#cueQueue.cancel();
     this.#clearTimer();
     const event = this.#machine.request(direction);
@@ -385,13 +513,17 @@ export class OutputController {
 
   #dispatchMedia(event: MediaPlaybackEvent): void {
     if (event.type !== 'request' || !this.#settings || this.#editing) return;
-    const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
+    const mediaPanelId = this.#settings.screen?.panels.find(
+      (panel) => panel.content.kind === 'media',
+    )?.id;
+    if (this.#settings.screen && !mediaPanelId) return;
+    const programZoneId = mediaPanelId ?? zoneIdForRole(this.#settings.layout, 'program');
     if (!programZoneId) return;
     this.#mediaToken = event.token;
     const request: BackgroundMediaMessage = {
       token: event.token,
       sessionToken: this.#sessionToken,
-      zoneId: programZoneId,
+      ...(mediaPanelId ? { panelId: mediaPanelId } : { zoneId: programZoneId }),
       src: convertFileSrc(event.item.path),
       type: event.item.type,
       sizing: this.#settings.imageSizing,
@@ -404,6 +536,7 @@ export class OutputController {
       if (this.#active && this.#sessionToken === sessionToken && this.#mediaToken === event.token)
         this.stop('display-lost');
     });
+    if (this.#settings.screen) return;
     for (const zone of layoutZones(this.#settings.layout).filter((item) => item.role === 'media')) {
       void emitTo(PRESENTATION, EVENT_BACKGROUND, {
         ...request,
@@ -413,11 +546,22 @@ export class OutputController {
     }
   }
 
-  #onReady(token: number, ok: boolean, zoneId?: string, sessionToken?: number): void {
+  #onReady(token: number, ok: boolean, targetId?: string, sessionToken?: number): void {
     if (!this.#active || this.#editing || !this.#settings || sessionToken !== this.#sessionToken)
       return;
-    const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
-    if (zoneId && zoneId !== programZoneId) return;
+    const programZoneId =
+      this.#settings.screen?.panels.find((panel) => panel.content.kind === 'media')?.id ??
+      zoneIdForRole(this.#settings.layout, 'program');
+    if (targetId && targetId !== programZoneId) return;
+    if (
+      this.#initialMediaWaiter?.sessionToken === sessionToken &&
+      this.#initialMediaWaiter.token === token
+    ) {
+      const waiter = this.#initialMediaWaiter;
+      this.#initialMediaWaiter = null;
+      window.clearTimeout(waiter.timeout);
+      waiter.resolve(ok);
+    }
     const machine = this.#machine;
     if (!machine) return;
     const event = ok ? machine.ready(token) : machine.failed(token);
@@ -451,8 +595,11 @@ export class OutputController {
       event.sessionToken !== this.#sessionToken
     )
       return;
-    const programZoneId = zoneIdForRole(this.#settings.layout, 'program');
-    if (event.zoneId && event.zoneId !== programZoneId) return;
+    const programZoneId =
+      this.#settings.screen?.panels.find((panel) => panel.content.kind === 'media')?.id ??
+      zoneIdForRole(this.#settings.layout, 'program');
+    const targetId = event.panelId ?? event.zoneId;
+    if (targetId && targetId !== programZoneId) return;
     if (
       this.#pendingCueResolve &&
       (event.event === 'ended' || event.event === 'failed') &&
@@ -491,6 +638,9 @@ export class OutputController {
       cue,
       token,
       sessionToken: this.#sessionToken,
+      ...(this.#settings?.screen?.cueTargetPanelId
+        ? { panelId: this.#settings.screen.cueTargetPanelId }
+        : {}),
       ...(cue.type === 'video'
         ? { src: this.#cueSources.get(cue.path) ?? convertFileSrc(cue.path) }
         : {}),
@@ -506,9 +656,10 @@ export class OutputController {
       .catch(() => false);
     if (this.#cueToken !== token || !this.#cueQueue.active || !this.#active) return false;
     if (!emitted) {
-      void emitTo(PRESENTATION, EVENT_CUE_END, { sessionToken: this.#sessionToken }).catch(
-        () => undefined,
-      );
+      void emitTo(PRESENTATION, EVENT_CUE_END, {
+        sessionToken: this.#sessionToken,
+        cueToken: token,
+      }).catch(() => undefined);
       this.#resumeBackground(wasCurrent);
       return false;
     }
@@ -535,9 +686,10 @@ export class OutputController {
     }).finally(() => {
       if (this.#cueToken !== token) return;
       this.#pendingCueResolve = null;
-      void emitTo(PRESENTATION, EVENT_CUE_END, { sessionToken: this.#sessionToken }).catch(
-        () => undefined,
-      );
+      void emitTo(PRESENTATION, EVENT_CUE_END, {
+        sessionToken: this.#sessionToken,
+        cueToken: token,
+      }).catch(() => undefined);
       this.#resumeBackground(wasCurrent);
     });
   }
@@ -550,13 +702,15 @@ export class OutputController {
 
   #cancelCuePresentation(): void {
     this.#clearTimer();
+    const dismissedToken = this.#cueToken;
     this.#cueToken += 1;
     const resolve = this.#pendingCueResolve;
     this.#pendingCueResolve = null;
     if (resolve) resolve(false);
-    void emitTo(PRESENTATION, EVENT_CUE_END, { sessionToken: this.#sessionToken }).catch(
-      () => undefined,
-    );
+    void emitTo(PRESENTATION, EVENT_CUE_END, {
+      sessionToken: this.#sessionToken,
+      cueToken: dismissedToken,
+    }).catch(() => undefined);
   }
 
   #clearTimer(): void {
@@ -599,6 +753,8 @@ export class OutputController {
     this.#machine = null;
     this.#settings = null;
     this.#active = false;
+    this.#finishScreenWait(false);
+    this.#finishInitialMediaWait(false);
     void emitTo(PRESENTATION, EVENT_CLEAR, { sessionToken: this.#sessionToken }).catch(
       () => undefined,
     );
@@ -608,6 +764,59 @@ export class OutputController {
     if (!message || typeof message.token !== 'number') return;
     if (message.token !== this.#readyWaiter?.token) return;
     this.#finishReadyWait(true);
+  }
+
+  #onScreenReady(message: ScreenReadyMessage): void {
+    const waiter = this.#screenWaiter;
+    if (!waiter || message.sessionToken !== waiter.sessionToken) return;
+    const mounted = new Set(message.panelIds);
+    if ([...waiter.expectedPanelIds].some((id) => !mounted.has(id))) return;
+    this.#finishScreenWait(true);
+  }
+
+  #waitForScreen(sessionToken: number, panelIds: readonly string[]): Promise<boolean> {
+    this.#finishScreenWait(false);
+    return new Promise((resolve) => {
+      const timeout = window.setTimeout(() => {
+        if (this.#screenWaiter?.sessionToken === sessionToken) this.#finishScreenWait(false);
+      }, SCREEN_READY_TIMEOUT_MS);
+      this.#screenWaiter = {
+        sessionToken,
+        expectedPanelIds: new Set(panelIds),
+        resolve,
+        timeout,
+      };
+    });
+  }
+
+  #finishScreenWait(ready: boolean): void {
+    const waiter = this.#screenWaiter;
+    if (!waiter) return;
+    this.#screenWaiter = null;
+    window.clearTimeout(waiter.timeout);
+    waiter.resolve(ready);
+  }
+
+  #waitForInitialMedia(sessionToken: number, token: number): Promise<boolean> {
+    this.#finishInitialMediaWait(false);
+    return new Promise((resolve) => {
+      const timeout = window.setTimeout(() => {
+        if (
+          this.#initialMediaWaiter?.sessionToken === sessionToken &&
+          this.#initialMediaWaiter.token === token
+        )
+          this.#finishInitialMediaWait(false);
+      }, INITIAL_CONTENT_TIMEOUT_MS);
+      this.#initialMediaWaiter = { sessionToken, token, resolve, timeout };
+    });
+  }
+
+  #finishInitialMediaWait(ready: boolean): void {
+    const waiter = this.#initialMediaWaiter;
+    if (!waiter) return;
+    this.#initialMediaWaiter = null;
+    window.clearTimeout(waiter.timeout);
+    waiter.resolve(ready);
   }
 
   #finishReadyWait(ready: boolean): void {

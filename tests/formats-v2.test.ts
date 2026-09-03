@@ -158,13 +158,14 @@ describe('picta v2 and v1 migration', () => {
         },
       ],
     });
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(3);
     expect(migrated.media.kind).toBe('inline');
     expect(migrated.media.data?.imageDurationSeconds).toBe(10);
     expect(migrated.media.data?.transition).toBe('crossfade');
     expect(migrated.team?.kind).toBe('inline');
     expect(migrated.event.liveGroups['on-court']).toHaveLength(1);
     expect(migrated.event.stats['player-v1-1']?.blockSolos).toBe(0);
-    expect(migrated.scenes[0]?.layout.type).toBe('split');
+    expect(migrated.screens[0]?.panels).toHaveLength(2);
+    expect(migrated.event.score?.homePoints).toBe(0);
   });
 });

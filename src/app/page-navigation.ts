@@ -1,6 +1,6 @@
 /** Page routing and rendered page state for the controller workspace. */
 
-export const PAGE_NAMES = ['home', 'media', 'roster', 'scenes', 'live', 'output'] as const;
+export const PAGE_NAMES = ['live', 'media', 'team', 'screens'] as const;
 
 export type PageName = (typeof PAGE_NAMES)[number];
 
@@ -11,35 +11,25 @@ export interface PageDetails {
 }
 
 export const PAGE_DETAILS: Record<PageName, PageDetails> = {
-  home: {
-    eyebrow: 'Workspace',
-    title: 'Home',
-    description: 'Build the show, check the room, and go live.',
-  },
-  media: {
-    eyebrow: 'Prepare',
-    title: 'Media',
-    description: 'Choose the images and videos that play in the program zone.',
-  },
-  roster: {
-    eyebrow: 'Prepare',
-    title: 'Roster',
-    description: 'Build reusable teams, groups, and player presentation cards.',
-  },
   live: {
     eyebrow: 'Operate',
     title: 'Live',
-    description: 'Choose the active lineup and update event statistics quickly.',
+    description: 'Preview the board, update the match, and control what is on air.',
   },
-  scenes: {
-    eyebrow: 'Prepare',
-    title: 'Scenes',
-    description: 'Compose the output canvas and choose what each zone shows.',
+  media: {
+    eyebrow: 'Setup',
+    title: 'Media',
+    description: 'Build the ordered media rotation used by Media panels.',
   },
-  output: {
-    eyebrow: 'Operate',
-    title: 'Output',
-    description: 'Confirm the destination and take the selected scene live.',
+  team: {
+    eyebrow: 'Setup',
+    title: 'Team',
+    description: 'Manage the reusable roster, groups, colors, and player cues.',
+  },
+  screens: {
+    eyebrow: 'Setup',
+    title: 'Screens',
+    description: 'Choose a template and assign Media, Score, Stats, or Blank panels.',
   },
 };
 
@@ -56,7 +46,10 @@ export function pageFromHash(hash: string): PageName {
     // percent escapes must fall through to the normal Home validation path.
     value = '';
   }
-  return isPageName(value) ? value : 'home';
+  if (value === 'roster') return 'team';
+  if (value === 'home' || value === 'scenes' || value === 'output')
+    return value === 'scenes' ? 'screens' : 'live';
+  return isPageName(value) ? value : 'live';
 }
 
 export function pageHash(page: PageName): string {
@@ -68,6 +61,8 @@ export function renderPage(document: Document, page: PageName): void {
   for (const panel of document.querySelectorAll<HTMLElement>('[data-page-panel]')) {
     panel.hidden = panel.dataset['pagePanel'] !== page;
   }
+  const liveOutput = document.getElementById('page-output');
+  if (liveOutput) liveOutput.hidden = page !== 'live';
   for (const item of document.querySelectorAll<HTMLElement>('.nav-item[data-page]')) {
     const current = item.dataset['page'] === page;
     if (current) item.setAttribute('aria-current', 'page');

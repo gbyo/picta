@@ -45,6 +45,8 @@ export interface SceneStripView {
   /** What the physical board is using right now. */
   activeSceneId: string | null;
   live: boolean;
+  selectedSceneId?: string;
+  showWhenOffAir?: boolean;
   onSwitch(sceneId: string): void;
 }
 
@@ -74,13 +76,18 @@ function sceneButton(scene: Scene, pressed: boolean, onClick: () => void): HTMLB
  * Picta showing images needs no scene chrome on every tab.
  */
 export function renderSceneStrip(elements: SceneStripElements, view: SceneStripView): void {
-  elements.strip.hidden = !view.live;
+  elements.strip.classList.toggle('on-air', view.live);
+  elements.strip.hidden = !view.live && !view.showWhenOffAir;
   elements.buttons.replaceChildren();
-  if (!view.live) return;
+  if (elements.strip.hidden) return;
   for (const scene of view.scenes) {
-    elements.buttons.append(
-      sceneButton(scene, scene.id === view.activeSceneId, () => view.onSwitch(scene.id)),
+    const button = sceneButton(
+      scene,
+      scene.id === (view.live ? view.activeSceneId : view.selectedSceneId),
+      () => view.onSwitch(scene.id),
     );
+    if (view.live && scene.id === view.activeSceneId) button.append(' · ● ON AIR');
+    elements.buttons.append(button);
   }
 }
 
@@ -90,12 +97,15 @@ export function renderScenePicker(elements: ScenePickerElements, view: ScenePick
     const button = sceneButton(scene, scene.id === view.selectedSceneId, () =>
       view.onSelect(scene.id),
     );
-    if (view.live && scene.id === view.activeSceneId) button.classList.add('scene-live');
+    if (view.live && scene.id === view.activeSceneId) {
+      button.classList.add('scene-live');
+      button.append(' · ● ON AIR');
+    }
     if (scene.id === view.defaultSceneId) {
       const star = document.createElement('span');
       star.className = 'scene-default-mark';
       star.textContent = '★';
-      star.title = 'Default scene';
+      star.title = 'Default Screen';
       button.append(' ', star);
     }
     button.disabled = view.editing;
@@ -137,9 +147,9 @@ export interface SceneDialogRequest {
 }
 
 const DIALOG_TITLES: Record<SceneDialogKind, string> = {
-  new: 'New Scene',
-  rename: 'Rename Scene',
-  duplicate: 'Duplicate Scene',
+  new: 'New Screen',
+  rename: 'Rename Screen',
+  duplicate: 'Duplicate Screen',
 };
 
 const DIALOG_CONFIRM: Record<SceneDialogKind, string> = {
@@ -166,7 +176,7 @@ export function askSceneName(
     const onSubmit = (event: SubmitEvent): void => {
       if ((event.submitter as HTMLButtonElement | null)?.value !== 'confirm') return;
       const name = elements.name.value.trim();
-      const error = name === '' ? 'Enter a scene name.' : request.validate(name);
+      const error = name === '' ? 'Enter a Screen name.' : request.validate(name);
       if (!error) return;
       event.preventDefault();
       elements.error.textContent = error;

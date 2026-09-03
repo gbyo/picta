@@ -62,6 +62,8 @@ export interface EventState {
   stats: Record<string, RawPlayerStats>;
   /** Live group overrides such as the current on-court or on-field players. */
   liveGroups: Record<string, string[]>;
+  /** Match state belongs to a show/event, never to a reusable team file. */
+  score?: VolleyballScoreState;
 }
 
 export interface MediaItem {
@@ -113,6 +115,56 @@ export interface ShowBackground {
   kind: 'black' | 'primary' | 'secondary';
 }
 
+export interface PanelRect {
+  /** Normalized coordinates in the inclusive 0..1 output canvas. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type PanelContent =
+  { kind: 'media' } | { kind: 'score' } | { kind: 'stats'; groupId?: string } | { kind: 'blank' };
+
+export interface ScreenPanel {
+  id: string;
+  rect: PanelRect;
+  content: PanelContent;
+}
+
+/** A complete, flat output composition. */
+export interface Screen {
+  id: string;
+  name: string;
+  panels: ScreenPanel[];
+  background: ShowBackground;
+  cueTargetPanelId?: string;
+  /** Set only when a migrated unusual layout does not match an editable template. */
+  importedLayout?: boolean;
+}
+
+export type ScoreSide = 'home' | 'away';
+export type MatchFormat = 'best-of-3' | 'best-of-5';
+
+export interface ScoreTeamState {
+  name: string;
+  primaryColor: string;
+}
+
+/** Volleyball event state. Rules are intentionally operator-driven. */
+export interface VolleyballScoreState {
+  sport: 'volleyball';
+  home: ScoreTeamState;
+  away: ScoreTeamState;
+  homePoints: number;
+  awayPoints: number;
+  homeSets: number;
+  awaySets: number;
+  setNumber: number;
+  serving: ScoreSide | null;
+  matchFormat: MatchFormat;
+}
+
 /** A reusable output composition and its live-board/background choices. */
 export interface Scene {
   id: string;
@@ -123,11 +175,15 @@ export interface Scene {
 }
 
 export interface ShowDocument {
-  version: 2;
+  version: 3;
   media: MediaResource;
   team?: TeamResource;
   event: EventState;
+  screens: Screen[];
+  defaultScreenId: string;
+  /** @deprecated Runtime compatibility only; never written to a v3 file. */
   scenes: Scene[];
+  /** @deprecated Runtime compatibility only; never written to a v3 file. */
   defaultSceneId: string;
 }
 

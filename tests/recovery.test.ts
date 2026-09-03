@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultMediaSet } from '../src/core/media.js';
-import { FULL_LAYOUT } from '../src/core/layouts.js';
 import { newDocumentSession } from '../src/app/document-lifecycle.js';
+import { defaultShowDocument } from '../src/core/show-file.js';
 import {
   createRecoverySnapshot,
   parseRecoverySnapshot,
@@ -9,20 +8,7 @@ import {
 } from '../src/app/recovery.js';
 
 function showData() {
-  return {
-    version: 2 as const,
-    media: { kind: 'inline' as const, data: defaultMediaSet('Recovery') },
-    event: { stats: {}, liveGroups: {} },
-    scenes: [
-      {
-        id: 'default',
-        name: 'Default',
-        layout: FULL_LAYOUT,
-        background: { kind: 'black' as const },
-      },
-    ],
-    defaultSceneId: 'default',
-  };
+  return defaultShowDocument();
 }
 
 describe('machine-local recovery snapshots', () => {
