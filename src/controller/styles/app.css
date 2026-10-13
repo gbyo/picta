@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import '@fontsource-variable/instrument-sans';
 @import '../../scoreboard.css';
 
 /*
@@ -177,8 +178,8 @@
 
 @theme inline {
   --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', system-ui, Ubuntu,
-    'Helvetica Neue', Arial, sans-serif;
+    'Instrument Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text',
+    'Segoe UI', system-ui, Ubuntu, 'Helvetica Neue', Arial, sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
 
