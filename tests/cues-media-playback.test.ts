@@ -118,3 +118,28 @@ describe('mixed media playback', () => {
     if (resumed?.type === 'request') expect(resumed.index).toBe(0);
   });
 });
+
+describe('jumping the rotation', () => {
+  it('requests the chosen item and ignores skipped or unknown ones', () => {
+    const machine = new MediaPlaybackMachine({
+      version: 1,
+      name: 'Set',
+      items: [
+        { id: 'a', type: 'image', path: '/a.png' },
+        { id: 'b', type: 'image', path: '/b.png' },
+        { id: 'c', type: 'image', path: '/c.png' },
+      ],
+      transition: 'none',
+      imageSizing: 'fit',
+      imageDurationSeconds: 5,
+    });
+    expect(machine.jump(1)).toBeNull();
+    const first = machine.start();
+    if (first?.type === 'request') machine.ready(first.token);
+    const jump = machine.jump(2);
+    expect(jump).toMatchObject({ type: 'request', index: 2 });
+    if (jump?.type === 'request') machine.failed(jump.token);
+    expect(machine.jump(2)).toBeNull();
+    expect(machine.jump(9)).toBeNull();
+  });
+});

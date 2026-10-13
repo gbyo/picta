@@ -3,6 +3,8 @@
 import type { MatchFormat, ScoreSide, Team, VolleyballScoreState } from './domain.js';
 
 export type ScoreAction =
+  /** One rally won: the winner scores and, under rally scoring, serves next. */
+  | { type: 'rally'; side: ScoreSide }
   | { type: 'point'; side: ScoreSide; delta: 1 | -1 }
   | { type: 'serve'; side: ScoreSide | null }
   | { type: 'set-number'; value: number }
@@ -80,6 +82,13 @@ export function reduceScore(
 ): VolleyballScoreState {
   const score = cloneScore(state);
   switch (action.type) {
+    case 'rally': {
+      if (matchWinner(score)) return state;
+      const key = action.side === 'home' ? 'homePoints' : 'awayPoints';
+      score[key] += 1;
+      score.serving = action.side;
+      return score;
+    }
     case 'point': {
       const key = action.side === 'home' ? 'homePoints' : 'awayPoints';
       score[key] = Math.max(0, score[key] + action.delta);
@@ -170,4 +179,125 @@ export function undoScore(history: ScoreHistory): ScoreHistory {
 
 export function resetMatchScore(score: VolleyballScoreState): VolleyballScoreState {
   return reduceScore(score, { type: 'reset' });
+}
+
+export function otherSide(side: ScoreSide): ScoreSide {
+  return side === 'home' ? 'away' : 'home';
+}
+
+export function sidePoints(score: VolleyballScoreState, side: ScoreSide): number {
+  return side === 'home' ? score.homePoints : score.awayPoints;
+}
+
+export function sideSets(score: VolleyballScoreState, side: ScoreSide): number {
+  return side === 'home' ? score.homeSets : score.awaySets;
+}
+
+/** Guidance only: the side that would win the set with one more rally. */
+export function setPointSide(score: VolleyballScoreState): ScoreSide | null {
+  if (matchWinner(score)) return null;
+  const target = setPointTarget(score);
+  for (const side of ['home', 'away'] as const) {
+    const mine = sidePoints(score, side) + 1;
+    const theirs = sidePoints(score, otherSide(side));
+    if (mine >= target && mine - theirs >= 2) return side;
+  }
+  return null;
+}
+
+/** True when the set point would also decide the match. */
+export function isMatchPoint(score: VolleyballScoreState): boolean {
+  const side = setPointSide(score);
+  if (!side) return false;
+  const needed = Math.ceil(matchSetLimit(score) / 2);
+  return sideSets(score, side) + 1 >= needed;
+}
+
+/** What End Set would do right now, or why it cannot. */
+export type EndSetPreview =
+  | { kind: 'match-complete' }
+  | { kind: 'tied' }
+  | {
+      kind: 'ready';
+      winner: ScoreSide;
+      regulation: boolean;
+      endsMatch: boolean;
+      winnerPoints: number;
+      loserPoints: number;
+    };
+
+export function previewEndSet(score: VolleyballScoreState): EndSetPreview {
+  if (matchWinner(score)) return { kind: 'match-complete' };
+  const winner = higherScoringSide(score);
+  if (!winner) return { kind: 'tied' };
+  const after = reduceScore(score, { type: 'end-set', winner });
+  return {
+    kind: 'ready',
+    winner,
+    regulation: regulationSetWinner(score) === winner,
+    endsMatch: matchWinner(after) !== null,
+    winnerPoints: sidePoints(score, winner),
+    loserPoints: sidePoints(score, otherSide(winner)),
+  };
+}
+
+/**
+ * Describe the change between two score states in operator language, so Undo
+ * can say exactly what it will reverse. Returns a generic label when several
+ * fields changed at once.
+ */
+export function describeScoreChange(
+  before: VolleyballScoreState,
+  after: VolleyballScoreState,
+): string {
+  const name = (side: ScoreSide, state: VolleyballScoreState) => state[side].name;
+  if (
+    before.home.name === after.away.name &&
+    before.away.name === after.home.name &&
+    before.home.name !== before.away.name
+  )
+    return 'Swap sides';
+  const setsChanged = before.homeSets !== after.homeSets || before.awaySets !== after.awaySets;
+  const pointsReset =
+    after.homePoints === 0 &&
+    after.awayPoints === 0 &&
+    (before.homePoints !== 0 || before.awayPoints !== 0);
+  if (setsChanged && after.homeSets === 0 && after.awaySets === 0 && after.setNumber === 1)
+    return 'Reset match';
+  if (setsChanged && (pointsReset || after.setNumber !== before.setNumber || matchWinner(after))) {
+    const winner = after.homeSets > before.homeSets ? 'home' : 'away';
+    return `End set ${before.setNumber} (${name(winner, before)} ${sidePoints(before, winner)}–${sidePoints(before, otherSide(winner))})`;
+  }
+  if (setsChanged) {
+    const side = after.homeSets !== before.homeSets ? 'home' : 'away';
+    return `${name(side, after)} sets → ${sideSets(after, side)}`;
+  }
+  if (pointsReset && after.setNumber === 1 && after.homeSets === 0 && after.awaySets === 0)
+    return 'Reset match';
+  for (const side of ['home', 'away'] as const) {
+    const delta = sidePoints(after, side) - sidePoints(before, side);
+    if (delta !== 0) {
+      const sign = delta > 0 ? '+' : '−';
+      return `${name(side, after)} ${sign}${Math.abs(delta)} (${after.homePoints}–${after.awayPoints})`;
+    }
+  }
+  if (before.serving !== after.serving)
+    return after.serving ? `${name(after.serving, after)} serve` : 'Clear serve';
+  if (before.setNumber !== after.setNumber) return `Set number → ${after.setNumber}`;
+  if (before.matchFormat !== after.matchFormat)
+    return after.matchFormat === 'best-of-3' ? 'Best of 3' : 'Best of 5';
+  if (before.home.name !== after.home.name || before.away.name !== after.away.name)
+    return 'Team name';
+  if (
+    before.home.primaryColor !== after.home.primaryColor ||
+    before.away.primaryColor !== after.away.primaryColor
+  )
+    return 'Team colour';
+  return 'Score change';
+}
+
+/** The description of what Undo would reverse, or null when there is nothing. */
+export function undoDescription(history: ScoreHistory): string | null {
+  const previous = history.past.at(-1);
+  return previous ? describeScoreChange(previous, history.present) : null;
 }

@@ -1,64 +1,79 @@
-# Picta 2.0
+# Picta
 
-Picta is an offline-first show-control console for a second display. Its primary workflow is a high-school volleyball video score table: rotating local media on the left and a readable score or six-player statistics board on the right.
+Picta is an offline-first show-control console for a second display. Its primary workflow is a school sporting event run from a laptop: rotating local media, a readable volleyball score, live player statistics and player introductions on a wide video scoretable.
 
-## Live workflow
+## The operator console
 
-Picta opens on **Live**. A normal event takes four setup actions: add Media, create or open a Team when player features are needed, enter the opponent on Live, and choose a display. **Go Live** prepares the output invisibly and reveals it only after the Screen and initial media are ready.
+Picta opens on the **Console**. The window is one production workspace, not a set of pages:
 
-The Live console keeps the audience preview, saved Screen switcher, media Previous/Next controls, output status, and score/stat controls together. The default **Media + Score** Screen is a true 50/50 composition. **Media + Stats** changes the right panel without advancing or reconstructing a shared left media panel.
+- **Top bar**: the show and its save state, the four workspaces, the audience display, and the output state with **Go Live** / **Stop**. ON AIR is a red tally across the top of the window, a red status pill with the time on air, and a red frame around the program monitor. Nothing else in the app uses that red.
+- **Program rail** (left, always visible, resizable): a faithful miniature of the audience display at the display's real aspect ratio, the **Screen switcher**, the cue on air, and either the media transport and rundown (when live) or a readiness checklist (when off air).
+- **Workspace** (right): **Console**, **Media**, **Roster** or **Screens**. Switching workspace never hides what is on air.
 
-Volleyball score controls cover points, serving side, set number, sets won, Best of 3/5 state, confirmed End Set, Undo, side swapping, and confirmed match reset. Picta does not guess set completion or replace an official scorebook.
+### Console
 
-Best of 5 is first to three sets; Best of 3 is first to two. Normal sets are to 25 and the deciding set to 15, both win by two. End Set warns before a nonstandard finish, preserving operator control for local rules. Ending the match keeps the final rally score visible instead of clearing it or advancing to a sixth set. Undo remains available.
+The match sits on top: one large **Point** target per team (`Q` / `P`). A point gives that team the serve (rally scoring); a small **−** corrects a point without touching the serve. **Undo** (`Z`) names exactly what it will reverse. **End Set** shows its result before you press it; a regulation finish ends immediately with Undo, an unusual finish asks first. Set point, match point and the final result are called out; a finished match keeps the final rally score on the TV.
 
-### A TV viewed from across the court
+Below the match are **Stats** and **Cues** (side by side on a wide window, tabs on a narrow one).
 
-Choose **Full Score** from the Live Screen switcher for maximum distance readability. It gives both teams large side-by-side scores on a 16:9 TV. **Media + Score** retains the requested rotating-media/score split, but necessarily reduces the physical size of the score. Scores use white heavy numerals on a solid dark background; team colors are accents, never the score text background. Fonts scale with the panel at 1080p and 4K without fixed pixel caps. The operator preview uses the exact same score markup and styling as output.
+- **Stats**: one tile per player in the live group with one button per statistic. A tap adds one (sport compound counters included, e.g. a kill also counts an attempt), right-click corrects, and `⇧Z` undoes the last stat. **Lineup** handles tonight's substitutions without touching the saved team.
+- **Cues**: lineups to **Play in order** or present **Manually** (a player is marked shown only after the audience saw them), and any player's card or intro video. The deck says where cues will appear on the current Screen. A cue on air appears in the program rail with its progress and an End button (`Esc`); ending a cue never stops output.
 
-Verify from the farthest intended seat on the actual TV before the event; resolution alone cannot guarantee readability at a particular distance. If names or sets are too small, use Full Score, shorten the display names, or use a larger/closer display. The browser-only sizing fixture at `/tests/fixtures/scoreboard.html?layout=full` (or `half`) is available with `npm run dev`.
+### Media
 
-## Screens and Panels
+A thumbnail grid of the rotation with an inspector. Drag to reorder (mouse, pen or touch), or `Alt`+arrows. Images use the rotation's default time or their own; videos play to the end. Missing files are flagged and relinked from one folder. Files that fail the WebView capability check are marked and skipped. The rotation is locked while ON AIR because the display is playing it; **Show Now** still works. Rotations can live inside the show or in a reusable `.pictaset`.
 
-A **Screen** is a complete output composition. It contains one to four flat, normalized rectangular **Panels**, each assigned Media, Score, Stats, or Blank content. New volleyball shows include:
+### Roster
 
-- Media + Score (default)
-- Media + Stats
-- Full Media
-- Full Score
-- Full Stats
+A fast, inline-editable roster table: type a number and name, press Enter, repeat. **Paste Roster** imports a list from a spreadsheet or email with a preview first. The inspector sets photo, intro video, card statistics and groups. Groups are ordered and reorderable. Custom sports define their own statistics. Teams are reusable `.pictateam` files.
 
-The Screens editor offers Full, 50/50 left-right, 65/35, 35/65, and 50/50 top-bottom templates. At 1920×1080 and 3840×1080, 50/50 panels resolve to exact 960-pixel and 1920-pixel halves respectively.
+### Screens
 
-## Files and migration
+A Screen is a complete audience composition of one to four non-overlapping panels showing Media, Score, Stats or Blank. The editor shows the composition on a canvas at the display's aspect ratio; click a panel to change what it shows, choose a template (Full, 50/50, 65/35, 35/65, top/bottom), set the background, and optionally show per-panel safe areas. Only one panel can show the rotation, so choosing Media moves it. Editing the Screen that is on air updates the display immediately, and says so. Imported layouts from older shows are kept exactly until a template is chosen.
 
-Picta 2.0 writes `.picta` format v3. It still reads v1, v2, and the earlier single-layout v2 shape. Old recursive layouts are resolved and flattened in memory; unusual three- and four-panel geometry is retained as an imported layout until the operator explicitly resets it to a template. Loading an older file never overwrites it automatically. Portable `.pictateam` and `.pictaset` formats remain unchanged, and match score stays in the show rather than the reusable team.
+## Keyboard
 
-Writes are atomic. Unsaved show, Team, and Media changes use machine-local crash recovery. Save As adopts a new path only after the dialog and write succeed.
+| Key | Action |
+| --- | --- |
+| `→` or `Space` | Next media (Space only when no button has focus) |
+| `←` | Previous media |
+| `Esc` | End the cue on air (never stops output) |
+| `1`–`9` | Switch to Screen 1–9 (arms it while off air) |
+| `Q` / `P` | Point to the left / right team |
+| `Z` / `⇧Z` | Undo score / undo stat |
+| `⌘K` / `Ctrl+K` | Command palette |
+| `⌘1`–`⌘4` | Console, Media, Roster, Screens |
+| `?` | All shortcuts |
+
+Shortcuts never fire while typing in a field or while a dialog, menu or popover has focus.
 
 ## Output reliability
 
-Output starts in stages: prepare a hidden WebView on the selected display, correlate renderer readiness, mount and acknowledge every Screen panel, load initial score/stats/media, then reveal and reverify the physical window. A failed stage closes the hidden presentation and leaves Picta OFF AIR. Session, panel, media, and cue tokens prevent late events from an older operation affecting current output.
+Go Live is staged and shown as it happens: check the display, check media, prepare a hidden window on the chosen display, wait for the renderer, mount and acknowledge every panel, load the first media, then reveal and re-verify placement. Any failure closes the hidden window, stays OFF AIR and explains what happened in a banner. Session, panel, media and cue tokens prevent late events from an older run affecting the current one. Switching between Screens that share a media panel keeps the playing media; a cue whose panel disappears is ended cleanly. If the output display disconnects, Picta stops, closes the window and reselects the display only when it can identify it exactly. The output is never moved to another screen automatically.
 
-The Media playlist structure is locked while output is live. Previous, Next, and explicit cues remain available. Internal ordering uses pointer capture rather than HTML drag-and-drop, which avoids conflicts with Tauri file importing on Windows and supports mouse, pen, touch, and keyboard alternatives.
+## Files
 
-## Keyboard behavior
+- `.picta` shows (format v3; v1 and v2 are migrated in memory and only rewritten when saved). See [docs/picta-format-v3.md](docs/picta-format-v3.md).
+- `.pictateam` reusable teams: [docs/pictateam-format.md](docs/pictateam-format.md).
+- `.pictaset` reusable media rotations: [docs/pictaset-format.md](docs/pictaset-format.md).
 
-- `Left Arrow`: previous media while live
-- `Right Arrow` or `Space`: next media, except while a button or field owns the key
-- `Escape`: end the active cue; it never stops the entire output
-- Tab and Shift+Tab: move through controls
-- Screen and panel buttons, template choices, score controls, and reorder alternatives are keyboard accessible
+New, Open, Save and Save As live in the native File menu and the show menu. Unsaved show, team and media changes are written to machine-local crash recovery and offered back at the next launch. Writes are atomic; Save As adopts a new path only after the write succeeds.
 
 ## Development
 
+Requires Node.js 22.22+, Rust stable and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/).
+
 ```sh
 npm ci
-npm run verify
+npm run dev          # browser preview with a simulated output and sample show
+npm run tauri dev    # the desktop app
+npm run verify       # format check, type check, tests
 npm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Picta uses TypeScript, Vite, and Tauri. It has no cloud, telemetry, FFmpeg, or runtime network requirement; update checks are the only optional network activity.
+The controller is React 19, TypeScript, Vite, Tailwind CSS v4 and shadcn/ui components on Base UI, with Lucide icons, inside Tauri 2. The audience renderer (`present.html`) and the Identify overlay stay small standalone renderers. See [docs/controller.md](docs/controller.md) for the architecture.
+
+Picta has no cloud service, telemetry, CDN assets or runtime network requirement. Update checks are notify-only, run in Rust, and never run while output is live.

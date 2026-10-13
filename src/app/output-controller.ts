@@ -39,6 +39,7 @@ import type {
   BoardData,
   Cue,
   LayoutNode,
+  MediaItem,
   MediaSet,
   Screen,
   VolleyballScoreState,
@@ -77,8 +78,13 @@ export interface CueContext {
   label: string;
 }
 
+/** Startup stages reported while a begin() is in progress. */
+export type OutputStage = 'renderer' | 'screen' | 'initial-media';
+
 export interface OutputHandlers {
-  onPosition(position: number, total: number): void;
+  /** `item` is the rotation item now on the program, when there is one. */
+  onPosition(position: number, total: number, item?: MediaItem): void;
+  onStage?(stage: OutputStage): void;
   onStopped(reason: OutputStopReason): void;
   onCueState(state: CueQueueState): void;
   onWarning(message: string): void;
@@ -236,6 +242,7 @@ export class OutputController {
     };
     this.#settings = settings;
     this.#machine = new MediaPlaybackMachine(this.#set);
+    this.#handlers.onStage?.('renderer');
     const ready = await this.#waitForPresentation();
     if (sessionToken !== this.#sessionToken) return false;
     if (!ready) {
@@ -247,6 +254,7 @@ export class OutputController {
     this.#active = true;
     try {
       if (settings.screen) {
+        this.#handlers.onStage?.('screen');
         const screenReady = this.#waitForScreen(
           sessionToken,
           settings.screen.panels.map((panel) => panel.id),
@@ -290,6 +298,7 @@ export class OutputController {
     const initialReadyPromise = settings.screen
       ? this.#waitForInitialMedia(sessionToken, request.token)
       : null;
+    if (initialReadyPromise) this.#handlers.onStage?.('initial-media');
     this.#dispatchMedia(request);
     if (!initialReadyPromise) return true;
     const initialReady = await initialReadyPromise;
@@ -419,6 +428,19 @@ export class OutputController {
     )?.id;
     const nextMedia = screen.panels.find((panel) => panel.content.kind === 'media')?.id;
     const mediaHostChanged = previousMedia !== nextMedia;
+    // A Program cue lives inside one panel. If that panel does not survive the
+    // switch with the same content, end the cue cleanly rather than leaving a
+    // card or video stranded (or a video cue waiting forever for an ended event
+    // from an element the renderer has just removed).
+    const cue = this.#cueQueue.state.current;
+    if (this.#cueQueue.active && cue && cue.target !== 'full-board') {
+      const cuePanel = this.#settings.screen?.cueTargetPanelId;
+      const previousKind = this.#settings.screen?.panels.find((panel) => panel.id === cuePanel)
+        ?.content.kind;
+      const nextKind = screen.panels.find((panel) => panel.id === cuePanel)?.content.kind;
+      if (!cuePanel || cuePanel !== screen.cueTargetPanelId || previousKind !== nextKind)
+        this.#cueQueue.cancel();
+    }
     if (mediaHostChanged) {
       this.#clearTimer();
       this.#machine?.pause();
@@ -448,6 +470,29 @@ export class OutputController {
 
   next(): void {
     this.#step(1);
+  }
+
+  /** Make a rotation item current. Ignored for unknown, missing or skipped items. */
+  jumpTo(itemId: string): void {
+    if (!this.#active || !this.#machine) return;
+    if (
+      this.#settings?.screen &&
+      !this.#settings.screen.panels.some((panel) => panel.content.kind === 'media')
+    )
+      return;
+    const index = this.#set.items.findIndex((item) => item.id === itemId);
+    if (index < 0) return;
+    const event = this.#machine.jump(index);
+    if (!event) return;
+    if (this.#cueQueue.active) this.#cueQueue.cancel();
+    this.#clearTimer();
+    this.#dispatchMedia(event);
+  }
+
+  /** Ids of rotation items this run will actually attempt, in order. */
+  get playableItemIds(): string[] {
+    const skip = this.#machine?.state.skip ?? new Set<string>();
+    return this.#set.items.filter((item) => !skip.has(item.path)).map((item) => item.id);
   }
 
   previous(): void {
@@ -582,7 +627,11 @@ export class OutputController {
     }
     if (event?.type === 'wait-image' || (event === null && machine.state.currentIndex >= 0)) {
       const state = machine.state;
-      this.#handlers.onPosition(state.currentIndex + 1, this.#set.items.length);
+      this.#handlers.onPosition(
+        state.currentIndex + 1,
+        this.#set.items.length,
+        this.#set.items[state.currentIndex],
+      );
     }
   }
 

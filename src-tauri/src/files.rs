@@ -218,15 +218,16 @@ pub fn write_document(path: &str, contents: &str) -> Result<(), String> {
     atomic_write(&path, contents)
 }
 
-/// Reveal one of Picta's own document files in the platform file manager.
-/// This is deliberately narrower than a generic shell/open command.
+/// Reveal one of Picta's own document files, or a supported media file, in
+/// the platform file manager. This is deliberately narrower than a generic
+/// shell/open command: it only ever selects an existing file of a known type.
 pub fn reveal_path(path: &str) -> Result<(), String> {
     let path = PathBuf::from(path);
-    if !is_document_path(&path) {
-        return Err("Picta can only reveal .picta, .pictateam or .pictaset files.".to_string());
+    if !is_allowed_path(&path) {
+        return Err("Picta can only reveal its own files and supported media.".to_string());
     }
     if !path.is_file() {
-        return Err("That Picta file no longer exists.".to_string());
+        return Err("That file no longer exists.".to_string());
     }
 
     #[cfg(target_os = "windows")]
@@ -461,6 +462,14 @@ mod tests {
     fn refuses_to_read_or_write_arbitrary_document_extensions() {
         assert!(read_document("/etc/hosts").is_err());
         assert!(write_document("/tmp/picta-test-output.json", "{}").is_err());
+    }
+
+    #[test]
+    fn reveals_only_existing_picta_or_media_files() {
+        assert!(reveal_path("/etc/hosts").is_err());
+        assert!(reveal_path("/Applications").is_err());
+        let missing = reveal_path("/definitely/not/here/clip.mp4").unwrap_err();
+        assert!(missing.contains("no longer exists"));
     }
 
     #[test]

@@ -147,6 +147,17 @@ export class MediaPlaybackMachine {
         : null;
   }
 
+  /** Make a specific item the current rotation item ("jump here"). */
+  jump(index: number): MediaPlaybackEvent | null {
+    if (!this.#state.active) return null;
+    const item = this.#set.items[index];
+    if (!item || this.#state.skip.has(item.path)) return null;
+    this.#token += 1;
+    this.#pendingToken = this.#token;
+    this.#state = { ...this.#state, pendingIndex: index };
+    return { type: 'request', token: this.#token, index, item, mediaType: item.type };
+  }
+
   /** Re-request the current item after a cue so its interval starts fresh. */
   replayCurrent(): MediaPlaybackEvent | null {
     if (!this.#state.active || this.#state.currentIndex < 0) return null;
