@@ -179,12 +179,51 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             .checked(update_checks_enabled(app))
             .build(app)?;
 
+    // View and Output mirror the controller's own workspace switcher and
+    // output controls, so the native menu bar is a complete map of the app.
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(
+            &MenuItemBuilder::with_id("view-console", "Console")
+                .accelerator("CmdOrCtrl+1")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view-media", "Media")
+                .accelerator("CmdOrCtrl+2")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view-roster", "Roster")
+                .accelerator("CmdOrCtrl+3")
+                .build(app)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("view-screens", "Screens")
+                .accelerator("CmdOrCtrl+4")
+                .build(app)?,
+        )
+        .separator()
+        .item(&MenuItemBuilder::with_id("command-palette", "Command Palette…").build(app)?)
+        .build()?;
+
+    // Deliberately no accelerators: going live and stopping are always a
+    // visible, deliberate act in the controller.
+    let output_menu = SubmenuBuilder::new(app, "Output")
+        .item(&MenuItemBuilder::with_id("go-live", "Go Live").build(app)?)
+        .item(&MenuItemBuilder::with_id("stop-output", "Stop Output…").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("identify-displays", "Identify Displays").build(app)?)
+        .build()?;
+
     let file_menu = SubmenuBuilder::new(app, "File")
         .item(&new_item)
         .item(&open_item)
         .separator()
         .item(&save_item)
         .item(&save_as_item)
+        .separator()
+        .item(&MenuItemBuilder::with_id("save-team", "Save Team").build(app)?)
+        .item(&MenuItemBuilder::with_id("save-media", "Save Media Set").build(app)?)
         .separator()
         .item(&PredefinedMenuItem::close_window(app, Some("Close"))?)
         .build()?;
@@ -220,9 +259,6 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     menu.append(&file_menu)?;
 
-    #[cfg(not(target_os = "macos"))]
-    menu.append(&help_menu)?;
-
     #[cfg(target_os = "macos")]
     {
         // Without an Edit submenu macOS drops copy/paste in text fields.
@@ -237,6 +273,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             .build()?;
         menu.append(&edit_menu)?;
     }
+
+    menu.append(&view_menu)?;
+    menu.append(&output_menu)?;
+
+    #[cfg(not(target_os = "macos"))]
+    menu.append(&help_menu)?;
 
     #[cfg(not(target_os = "macos"))]
     let _ = AboutMetadata::default();

@@ -190,4 +190,96 @@ describe('v3 output Screen startup', () => {
     send(EVENT_RESULT, { token: media['token'], ok: true, sessionToken, panelId: 'panel-1' });
     await expect(pending).resolves.toBe(true);
   });
+
+  async function startLive(handlers: Partial<Parameters<typeof makeController>[0]> = {}) {
+    const controller = makeController(handlers);
+    await controller.init();
+    const set = defaultMediaSet('Media');
+    set.items = [
+      { id: 'one', type: 'image', path: '/one.png' },
+      { id: 'two', type: 'image', path: '/two.png' },
+      { id: 'three', type: 'image', path: '/three.png' },
+    ];
+    const pending = controller.begin(set, {
+      intervalSeconds: 10,
+      transition: 'none',
+      imageSizing: 'fit',
+      layout: FULL_LAYOUT,
+      screen: screenFromTemplate('half-left-right', 'Media + Score', 'media-score'),
+    });
+    send(EVENT_READY, lastPayload(EVENT_READY_REQUEST));
+    await flushPromises();
+    const sessionToken = lastPayload(EVENT_SCREEN)['sessionToken'] as number;
+    send(EVENT_SCREEN_READY, { sessionToken, panelIds: ['panel-left', 'panel-right'] });
+    await flushPromises();
+    const first = lastPayload(EVENT_BACKGROUND);
+    send(EVENT_RESULT, { token: first['token'], ok: true, sessionToken, panelId: 'panel-left' });
+    await expect(pending).resolves.toBe(true);
+    return { controller, sessionToken };
+  }
+
+  function makeController(
+    handlers: Partial<ConstructorParameters<typeof OutputController>[0]> = {},
+  ) {
+    return new OutputController({
+      onPosition: () => undefined,
+      onStopped: () => undefined,
+      onCueState: () => undefined,
+      onWarning: () => undefined,
+      ...handlers,
+    });
+  }
+
+  it('reports each startup stage in order', async () => {
+    const stages: string[] = [];
+    await startLive({ onStage: (stage) => stages.push(stage) });
+    expect(stages).toEqual(['renderer', 'screen', 'initial-media']);
+  });
+
+  it('reports which rotation item is on the program', async () => {
+    const positions: (string | undefined)[] = [];
+    await startLive({ onPosition: (_position, _total, item) => positions.push(item?.id) });
+    expect(positions).toEqual(['one']);
+  });
+
+  it('jumps the rotation to a chosen item', async () => {
+    const { controller, sessionToken } = await startLive();
+    controller.jumpTo('three');
+    const request = lastPayload(EVENT_BACKGROUND);
+    expect(request).toMatchObject({
+      src: 'asset:///three.png',
+      panelId: 'panel-left',
+      sessionToken,
+    });
+    controller.jumpTo('missing-id');
+    expect(lastPayload(EVENT_BACKGROUND)['token']).toBe(request['token']);
+  });
+
+  it('keeps a Program cue across a switch that keeps its panel, and ends it otherwise', async () => {
+    const { controller } = await startLive();
+    const cue = {
+      type: 'player-card' as const,
+      playerId: 'p1',
+      target: 'program' as const,
+      holdMs: 9000,
+      number: '7',
+      name: 'Avery',
+      position: 'OH',
+      stats: [],
+    };
+    void controller.playCue(cue, { kind: 'single-player', label: '#7 Avery' });
+    await flushPromises();
+    expect(controller.cueActive).toBe(true);
+    controller.applyScreen(
+      screenFromTemplate('half-left-right', 'Media + Stats', 'media-stats', [
+        { kind: 'media' },
+        { kind: 'stats' },
+      ]),
+    );
+    expect(controller.cueActive).toBe(true);
+    controller.applyScreen(
+      screenFromTemplate('full', 'Full Score', 'full-score', [{ kind: 'score' }]),
+    );
+    expect(controller.cueActive).toBe(false);
+  });
 });
