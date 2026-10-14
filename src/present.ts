@@ -191,12 +191,12 @@ function setScreen(message: ScreenMessage): void {
     renderer.root.remove();
   }
   zones = next;
-  window.requestAnimationFrame(() => {
-    const panelIds = message.screen.panels
-      .filter((panel) => zones.get(panel.id)?.root.isConnected)
-      .map((panel) => panel.id);
-    void emit(EVENT_SCREEN_READY, { sessionToken: message.sessionToken, panelIds });
-  });
+  // Reply now, not on the next animation frame: Go Live mounts the Screen while
+  // this window is still hidden, and WebKit never runs frames for a hidden window.
+  const panelIds = message.screen.panels
+    .filter((panel) => zones.get(panel.id)?.root.isConnected)
+    .map((panel) => panel.id);
+  void emit(EVENT_SCREEN_READY, { sessionToken: message.sessionToken, panelIds });
 }
 
 function createNode(node: LayoutNode): HTMLElement {
