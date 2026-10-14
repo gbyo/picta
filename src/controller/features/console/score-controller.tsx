@@ -108,7 +108,7 @@ function TeamBlock({
       as="section"
       aria-label={`${team.name} (${sideLabel})`}
       outline={serving}
-      className="min-w-0 flex-1 overflow-hidden rounded-cladd-lg"
+      className="@container/team min-w-0 flex-1 overflow-hidden rounded-cladd-lg"
       contentClassName="flex flex-col gap-2 p-3 pl-4"
     >
       <span
@@ -148,7 +148,7 @@ function TeamBlock({
             onClick={() => scoreAction({ type: 'serve', side: serving ? null : side })}
           >
             <Volleyball />
-            {serving ? 'SERVING' : 'Serve'}
+            <span className="@max-[280px]/team:sr-only">{serving ? 'SERVING' : 'Serve'}</span>
           </Button>
         </Hint>
       </div>

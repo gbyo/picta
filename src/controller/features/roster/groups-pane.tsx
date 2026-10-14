@@ -185,7 +185,6 @@ function GroupInspector({ group }: { group: PlayerGroup }) {
         </PropertyRow>
         <PropertyRow label="Maximum players">
           <CommitInput
-            key={`${group.id}-${group.maxPlayers ?? ''}`}
             type="number"
             min={1}
             label="Maximum players"

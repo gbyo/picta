@@ -1,8 +1,14 @@
 import { useState } from 'react';
-import { Button, ColorPicker, Input, NumberField } from '@cladd-ui/react';
+import { Button, Input, NumberField } from '@cladd-ui/react';
 import type { MatchFormat, ScoreSide, VolleyballScoreState } from '@core/domain.js';
 import { matchSetLimit, sideSets } from '@core/score.js';
-import { ActionButton, Choice, Field } from '@/components/picta/controls';
+import {
+  ActionButton,
+  Choice,
+  ColorField,
+  explicitSubmit,
+  Field,
+} from '@/components/picta/controls';
 import { ModalDialog } from '@/components/picta/dialog';
 import { InspectorSection, PropertyRow } from '@/components/picta/workspace';
 import { scoreAction } from '@/actions/match';
@@ -52,14 +58,7 @@ export function MatchSetupDialog({
         </>
       }
     >
-      <form
-        id="match-setup-form"
-        className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          apply();
-        }}
-      >
+      <form id="match-setup-form" className="flex flex-col gap-4" onSubmit={explicitSubmit(apply)}>
         <InspectorSection title="Format">
           <Choice<MatchFormat>
             label="Match format"
@@ -83,14 +82,10 @@ export function MatchSetupDialog({
                   onChange={(name) => setTeams({ ...teams, [side]: { ...teams[side], name } })}
                 />
               </Field>
-              <ColorPicker
-                surface="cut"
-                dropdownIcon={false}
-                aria-label={`${label} colour`}
+              <ColorField
+                label={`${label} colour`}
                 value={teams[side].color}
-                onChange={(next) =>
-                  setTeams({ ...teams, [side]: { ...teams[side], color: next.hex } })
-                }
+                onChange={(color) => setTeams({ ...teams, [side]: { ...teams[side], color } })}
                 className="w-28"
               />
             </div>

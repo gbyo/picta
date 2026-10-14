@@ -43,8 +43,8 @@ export function PictaPopover({
   label: string;
   position?: PopoverPosition;
   width?: keyof typeof WIDTHS;
-  /** Selector for the element to focus first; defaults to the first control. */
-  initialFocus?: string;
+  /** Selectors for the element to focus first, in order of preference; defaults to the first control. */
+  initialFocus?: string[];
   className?: string;
   contentClassName?: string;
   children: ReactNode | ((close: () => void) => ReactNode);
@@ -65,8 +65,9 @@ export function PictaPopover({
     const root = content.current;
     if (!root) return;
     const target =
-      (initialFocus ? root.querySelector<HTMLElement>(initialFocus) : null) ??
-      root.querySelector<HTMLElement>(FOCUSABLE);
+      (initialFocus ?? [])
+        .map((selector) => root.querySelector<HTMLElement>(selector))
+        .find((element) => element !== null) ?? root.querySelector<HTMLElement>(FOCUSABLE);
     (target ?? root).focus({ preventScroll: true });
   };
 

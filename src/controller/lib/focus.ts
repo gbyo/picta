@@ -31,3 +31,11 @@ export function restoreMenuFocus(): void {
       menuTrigger.focus({ preventScroll: true });
   }, 0);
 }
+
+/** Return focus to `element` after an overlay closes, but only for keyboard users. */
+export function restoreFocusIfKeyboard(element: HTMLElement | null): void {
+  setTimeout(() => {
+    if (keyboard && element?.isConnected && document.activeElement === document.body)
+      element.focus({ preventScroll: true });
+  }, 0);
+}

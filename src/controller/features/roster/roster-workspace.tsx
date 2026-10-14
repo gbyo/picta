@@ -175,20 +175,20 @@ export function RosterWorkspace() {
         <WorkspaceBody>
           <TabPanel
             value="players"
-            className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-col"
+            className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col"
           >
             <PlayersPane />
           </TabPanel>
           <TabPanel
             value="groups"
-            className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-col"
+            className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col"
           >
             <GroupsPane />
           </TabPanel>
           {team.sport === 'custom' && (
             <TabPanel
               value="stats"
-              className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-col"
+              className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col"
             >
               <CustomStatsPane />
             </TabPanel>

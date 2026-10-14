@@ -63,7 +63,7 @@ export function MediaThumb({
   return (
     <div
       className={cn(
-        'relative flex aspect-video shrink-0 items-center justify-center overflow-hidden rounded-[3px] bg-black',
+        'relative flex aspect-video shrink-0 items-center justify-center overflow-hidden rounded-cladd-3xs bg-black',
         (item.missing || failed) && 'ring-1 ring-danger/60',
         className,
       )}

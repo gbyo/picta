@@ -121,7 +121,7 @@ export function DisplayPicker() {
       label="Audience display"
       position="bottom-end"
       width="md"
-      initialFocus='[role="option"][aria-selected="true"], [role="option"]'
+      initialFocus={['[role="option"][aria-selected="true"]', '[role="option"]:not([disabled])']}
       contentClassName="gap-3 p-3"
       trigger={
         <Button

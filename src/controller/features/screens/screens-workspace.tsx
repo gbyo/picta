@@ -106,7 +106,7 @@ function ScreenListItem({
             ref={sortable.ref}
             style={sortable.style}
             selected={selected}
-            className={cn(sortable.dragging && 'shadow-cladd-popover')}
+            className={cn('@max-[560px]/ws:shrink-0', sortable.dragging && 'shadow-cladd-popover')}
             contentClassName="flex items-center gap-1"
           />
         }
@@ -491,9 +491,10 @@ export function ScreensWorkspace() {
         <Panel
           as="aside"
           aria-label="Screens"
-          className="w-56 shrink-0 border-r @max-[860px]/ws:w-48 @max-[700px]/ws:w-16 @max-[560px]/ws:max-h-40 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+          className="w-56 shrink-0 border-r @max-[860px]/ws:w-48 @max-[700px]/ws:w-16 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+          contentClassName="@max-[560px]/ws:flex-row @max-[560px]/ws:items-center"
         >
-          <div className="flex h-cladd-xl shrink-0 items-center border-b pr-2 pl-3 @max-[700px]/ws:justify-center @max-[700px]/ws:px-1">
+          <div className="flex h-cladd-xl shrink-0 items-center border-b pr-2 pl-3 @max-[700px]/ws:justify-center @max-[700px]/ws:px-1 @max-[560px]/ws:border-r @max-[560px]/ws:border-b-0">
             <SectionHeader
               label={<span className="@max-[700px]/ws:hidden">Screens</span>}
               className="flex-1 @max-[700px]/ws:flex-none"
@@ -523,9 +524,12 @@ export function ScreensWorkspace() {
               }
             />
           </div>
-          <Scroll>
+          <Scroll className="@max-[560px]/ws:min-w-0 @max-[560px]/ws:overflow-x-auto @max-[560px]/ws:overflow-y-hidden">
             <SortableArea ids={screens.map((item) => item.id)} onMove={moveScreen}>
-              <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Screens in switcher order">
+              <ol
+                className="flex flex-col gap-0.5 p-1.5 @max-[560px]/ws:flex-row"
+                aria-label="Screens in switcher order"
+              >
                 {screens.map((item, index) => (
                   <ScreenListItem
                     key={item.id}

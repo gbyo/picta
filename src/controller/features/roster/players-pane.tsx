@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { Button, Checkbox, ColorPicker, Input, ToggleButton } from '@cladd-ui/react';
+import { Button, Checkbox, Input, ToggleButton } from '@cladd-ui/react';
 import {
   Film,
   FolderSearch,
@@ -16,7 +16,7 @@ import type { Player, Team } from '@core/domain.js';
 import { basename } from '@core/paths.js';
 import { featuredStatIds, type SportDefinition } from '@core/sports.js';
 import { playerHasVideo } from '@core/player-cues.js';
-import { ActionButton, CommitInput, IconButton } from '@/components/picta/controls';
+import { ActionButton, ColorField, CommitInput, IconButton } from '@/components/picta/controls';
 import { Hint } from '@/components/picta/hint';
 import { SortableArea, useSortableItem } from '@/components/picta/sortable';
 import {
@@ -379,19 +379,15 @@ function PlayerInspector({
   );
 }
 
-/** A colour that previews while it is being picked and commits once, when the picker closes. */
+/** A colour that previews while it is being picked and commits once, when the editor closes. */
 function TeamColorField({ which, color }: { which: 'primary' | 'secondary'; color: string }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const label = which === 'primary' ? 'Primary team colour' : 'Secondary team colour';
   return (
-    <ColorPicker
-      surface="cut"
-      dropdownIcon={false}
-      aria-label={label}
+    <ColorField
+      label={which === 'primary' ? 'Primary team colour' : 'Secondary team colour'}
       value={draft ?? color}
-      onChange={(next) => setDraft(next.hex)}
-      onPopoverState={(open) => {
-        if (open) return;
+      onChange={setDraft}
+      onClose={() => {
         if (draft !== null && draft !== color) setTeamColor(which, draft);
         setDraft(null);
       }}

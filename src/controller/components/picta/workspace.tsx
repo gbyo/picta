@@ -51,9 +51,13 @@ export function Scroll({ className, ...props }: ComponentProps<'div'>) {
   );
 }
 
+/** A workspace is also a container, so its parts can respond to its own width. */
 export function Workspace({ className, ...props }: ComponentProps<'div'>) {
   return (
-    <div className={cn('flex h-full min-h-0 min-w-0 flex-col bg-cladd-bg', className)} {...props} />
+    <div
+      className={cn('@container/ws flex h-full min-h-0 min-w-0 flex-col bg-cladd-bg', className)}
+      {...props}
+    />
   );
 }
 
@@ -101,12 +105,12 @@ export function WorkspaceToolbar({ className, ...props }: ComponentProps<typeof 
   );
 }
 
-/** The working area. A container, so inspectors can stack below at narrow widths. */
+/** The working area. Inspectors stack below it when the workspace is narrow. */
 export function WorkspaceBody({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        '@container/ws flex min-h-0 flex-1 @max-[560px]/ws:flex-col @max-[560px]/ws:overflow-y-auto',
+        'flex min-h-0 flex-1 @max-[560px]/ws:flex-col @max-[560px]/ws:overflow-y-auto',
         className,
       )}
       {...props}

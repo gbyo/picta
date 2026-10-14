@@ -16,8 +16,8 @@ export function LayoutGlyph({
     <div
       aria-hidden
       className={cn(
-        'relative aspect-video shrink-0 overflow-hidden rounded-[3px] bg-sunken ring-1',
-        tone === 'live' ? 'ring-live' : tone === 'armed' ? 'ring-accent' : 'ring-line-strong',
+        'relative aspect-video shrink-0 overflow-hidden rounded-cladd-3xs bg-cladd-surface-cut ring-1',
+        tone === 'live' ? 'ring-live' : tone === 'armed' ? 'ring-accent' : 'ring-cladd-outline',
         className,
       )}
     >
@@ -28,7 +28,7 @@ export function LayoutGlyph({
           <div
             key={panel.id}
             className={cn(
-              'absolute flex items-center justify-center border border-sunken text-white/70',
+              'absolute flex items-center justify-center border border-black/40 text-white/70',
               meta.tint,
             )}
             style={{

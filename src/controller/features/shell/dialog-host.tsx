@@ -1,8 +1,14 @@
-import { useState, type FormEvent } from 'react';
-import { Button, ColorPicker, Input, Select } from '@cladd-ui/react';
+import { useState } from 'react';
+import { Button, Input, Select } from '@cladd-ui/react';
 import { History, TriangleAlert } from 'lucide-react';
 import { allBuiltInSports } from '@core/sports.js';
-import { ActionButton, Field, type Intent } from '@/components/picta/controls';
+import {
+  ActionButton,
+  ColorField,
+  explicitSubmit,
+  Field,
+  type Intent,
+} from '@/components/picta/controls';
 import { ModalDialog, useInitialFocus } from '@/components/picta/dialog';
 import {
   cancelCurrent,
@@ -130,8 +136,7 @@ function TextDialog({ request }: { request: TextRequest }) {
   const field = useInitialFocus<HTMLInputElement>({ select: true });
   const [value, setValue] = useState(request.initialValue ?? '');
   const [error, setError] = useState<string | null>(null);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = explicitSubmit(() => {
     const trimmed = value.trim();
     if (!trimmed) {
       setError(`Enter a ${request.label.toLocaleLowerCase()}.`);
@@ -143,7 +148,7 @@ function TextDialog({ request }: { request: TextRequest }) {
       return;
     }
     resolveCurrent(trimmed);
-  };
+  });
   return (
     <ModalDialog
       onOpenChange={dismiss}
@@ -194,14 +199,13 @@ function NewTeamDialog() {
     customName: '',
   });
   const [error, setError] = useState<string | null>(null);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = explicitSubmit(() => {
     if (!details.name.trim()) {
       setError('Enter a team name.');
       return;
     }
     resolveCurrent({ ...details, name: details.name.trim() });
-  };
+  });
   const preset = SPORTS.find((sport) => sport.id === details.sport);
   return (
     <ModalDialog
@@ -246,13 +250,11 @@ function NewTeamDialog() {
           <Field label="Colours">
             <div className="flex gap-2">
               {(['primary', 'secondary'] as const).map((which) => (
-                <ColorPicker
+                <ColorField
                   key={which}
-                  surface="cut"
-                  dropdownIcon={false}
-                  aria-label={which === 'primary' ? 'Primary colour' : 'Secondary colour'}
+                  label={which === 'primary' ? 'Primary colour' : 'Secondary colour'}
                   value={details[which]}
-                  onChange={(color) => setDetails({ ...details, [which]: color.hex })}
+                  onChange={(hex) => setDetails({ ...details, [which]: hex })}
                   className="w-auto min-w-0 flex-1"
                 />
               ))}

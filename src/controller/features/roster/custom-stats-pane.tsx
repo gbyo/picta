@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { Input, Surface } from '@cladd-ui/react';
 import { Plus, Trash2 } from 'lucide-react';
 import { shortLabelFromLabel, statIdFromLabel } from '@core/custom-stats.js';
-import { ActionButton, Field, IconButton } from '@/components/picta/controls';
+import { ActionButton, explicitSubmit, Field, IconButton } from '@/components/picta/controls';
 import { Scroll } from '@/components/picta/workspace';
 import { useTeam } from '@/hooks';
 import { setCustomStats } from '@/actions/team';
@@ -21,8 +21,7 @@ export function CustomStatsPane() {
     shortLabel,
   }));
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = explicitSubmit(() => {
     const id = statIdFromLabel(label);
     if (!id) {
       setError('Enter a statistic name with letters or numbers.');
@@ -43,7 +42,7 @@ export function CustomStatsPane() {
     setLabel('');
     setShort('');
     setError(null);
-  };
+  });
 
   return (
     <Scroll>

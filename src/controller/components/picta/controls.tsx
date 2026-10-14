@@ -9,11 +9,13 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type FormEvent,
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { Button, Input, SurfaceCut, ToggleButton, ToggleGroup } from '@cladd-ui/react';
+import { Button, ColorPicker, Input, SurfaceCut, ToggleButton, ToggleGroup } from '@cladd-ui/react';
 import { cn, defined } from '@/lib/utils';
+import { restoreFocusIfKeyboard } from '@/lib/focus';
 import { Hint } from './hint';
 
 /** The class a bare inline `<input>` uses, so one-off inline edits match CommitInput. */
@@ -327,4 +329,61 @@ export function Choice<T extends string>({
       </ToggleGroup>
     </SurfaceCut>
   );
+}
+
+/* Colour --------------------------------------------------------------------- */
+
+/**
+ * A colour well that opens Cladd's colour editor. Team colours are opaque, so
+ * there is no alpha. `onClose` fires when the editor closes, which is where a
+ * change that should be one Undo step is committed.
+ */
+export function ColorField({
+  label,
+  value,
+  onChange,
+  onClose,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange(hex: string): void;
+  onClose?(): void;
+  className?: string;
+}) {
+  const trigger = useRef<HTMLElement | null>(null);
+  return (
+    <ColorPicker
+      ref={trigger}
+      surface="cut"
+      alpha={false}
+      dropdownIcon={false}
+      aria-label={label}
+      value={value}
+      onChange={(color) => onChange(color.hex)}
+      onPopoverState={(open) => {
+        if (open) return;
+        onClose?.();
+        restoreFocusIfKeyboard(trigger.current);
+      }}
+      {...(className ? { className } : {})}
+    />
+  );
+}
+
+/* Forms ---------------------------------------------------------------------- */
+
+/**
+ * A submit handler for forms that contain Cladd controls. Cladd renders its
+ * Buttons without a `type`, which the browser treats as "submit", so opening a
+ * Select, a colour editor or a segmented option inside a form would submit it.
+ * Only Enter in a field, or a button that is explicitly `type="submit"`, counts.
+ */
+export function explicitSubmit(handler: () => void) {
+  return (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (submitter && !submitter.hasAttribute('type')) return;
+    handler();
+  };
 }
