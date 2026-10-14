@@ -311,6 +311,8 @@ export function Choice<T extends string>({
               key={option.value}
               type="button"
               value={option.value}
+              // Segmented only dims a disabled group; the buttons must really be disabled.
+              disabled={disabled ?? false}
               size="sm"
               {...(option.ariaLabel ? { 'aria-label': option.ariaLabel } : {})}
               className={cn(stretch && 'min-w-0 flex-1', vertical && 'justify-start')}

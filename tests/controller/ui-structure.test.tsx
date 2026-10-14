@@ -130,6 +130,15 @@ describe('media workspace inspector', () => {
     expect(within(inspector).getByText('one.png')).toBeInTheDocument();
   });
 
+  it('really disables the rotation settings while ON AIR, not just dims them', async () => {
+    app = await startApp();
+    await goLiveFromUi();
+    act(() => setState({ mode: 'media', selectedMediaIds: [] }));
+    const inspector = await screen.findByRole('complementary', { name: 'Media inspector' });
+    expect(within(inspector).getByRole('button', { name: 'Cut' })).toBeDisabled();
+    expect(within(inspector).getByRole('button', { name: 'Fill' })).toBeDisabled();
+  });
+
   it('keeps the header to the rotation, Add Media and one overflow menu', async () => {
     app = await startApp();
     act(() => setState({ mode: 'media' }));
