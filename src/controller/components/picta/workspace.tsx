@@ -283,9 +283,13 @@ export function PropertyRow({
         className,
       )}
     >
-      <label htmlFor={htmlFor} className="truncate text-cladd-xs text-cladd-fg-soft">
-        {label}
-      </label>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="truncate text-cladd-xs text-cladd-fg-soft">
+          {label}
+        </label>
+      ) : (
+        <span className="truncate text-cladd-xs text-cladd-fg-soft">{label}</span>
+      )}
       <div className="flex min-w-0 items-center gap-2">{children}</div>
     </div>
   );

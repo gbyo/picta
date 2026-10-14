@@ -112,9 +112,13 @@ export function Field({
 }) {
   return (
     <div className={cn('flex flex-col gap-1', className)}>
-      <label htmlFor={htmlFor} className="text-cladd-xs font-medium text-cladd-fg-soft">
-        {label}
-      </label>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="text-cladd-xs font-medium text-cladd-fg-soft">
+          {label}
+        </label>
+      ) : (
+        <span className="text-cladd-xs font-medium text-cladd-fg-soft">{label}</span>
+      )}
       {children}
       {error ? (
         <p role="alert" className="text-cladd-xs text-danger">
