@@ -252,12 +252,12 @@ function MediaCard({
             failed={Boolean(failure)}
             typeIcon={false}
           />
-          <span className="absolute top-1 left-1 rounded-cladd-3xs bg-black/70 px-1 text-cladd-2xs font-semibold text-white tabular">
+          <span className="absolute top-1 left-1 rounded-cladd-3xs bg-black/70 px-1 text-cladd-xs font-semibold text-white tabular">
             {index + 1}
           </span>
           <span
             className={cn(
-              'absolute right-1 bottom-1 flex items-center gap-0.5 rounded-cladd-3xs bg-black/70 px-1 text-cladd-2xs tabular',
+              'absolute right-1 bottom-1 flex items-center gap-0.5 rounded-cladd-3xs bg-black/70 px-1 text-cladd-xs tabular',
               custom ? 'text-white' : 'text-white/60',
             )}
           >
@@ -280,7 +280,7 @@ function MediaCard({
           </p>
           <p
             className={cn(
-              'truncate text-cladd-2xs',
+              'truncate text-cladd-xs',
               status ? 'text-danger' : 'text-cladd-fg-softer',
             )}
           >

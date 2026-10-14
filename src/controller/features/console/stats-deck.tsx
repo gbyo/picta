@@ -122,7 +122,7 @@ function Derived({ definition, stats }: { definition: SportDefinition; stats: Ra
   const derived = volleyballDerivedStats(stats);
   const hit = derived.hittingPercentage;
   return (
-    <span className="text-cladd-2xs text-cladd-fg-softer tabular">
+    <span className="text-cladd-xs text-cladd-fg-softer tabular">
       Hit {hit === null ? '—' : hit.toFixed(3).replace(/^0/, '').replace(/^-0/, '-')} · Blk{' '}
       {derived.totalBlocks} · Pts {derived.points}
     </span>
@@ -158,7 +158,7 @@ function PlayerTile({
           <Derived definition={definition} stats={stats} />
         </span>
         {player.position && (
-          <span className="shrink-0 text-cladd-2xs font-medium text-cladd-fg-softer">
+          <span className="shrink-0 text-cladd-xs font-medium text-cladd-fg-softer">
             {player.position}
           </span>
         )}
@@ -283,7 +283,7 @@ function LineupEditor({ group, members }: { group: PlayerGroup; members: Set<str
                 />
                 <span className="w-6 text-right text-cladd-fg-soft tabular">{player.number}</span>
                 <span className="truncate">{player.name}</span>
-                <span className="ml-auto text-cladd-2xs text-cladd-fg-softer">
+                <span className="ml-auto text-cladd-xs text-cladd-fg-softer">
                   {player.position}
                 </span>
               </label>
@@ -291,7 +291,7 @@ function LineupEditor({ group, members }: { group: PlayerGroup; members: Set<str
           );
         })}
       </ul>
-      <p className="text-cladd-2xs leading-snug text-cladd-fg-softer">
+      <p className="text-cladd-xs leading-snug text-cladd-fg-softer">
         Changes here are tonight only. They are saved with the show, never with the team.
       </p>
     </div>

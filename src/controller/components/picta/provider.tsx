@@ -33,7 +33,7 @@ export const PICTA_DEFAULTS: ComponentDefaults = {
   ListButton: { size: 'md', rounded: false },
   Checkbox: { size: 'xs' },
   Switch: { size: 'sm' },
-  Shortcut: { size: 'sm' },
+  Shortcut: { size: 'md' },
   Chip: { size: 'xs' },
   Tooltip: {},
 };

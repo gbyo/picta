@@ -60,10 +60,10 @@ export function CustomStatsPane() {
               key={stat.id}
               className="flex h-cladd-lg items-center gap-3 border-b px-3 last:border-b-0"
             >
-              <span className="w-4 text-cladd-2xs text-cladd-fg-softer tabular">{index + 1}</span>
+              <span className="w-4 text-cladd-xs text-cladd-fg-softer tabular">{index + 1}</span>
               <span className="w-12 text-cladd-xs font-semibold">{stat.shortLabel}</span>
               <span className="min-w-0 flex-1 truncate text-cladd-xs">{stat.label}</span>
-              <span className="text-cladd-2xs text-cladd-fg-softer">{stat.id}</span>
+              <span className="text-cladd-xs text-cladd-fg-softer">{stat.id}</span>
               <IconButton
                 label={`Remove ${stat.label}`}
                 size="sm"

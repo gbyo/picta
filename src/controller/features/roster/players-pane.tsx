@@ -162,7 +162,7 @@ function PlayerRow({
           ) : null}
         </span>
         <span
-          className="truncate text-cladd-2xs text-cladd-fg-softer @max-[860px]/ws:hidden"
+          className="truncate text-cladd-xs text-cladd-fg-softer @max-[860px]/ws:hidden"
           title={groups.map((group) => group.name).join(', ')}
         >
           {featured.join(' · ')}
@@ -450,7 +450,7 @@ export function PlayersPane() {
           role="row"
           className={cn(
             ROSTER_GRID,
-            'mx-1 h-cladd-md shrink-0 border-b px-1 text-cladd-2xs font-medium tracking-wider text-cladd-fg-soft uppercase',
+            'mx-1 h-cladd-md shrink-0 border-b px-1 text-cladd-xs font-medium tracking-wider text-cladd-fg-soft uppercase',
           )}
         >
           <span />

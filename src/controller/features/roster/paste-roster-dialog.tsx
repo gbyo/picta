@@ -65,7 +65,7 @@ export function PasteRosterDialog({
           <SectionHeader label="Preview" />
           <div className="h-64 overflow-y-auto rounded-cladd-md bg-cladd-surface-cut">
             <table className="w-full text-cladd-xs">
-              <thead className="sticky top-0 bg-cladd-surface-cut text-cladd-2xs tracking-wider text-cladd-fg-soft uppercase">
+              <thead className="sticky top-0 bg-cladd-surface-cut text-cladd-xs tracking-wider text-cladd-fg-soft uppercase">
                 <tr>
                   <th className="w-12 px-2 py-1.5 text-right font-medium">#</th>
                   <th className="px-2 py-1.5 text-left font-medium">Name</th>

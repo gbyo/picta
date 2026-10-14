@@ -54,7 +54,7 @@ Feature code composes these instead of choosing sizes, radii and spacings itself
 
 A workspace reads the same way everywhere: **identity and quiet metadata, then the primary action, then one overflow menu**. A selected thing is shown by the inspector as **identity, named sections of property rows, contextual actions, and anything destructive in its own section at the end**. With nothing selected the inspector shows the parent object's own properties (the rotation, the team).
 
-Text uses only Cladd's `2xs`/`xs`/`sm`/`md` sizes; controls use Cladd's `sm`-`xl` heights; radii and spacing come from Cladd tokens. A new arbitrary pixel value needs a reason (the live score numerals have one).
+Text uses only Cladd's `xs` (12px), `sm` and `md` sizes, so nothing in the controller is smaller than 12px; controls use Cladd's `sm`-`xl` heights; radii and spacing come from Cladd tokens. A new arbitrary pixel value needs a reason (the live score numerals have one).
 
 ### What stays outside Cladd, and why
 

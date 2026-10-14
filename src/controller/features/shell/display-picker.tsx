@@ -70,7 +70,7 @@ function Arrangement({
               {display.index}
             </span>
             {display.id === controllerId && (
-              <span className="text-cladd-2xs text-cladd-fg-softer">Picta</span>
+              <span className="text-cladd-xs text-cladd-fg-softer">Picta</span>
             )}
           </Surface>
         );
@@ -135,7 +135,7 @@ export function DisplayPicker() {
           {selected ? <Monitor /> : <MonitorOff />}
           <span className="flex flex-col items-start leading-none">
             <span>{selected ? `Display ${selected.index}` : 'No display'}</span>
-            <span className="mt-0.5 text-cladd-2xs font-normal text-cladd-fg-soft tabular">
+            <span className="mt-0.5 text-cladd-xs font-normal text-cladd-fg-soft tabular">
               {selected ? `${selected.width}×${selected.height}` : 'Choose output'}
             </span>
           </span>

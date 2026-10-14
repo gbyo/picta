@@ -17,7 +17,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import { Button, ListTitle, Surface, useTheme } from '@cladd-ui/react';
 import { Check, ChevronRight, Ellipsis } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Keys } from './hint';
+import { Hint, Keys } from './hint';
 
 export const ActionMenu = MenuPrimitive.Root;
 export const ActionMenuTrigger = MenuPrimitive.Trigger;
@@ -169,13 +169,17 @@ export function OverflowMenu({
 }) {
   return (
     <ActionMenu>
-      <ActionMenuTrigger
-        render={
-          <Button square variant="transparent" outline={false} aria-label={label}>
-            <Ellipsis />
-          </Button>
-        }
-      />
+      <Hint label={label} side="bottom">
+        <span className="inline-flex">
+          <ActionMenuTrigger
+            render={
+              <Button square variant="transparent" outline={false} aria-label={label}>
+                <Ellipsis />
+              </Button>
+            }
+          />
+        </span>
+      </Hint>
       <ActionMenuContent align={align}>{children}</ActionMenuContent>
     </ActionMenu>
   );

@@ -28,7 +28,7 @@ function HoldMeter({ since, durationMs }: { since: number; durationMs: number })
           style={{ width: `${progress * 100}%` }}
         />
       </div>
-      <span className="w-7 text-right text-cladd-2xs text-cladd-fg-softer tabular">
+      <span className="w-7 text-right text-cladd-xs text-cladd-fg-softer tabular">
         {remaining}s
       </span>
     </div>
@@ -132,17 +132,17 @@ export function MediaTransport() {
               >
                 {current ? name(current) : 'Starting…'}
               </p>
-              <p className="flex min-w-0 items-center gap-1 text-cladd-2xs text-cladd-fg-softer">
+              <p className="flex min-w-0 items-center gap-1 text-cladd-xs text-cladd-fg-softer">
                 <CornerDownRight className="size-3 shrink-0" />
                 <span className="truncate">{next ? `Next: ${name(next)}` : 'Only item'}</span>
               </p>
             </div>
             {cueActive ? (
-              <p className="text-cladd-2xs text-cue">Paused for a cue</p>
+              <p className="text-cladd-xs text-cue">Paused for a cue</p>
             ) : current?.type === 'image' && since > 0 ? (
               <HoldMeter since={since} durationMs={mediaDurationSeconds(current, set) * 1000} />
             ) : current?.type === 'video' ? (
-              <p className="text-cladd-2xs text-cladd-fg-softer">Video · advances when it ends</p>
+              <p className="text-cladd-xs text-cladd-fg-softer">Video · advances when it ends</p>
             ) : null}
           </div>
         </Surface>
@@ -162,7 +162,7 @@ export function MediaTransport() {
                     : 'text-cladd-fg-soft hover:bg-cladd-surface-hover',
                 )}
               >
-                <span className="w-5 shrink-0 text-right text-cladd-2xs text-cladd-fg-softer tabular">
+                <span className="w-5 shrink-0 text-right text-cladd-xs text-cladd-fg-softer tabular">
                   {index + 1}
                 </span>
                 <span
@@ -181,7 +181,7 @@ export function MediaTransport() {
                   {name(item)}
                 </span>
                 {unavailable ? (
-                  <span className="text-cladd-2xs text-danger">
+                  <span className="text-cladd-xs text-danger">
                     {item.missing ? 'Missing' : 'Skipped'}
                   </span>
                 ) : (

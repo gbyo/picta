@@ -160,7 +160,7 @@ function ScreenListItem({
             </span>
             <span
               className={cn(
-                'block text-cladd-2xs',
+                'block text-cladd-xs',
                 live ? 'font-semibold text-live' : 'text-cladd-fg-softer',
               )}
             >
@@ -237,7 +237,7 @@ function LayoutOption({ id, active, onPick }: { id: Template; active: boolean; o
         outline={active}
         variant={active ? 'gradient' : 'solid'}
         color={active ? 'brand' : ''}
-        className="focus-ring rounded-cladd-md text-cladd-2xs font-medium"
+        className="focus-ring rounded-cladd-md text-cladd-xs font-medium"
         contentClassName="flex flex-col items-center gap-1 p-1.5"
       >
         <LayoutGlyph screen={PREVIEW_TEMPLATES[id]} className="w-full" />
@@ -549,7 +549,7 @@ export function ScreensWorkspace() {
               </ol>
             </SortableArea>
           </Scroll>
-          <p className="border-t px-3 py-2 text-cladd-2xs leading-snug text-cladd-fg-softer @max-[1000px]/ws:hidden">
+          <p className="border-t px-3 py-2 text-cladd-xs leading-snug text-cladd-fg-softer @max-[1000px]/ws:hidden">
             Order here is the switcher order and number keys.
           </p>
         </Panel>

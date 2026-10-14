@@ -64,12 +64,10 @@ function MemberRow({
       >
         <GripVertical className="size-4" />
       </button>
-      <span className="w-5 text-right text-cladd-2xs text-cladd-fg-softer tabular">
-        {index + 1}
-      </span>
+      <span className="w-5 text-right text-cladd-xs text-cladd-fg-softer tabular">{index + 1}</span>
       <span className="w-8 text-cladd-xs font-semibold tabular">{player.number}</span>
       <span className="min-w-0 flex-1 truncate text-cladd-xs">{player.name}</span>
-      <span className="text-cladd-2xs text-cladd-fg-softer">{player.position}</span>
+      <span className="text-cladd-xs text-cladd-fg-softer">{player.position}</span>
       <span className="flex">
         <IconButton
           label={`Move ${player.name} earlier`}

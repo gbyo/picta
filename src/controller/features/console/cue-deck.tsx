@@ -77,7 +77,7 @@ function ManualSession() {
       >
         <Hand className="size-4 text-cue" />
         <div className="min-w-0 flex-1">
-          <p className="text-cladd-2xs font-bold tracking-wider text-cue">PRESENTING MANUALLY</p>
+          <p className="text-cladd-xs font-bold tracking-wider text-cue">PRESENTING MANUALLY</p>
           <p className="truncate text-cladd-xs font-semibold">
             {group?.name ?? 'Lineup'} · {shown} of {players.length} shown
           </p>
@@ -129,7 +129,7 @@ function ManualSession() {
                   ) : null
                 }
               >
-                <span className="w-4 text-cladd-2xs text-cladd-fg-softer tabular">{index + 1}</span>
+                <span className="w-4 text-cladd-xs text-cladd-fg-softer tabular">{index + 1}</span>
                 <span className="w-8 text-cladd-md font-bold tabular">{player.number}</span>
                 <span
                   className={cn(
@@ -179,7 +179,7 @@ function LineupRow({ group, live, busy }: { group: PlayerGroup; live: boolean; b
           />
           <span className="min-w-0">
             <span className="block truncate text-cladd-xs font-semibold">{group.name}</span>
-            <span className="block truncate text-cladd-2xs text-cladd-fg-softer">
+            <span className="block truncate text-cladd-xs text-cladd-fg-softer">
               {empty
                 ? 'No players'
                 : `${players.length} player${players.length === 1 ? '' : 's'} · ${videos ? `${videos} intro video${videos === 1 ? '' : 's'}, ` : ''}${players.length - videos} card${players.length - videos === 1 ? '' : 's'}`}
@@ -212,13 +212,13 @@ function LineupRow({ group, live, busy }: { group: PlayerGroup; live: boolean; b
         <ol className="flex flex-col border-t px-2 py-1.5">
           {players.map((player, index) => (
             <li key={player.id} className="flex h-6 items-center gap-2 text-cladd-xs">
-              <span className="w-4 text-right text-cladd-2xs text-cladd-fg-softer tabular">
+              <span className="w-4 text-right text-cladd-xs text-cladd-fg-softer tabular">
                 {index + 1}
               </span>
               <span className="w-7 font-semibold tabular">{player.number}</span>
               <span className="min-w-0 flex-1 truncate text-cladd-fg-soft">{player.name}</span>
               <PresentationIcon player={player} />
-              <span className="w-16 text-cladd-2xs text-cladd-fg-softer">
+              <span className="w-16 text-cladd-xs text-cladd-fg-softer">
                 {playerHasVideo(player) ? 'intro video' : 'card · 9s'}
               </span>
             </li>
@@ -263,7 +263,7 @@ function PlayerFinder({ live, busy }: { live: boolean; busy: boolean }) {
                 {player.number}
               </span>
               <span className="min-w-0 flex-1 truncate text-cladd-xs">{player.name}</span>
-              <span className="text-cladd-2xs text-cladd-fg-softer">{player.position}</span>
+              <span className="text-cladd-xs text-cladd-fg-softer">{player.position}</span>
               <Button
                 size="sm"
                 variant="transparent"

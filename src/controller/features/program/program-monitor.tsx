@@ -27,14 +27,14 @@ export function ProgramMonitor() {
       <div className="flex h-cladd-sm items-center gap-2">
         <span
           className={cn(
-            'rounded-cladd-3xs px-1.5 py-0.5 text-cladd-2xs font-bold tracking-wider',
+            'rounded-cladd-3xs px-1.5 py-0.5 text-cladd-xs font-bold tracking-wider',
             live ? 'bg-live text-live-fg' : 'bg-cladd-surface-cut text-cladd-fg-soft',
           )}
         >
           {live ? 'PROGRAM' : 'PREVIEW'}
         </span>
         <span className="min-w-0 truncate text-cladd-xs font-semibold">{screen.name}</span>
-        <span className="ml-auto shrink-0 text-cladd-2xs text-cladd-fg-softer tabular">
+        <span className="ml-auto shrink-0 text-cladd-xs text-cladd-fg-softer tabular">
           {display ? `${display.width}×${display.height}` : '16:9'}
         </span>
       </div>
@@ -56,7 +56,7 @@ export function ProgramMonitor() {
         />
       </SurfaceCut>
       {!live && (
-        <p className="text-cladd-2xs leading-snug text-cladd-fg-softer">
+        <p className="text-cladd-xs leading-snug text-cladd-fg-softer">
           Not on air. This is what Go Live will show.
         </p>
       )}
