@@ -1,5 +1,5 @@
+import { Button, Segmented, SegmentedButton } from '@cladd-ui/react';
 import {
-  ChevronDown,
   Command,
   FilePlus2,
   FolderOpen,
@@ -10,23 +10,16 @@ import {
   Save,
   Sun,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Hint } from '@/components/picta/hint';
+import { Panel } from '@/components/picta/workspace';
+import { ResourceMenu, type ResourceAction } from '@/components/picta/resource-menu';
 import { cn } from '@/lib/utils';
 import { usePicta } from '@/state/store';
 import { anyDirty, dirtyNames, showTitle } from '@/state/derive';
 import { newShow, openShow, reveal, saveShow } from '@/actions/document';
 import { openPalette, openShortcuts, setMode, setTheme } from '@/actions/ui';
 import { checkForUpdates } from '@/boot';
-import { mod } from '@/shortcuts';
+import { modKey } from '@/shortcuts';
 import { DisplayPicker } from './display-picker';
 import { MODES } from './modes';
 import { OutputControl } from './output-control';
@@ -37,97 +30,100 @@ function ShowMenu() {
   const unsaved = usePicta((state) => dirtyNames(state.doc, state.pathStyle).join(', '));
   const hasPath = usePicta((state) => state.doc.show.filePath !== null);
   const theme = usePicta((state) => state.theme);
+  const groups: ResourceAction[][] = [
+    [
+      {
+        id: 'new',
+        label: 'New Show',
+        icon: FilePlus2,
+        keys: [modKey, 'N'],
+        onSelect: () => void newShow(),
+      },
+      {
+        id: 'open',
+        label: 'Open Show…',
+        icon: FolderOpen,
+        keys: [modKey, 'O'],
+        onSelect: () => void openShow(),
+      },
+    ],
+    [
+      {
+        id: 'save',
+        label: 'Save',
+        icon: Save,
+        keys: [modKey, 'S'],
+        onSelect: () => void saveShow(),
+      },
+      {
+        id: 'save-as',
+        label: 'Save As…',
+        icon: Save,
+        keys: ['⇧', modKey, 'S'],
+        onSelect: () => void saveShow(true),
+      },
+      {
+        id: 'reveal',
+        label: 'Reveal Show File',
+        icon: FolderSearch,
+        disabled: !hasPath,
+        onSelect: () => void reveal('show'),
+      },
+    ],
+    [
+      {
+        id: 'theme',
+        label: theme === 'dark' ? 'Light Appearance' : 'Dark Appearance',
+        icon: theme === 'dark' ? Sun : Moon,
+        onSelect: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+      },
+      {
+        id: 'shortcuts',
+        label: 'Keyboard Shortcuts',
+        icon: Keyboard,
+        keys: ['?'],
+        onSelect: () => openShortcuts(),
+      },
+      {
+        id: 'updates',
+        label: 'Check for Updates…',
+        icon: RefreshCw,
+        onSelect: () => void checkForUpdates(true),
+      },
+    ],
+  ];
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            className="h-8 max-w-64 gap-1.5 px-2 text-[13px] font-semibold text-fg"
-            aria-label={`Show: ${title}${dirty ? ' (unsaved changes)' : ''}`}
-          />
-        }
-      >
-        <span className="truncate">{title}</span>
-        {dirty && (
-          <span className="size-1.5 shrink-0 rounded-full bg-warn" title={`Unsaved: ${unsaved}`} />
-        )}
-        <ChevronDown className="size-3 text-fg-faint" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-60" align="start">
-        <DropdownMenuItem onClick={() => void newShow()}>
-          <FilePlus2 />
-          New Show
-          <DropdownMenuShortcut>{mod}N</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void openShow()}>
-          <FolderOpen />
-          Open Show…
-          <DropdownMenuShortcut>{mod}O</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void saveShow()}>
-          <Save />
-          Save
-          <DropdownMenuShortcut>{mod}S</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void saveShow(true)}>
-          <Save />
-          Save As…
-          <DropdownMenuShortcut>⇧{mod}S</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!hasPath} onClick={() => void reveal('show')}>
-          <FolderSearch />
-          Reveal Show File
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? <Sun /> : <Moon />}
-          {theme === 'dark' ? 'Light Appearance' : 'Dark Appearance'}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => openShortcuts()}>
-          <Keyboard />
-          Keyboard Shortcuts
-          <DropdownMenuShortcut>?</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void checkForUpdates(true)}>
-          <RefreshCw />
-          Check for Updates…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ResourceMenu
+      name={title}
+      dirty={dirty}
+      unsavedLabel={`Unsaved: ${unsaved}`}
+      ariaLabel={`Show: ${title}${dirty ? ' (unsaved changes)' : ''}`}
+      groups={groups}
+    />
   );
 }
 
 function ModeSwitcher() {
   const mode = usePicta((state) => state.mode);
   return (
-    <nav
-      aria-label="Workspaces"
-      className="flex h-8 items-center gap-0.5 rounded-md bg-sunken/70 p-0.5"
-    >
+    <Segmented as="nav" aria-label="Workspaces" className="gap-0.5">
       {MODES.map((item) => {
         const active = item.id === mode;
         return (
-          <Hint key={item.id} label={item.hint} keys={[mod, item.key]} side="bottom">
-            <button
-              type="button"
+          <Hint key={item.id} label={item.hint} keys={[modKey, item.key]} side="bottom">
+            <SegmentedButton
+              active={active}
+              readOnly={false}
               aria-current={active ? 'page' : undefined}
               onClick={() => setMode(item.id)}
-              className={cn(
-                'flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent',
-                active
-                  ? 'bg-raised text-fg shadow-[0_0_0_1px_var(--line-strong)]'
-                  : 'text-fg-muted hover:text-fg',
-              )}
             >
-              <item.icon className="size-3.5" />
+              <item.icon />
               <span className="max-[900px]:hidden">{item.label}</span>
-            </button>
+            </SegmentedButton>
           </Hint>
         );
       })}
-    </nav>
+    </Segmented>
   );
 }
 
@@ -150,27 +146,36 @@ function Mark() {
   );
 }
 
+/**
+ * Quiet and stable: the same few things in the same places until something
+ * operationally important happens, when only the live tally changes.
+ */
 export function TopBar() {
   const live = usePicta((state) => state.output.phase === 'live');
   return (
-    <header
+    <Panel
+      as="header"
+      row
       className={cn(
-        'relative z-20 flex h-12 shrink-0 items-center gap-3 border-b border-line bg-surface px-3',
-        live && 'before:absolute before:inset-x-0 before:top-0 before:h-[2px] before:bg-live',
+        'relative z-20 h-cladd-2xl shrink-0 border-b',
+        live &&
+          'before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-0.5 before:bg-live',
       )}
+      contentClassName="gap-3 px-3"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className={cn('text-fg-muted', live && 'text-live')}>
+      <div className="flex min-w-0 flex-1 basis-0 items-center gap-1.5">
+        <span className={cn('shrink-0 text-cladd-fg-soft', live && 'text-live')}>
           <Mark />
         </span>
         <ShowMenu />
       </div>
       <ModeSwitcher />
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
-        <Hint label="Search commands, players and Screens" keys={[mod, 'K']} side="bottom">
+      <div className="flex shrink-0 items-center justify-end gap-2 whitespace-nowrap">
+        <Hint label="Search commands, players and Screens" keys={[modKey, 'K']} side="bottom">
           <Button
-            variant="ghost"
-            size="icon-lg"
+            square
+            variant="transparent"
+            outline={false}
             aria-label="Command palette"
             onClick={() => openPalette()}
           >
@@ -178,9 +183,9 @@ export function TopBar() {
           </Button>
         </Hint>
         <DisplayPicker />
-        <div className="mx-1 h-6 w-px bg-line" />
+        <div className="mx-1 h-5 w-px bg-cladd-outline" />
         <OutputControl />
       </div>
-    </header>
+    </Panel>
   );
 }

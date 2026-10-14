@@ -1,23 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+import { Button, ColorPicker, Input, Select } from '@cladd-ui/react';
 import { History, TriangleAlert } from 'lucide-react';
 import { allBuiltInSports } from '@core/sports.js';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ActionButton, Field, type Intent } from '@/components/picta/controls';
+import { ModalDialog, useInitialFocus } from '@/components/picta/dialog';
 import {
   cancelCurrent,
   resolveCurrent,
@@ -29,101 +15,121 @@ import {
   type TextRequest,
 } from '@/state/dialogs';
 
-function ConfirmBody({ request }: { request: ConfirmRequest }) {
+const dismiss = (open: boolean) => {
+  if (!open) cancelCurrent();
+};
+
+const CONFIRM_INTENT: Record<NonNullable<ConfirmRequest['tone']> | 'default', Intent> = {
+  default: 'primary',
+  danger: 'danger-fill',
+  live: 'live',
+};
+
+/** A question with a yes and a no. The safe answer (cancel) is focused. */
+function ConfirmDialog({ request }: { request: ConfirmRequest }) {
+  const cancel = useInitialFocus<HTMLButtonElement>();
   return (
-    <>
-      <AlertDialogTitle className="flex items-center gap-2 text-[14px] font-semibold">
-        {request.tone === 'danger' && <TriangleAlert className="size-4 text-danger" />}
-        {request.title}
-      </AlertDialogTitle>
-      <AlertDialogDescription className="text-[12.5px] leading-relaxed text-fg-muted">
-        {request.body}
-      </AlertDialogDescription>
-      <div className="mt-2 flex justify-end gap-2">
-        <Button onClick={() => resolveCurrent(false)} autoFocus>
-          {request.cancelLabel ?? 'Cancel'}
-        </Button>
-        <Button
-          variant={
-            request.tone === 'danger' ? 'danger' : request.tone === 'live' ? 'live' : 'primary'
-          }
-          onClick={() => resolveCurrent(true)}
-        >
-          {request.confirmLabel}
-        </Button>
-      </div>
-    </>
+    <ModalDialog
+      onOpenChange={dismiss}
+      title={
+        <span className="flex items-center gap-2">
+          {request.tone === 'danger' && <TriangleAlert className="size-4 text-danger" />}
+          {request.title}
+        </span>
+      }
+      text={request.body}
+      actions={
+        <>
+          <Button ref={cancel} onClick={() => resolveCurrent(false)}>
+            {request.cancelLabel ?? 'Cancel'}
+          </Button>
+          <ActionButton
+            intent={CONFIRM_INTENT[request.tone ?? 'default']}
+            onClick={() => resolveCurrent(true)}
+          >
+            {request.confirmLabel}
+          </ActionButton>
+        </>
+      }
+    />
   );
 }
 
-function SaveChangesBody({ request }: { request: SaveChangesRequest }) {
+function NameList({ names }: { names: string[] }) {
   return (
-    <>
-      <AlertDialogTitle className="text-[14px] font-semibold">
-        Save changes before {request.reason}?
-      </AlertDialogTitle>
-      <AlertDialogDescription className="text-[12.5px] leading-relaxed text-fg-muted">
-        These have unsaved changes:
-      </AlertDialogDescription>
-      <ul className="rounded-md bg-sunken px-3 py-2 text-[12.5px] text-fg">
-        {request.names.map((name) => (
-          <li key={name} className="truncate">
-            {name}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-2 flex items-center gap-2">
-        <Button variant="ghost" className="text-danger" onClick={() => resolveCurrent('discard')}>
-          Don't Save
-        </Button>
-        <Button className="ml-auto" onClick={() => resolveCurrent('cancel')}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={() => resolveCurrent('save')} autoFocus>
-          Save
-        </Button>
-      </div>
-    </>
+    <ul className="rounded-cladd-md bg-cladd-surface-cut px-3 py-2 text-cladd-xs">
+      {names.map((name) => (
+        <li key={name} className="truncate">
+          {name}
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function RecoveryBody({ request }: { request: RecoveryRequest }) {
+function SaveChangesDialog({ request }: { request: SaveChangesRequest }) {
+  const save = useInitialFocus<HTMLButtonElement>();
+  return (
+    <ModalDialog
+      onOpenChange={dismiss}
+      title={`Save changes before ${request.reason}?`}
+      text="These have unsaved changes:"
+      actions={
+        <>
+          <ActionButton
+            intent="danger"
+            className="mr-auto"
+            onClick={() => resolveCurrent('discard')}
+          >
+            Don't Save
+          </ActionButton>
+          <Button onClick={() => resolveCurrent('cancel')}>Cancel</Button>
+          <ActionButton ref={save} intent="primary" onClick={() => resolveCurrent('save')}>
+            Save
+          </ActionButton>
+        </>
+      }
+    >
+      <NameList names={request.names} />
+    </ModalDialog>
+  );
+}
+
+function RecoveryDialog({ request }: { request: RecoveryRequest }) {
+  const recover = useInitialFocus<HTMLButtonElement>();
   const when = new Date(request.savedAt).toLocaleString(undefined, {
     weekday: 'short',
     hour: 'numeric',
     minute: '2-digit',
   });
   return (
-    <>
-      <AlertDialogTitle className="flex items-center gap-2 text-[14px] font-semibold">
-        <History className="size-4 text-accent" />
-        Recover unsaved work?
-      </AlertDialogTitle>
-      <AlertDialogDescription className="text-[12.5px] leading-relaxed text-fg-muted">
-        Picta did not close cleanly last time ({when}). It kept a copy of what was unsaved:
-      </AlertDialogDescription>
-      <ul className="rounded-md bg-sunken px-3 py-2 text-[12.5px] text-fg">
-        {request.names.map((name) => (
-          <li key={name}>{name}</li>
-        ))}
-      </ul>
-      <div className="mt-2 flex justify-end gap-2">
-        <Button onClick={() => resolveCurrent('discard')}>Discard</Button>
-        <Button variant="primary" onClick={() => resolveCurrent('recover')} autoFocus>
-          Recover
-        </Button>
-      </div>
-    </>
+    <ModalDialog
+      onOpenChange={dismiss}
+      title={
+        <span className="flex items-center gap-2">
+          <History className="size-4 text-cladd-primary" />
+          Recover unsaved work?
+        </span>
+      }
+      text={`Picta did not close cleanly last time (${when}). It kept a copy of what was unsaved:`}
+      actions={
+        <>
+          <Button onClick={() => resolveCurrent('discard')}>Discard</Button>
+          <ActionButton ref={recover} intent="primary" onClick={() => resolveCurrent('recover')}>
+            Recover
+          </ActionButton>
+        </>
+      }
+    >
+      <NameList names={request.names} />
+    </ModalDialog>
   );
 }
 
-function TextBody({ request }: { request: TextRequest }) {
+function TextDialog({ request }: { request: TextRequest }) {
+  const field = useInitialFocus<HTMLInputElement>({ select: true });
   const [value, setValue] = useState(request.initialValue ?? '');
   const [error, setError] = useState<string | null>(null);
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    requestAnimationFrame(() => input.current?.select());
-  }, []);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = value.trim();
@@ -139,37 +145,47 @@ function TextBody({ request }: { request: TextRequest }) {
     resolveCurrent(trimmed);
   };
   return (
-    <form onSubmit={submit} className="grid gap-3">
-      <DialogTitle className="text-[14px] font-semibold">{request.title}</DialogTitle>
-      <div className="grid gap-1.5">
-        <Label htmlFor="text-request">{request.label}</Label>
-        <Input
-          id="text-request"
-          ref={input}
-          value={value}
-          maxLength={request.maxLength ?? 60}
-          placeholder={request.placeholder}
-          aria-invalid={error !== null}
-          onChange={(event) => {
-            setValue(event.currentTarget.value);
-            setError(null);
-          }}
-        />
-        {error && <p className="text-[11.5px] text-danger">{error}</p>}
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button onClick={() => cancelCurrent()}>Cancel</Button>
-        <Button variant="primary" type="submit">
-          {request.confirmLabel}
-        </Button>
-      </div>
-    </form>
+    <ModalDialog
+      onOpenChange={dismiss}
+      title={request.title}
+      actions={
+        <>
+          <Button onClick={() => cancelCurrent()}>Cancel</Button>
+          <ActionButton intent="primary" type="submit" form="text-request-form">
+            {request.confirmLabel}
+          </ActionButton>
+        </>
+      }
+    >
+      <form id="text-request-form" onSubmit={submit}>
+        <Field label={request.label} htmlFor="text-request" error={error}>
+          <Input
+            inputId="text-request"
+            value={value}
+            maxLength={request.maxLength ?? 60}
+            placeholder={request.placeholder ?? ''}
+            valid={error === null}
+            inputRef={field}
+            onChange={(next) => {
+              setValue(next);
+              setError(null);
+            }}
+          />
+        </Field>
+      </form>
+    </ModalDialog>
   );
 }
 
 const SPORTS = allBuiltInSports();
+const SPORT_IDS = [...SPORTS.map((sport) => sport.id), 'custom'];
 
-function NewTeamBody() {
+function sportName(id: string): string {
+  return id === 'custom' ? 'Custom sport' : (SPORTS.find((sport) => sport.id === id)?.name ?? id);
+}
+
+function NewTeamDialog() {
+  const name = useInitialFocus<HTMLInputElement>();
   const [details, setDetails] = useState<NewTeamDetails>({
     name: '',
     sport: 'volleyball',
@@ -188,98 +204,84 @@ function NewTeamBody() {
   };
   const preset = SPORTS.find((sport) => sport.id === details.sport);
   return (
-    <form onSubmit={submit} className="grid gap-4">
-      <div>
-        <DialogTitle className="text-[14px] font-semibold">New team</DialogTitle>
-        <DialogDescription className="mt-1 text-[12px] text-fg-muted">
-          A reusable team: roster, photos, intro videos and groups. Save it as a .pictateam to use
-          it at every event.
-        </DialogDescription>
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="team-name">Team name</Label>
-        <Input
-          id="team-name"
-          autoFocus
-          value={details.name}
-          placeholder="e.g. Ninety Six Wildcats"
-          onChange={(event) => {
-            setDetails({ ...details, name: event.currentTarget.value });
-            setError(null);
-          }}
-        />
-        {error && <p className="text-[11.5px] text-danger">{error}</p>}
-      </div>
-      <div className="grid grid-cols-[1fr_auto] gap-3">
-        <div className="grid gap-1.5">
-          <Label>Sport</Label>
-          <Select
-            value={details.sport}
-            onValueChange={(value) => setDetails({ ...details, sport: String(value) })}
-          >
-            <SelectTrigger className="w-full" aria-label="Sport">
-              <SelectValue>
-                {(value: string) =>
-                  value === 'custom'
-                    ? 'Custom sport'
-                    : (SPORTS.find((sport) => sport.id === value)?.name ?? value)
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {SPORTS.map((sport) => (
-                <SelectItem key={sport.id} value={sport.id}>
-                  {sport.name}
-                </SelectItem>
-              ))}
-              <SelectItem value="custom">Custom sport</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-1.5">
-          <Label>Colours</Label>
-          <div className="flex h-7 items-center gap-1.5">
-            {(['primary', 'secondary'] as const).map((which) => (
-              <input
-                key={which}
-                type="color"
-                aria-label={which === 'primary' ? 'Primary colour' : 'Secondary colour'}
-                value={details[which]}
-                onChange={(event) => setDetails({ ...details, [which]: event.currentTarget.value })}
-                className="h-7 w-9 cursor-pointer rounded-[4px] border border-line-strong bg-transparent p-0.5"
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      {details.sport === 'custom' ? (
-        <div className="grid gap-1.5">
-          <Label htmlFor="custom-name">Sport name</Label>
+    <ModalDialog
+      onOpenChange={dismiss}
+      title="New team"
+      text="A reusable team: roster, photos, intro videos and groups. Save it as a .pictateam to use it at every event."
+      actions={
+        <>
+          <Button onClick={() => cancelCurrent()}>Cancel</Button>
+          <ActionButton intent="primary" type="submit" form="new-team-form">
+            Create Team
+          </ActionButton>
+        </>
+      }
+    >
+      <form id="new-team-form" onSubmit={submit} className="flex flex-col gap-3">
+        <Field label="Team name" htmlFor="team-name" error={error}>
           <Input
-            id="custom-name"
-            value={details.customName ?? ''}
-            placeholder="e.g. Ultimate"
-            onChange={(event) => setDetails({ ...details, customName: event.currentTarget.value })}
+            inputId="team-name"
+            inputRef={name}
+            value={details.name}
+            placeholder="e.g. Ninety Six Wildcats"
+            valid={error === null}
+            onChange={(next) => {
+              setDetails({ ...details, name: next });
+              setError(null);
+            }}
           />
-          <p className="text-[11.5px] text-fg-faint">
-            You add the statistics you want to count in Roster.
-          </p>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Sport">
+            <Select
+              options={SPORT_IDS}
+              value={details.sport}
+              onChange={(value) => setDetails({ ...details, sport: value })}
+              renderOption={({ value }) => sportName(value)}
+              aria-label="Sport"
+            >
+              {sportName(details.sport)}
+            </Select>
+          </Field>
+          <Field label="Colours">
+            <div className="flex gap-2">
+              {(['primary', 'secondary'] as const).map((which) => (
+                <ColorPicker
+                  key={which}
+                  surface="cut"
+                  dropdownIcon={false}
+                  aria-label={which === 'primary' ? 'Primary colour' : 'Secondary colour'}
+                  value={details[which]}
+                  onChange={(color) => setDetails({ ...details, [which]: color.hex })}
+                  className="w-auto min-w-0 flex-1"
+                />
+              ))}
+            </div>
+          </Field>
         </div>
-      ) : (
-        preset && (
-          <p className="text-[11.5px] text-fg-faint">
-            Counts {preset.stats.map((stat) => stat.label.toLocaleLowerCase()).join(', ')}. Starts
-            with {preset.defaultGroups.map((group) => group.name).join(' and ')} groups.
-          </p>
-        )
-      )}
-      <div className="flex justify-end gap-2">
-        <Button onClick={() => cancelCurrent()}>Cancel</Button>
-        <Button variant="primary" type="submit">
-          Create Team
-        </Button>
-      </div>
-    </form>
+        {details.sport === 'custom' ? (
+          <Field
+            label="Sport name"
+            htmlFor="custom-name"
+            hint="You add the statistics you want to count in Roster."
+          >
+            <Input
+              inputId="custom-name"
+              value={details.customName ?? ''}
+              placeholder="e.g. Ultimate"
+              onChange={(next) => setDetails({ ...details, customName: next })}
+            />
+          </Field>
+        ) : (
+          preset && (
+            <p className="text-cladd-xs text-cladd-fg-softer">
+              Counts {preset.stats.map((stat) => stat.label.toLocaleLowerCase()).join(', ')}. Starts
+              with {preset.defaultGroups.map((group) => group.name).join(' and ')} groups.
+            </p>
+          )
+        )}
+      </form>
+    </ModalDialog>
   );
 }
 
@@ -288,27 +290,16 @@ export function DialogHost() {
   const current = useCurrentDialog();
   if (!current) return null;
   const { request } = current;
-  const onOpenChange = (open: boolean) => {
-    if (!open) cancelCurrent();
-  };
-  if (request.kind === 'text' || request.kind === 'new-team')
-    return (
-      <Dialog open onOpenChange={onOpenChange} key={current.id}>
-        <DialogContent
-          className="w-[min(420px,calc(100%-32px))] sm:max-w-none"
-          showCloseButton={false}
-        >
-          {request.kind === 'text' ? <TextBody request={request} /> : <NewTeamBody />}
-        </DialogContent>
-      </Dialog>
-    );
-  return (
-    <AlertDialog open onOpenChange={onOpenChange} key={current.id}>
-      <AlertDialogContent className="w-[min(420px,calc(100%-32px))] sm:max-w-none data-[size=default]:max-w-none data-[size=default]:sm:max-w-none">
-        {request.kind === 'confirm' && <ConfirmBody request={request} />}
-        {request.kind === 'save-changes' && <SaveChangesBody request={request} />}
-        {request.kind === 'recovery' && <RecoveryBody request={request} />}
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  switch (request.kind) {
+    case 'confirm':
+      return <ConfirmDialog key={current.id} request={request} />;
+    case 'save-changes':
+      return <SaveChangesDialog key={current.id} request={request} />;
+    case 'recovery':
+      return <RecoveryDialog key={current.id} request={request} />;
+    case 'text':
+      return <TextDialog key={current.id} request={request} />;
+    case 'new-team':
+      return <NewTeamDialog key={current.id} />;
+  }
 }

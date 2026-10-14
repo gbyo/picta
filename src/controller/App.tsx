@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Toaster } from '@/components/ui/sonner';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/picta/resizable';
+import { PictaProvider } from '@/components/picta/provider';
+import { Toaster } from '@/components/picta/toaster';
 import { usePicta } from './state/store';
 import { handleGlobalKey } from './shortcuts';
 import { TopBar } from './features/shell/top-bar';
@@ -31,7 +31,7 @@ function storedRailWidth(): number {
 function Workspace() {
   const mode = usePicta((state) => state.mode);
   return (
-    <main aria-label="Workspace" className="h-full min-h-0 min-w-0 bg-canvas">
+    <main aria-label="Workspace" className="h-full min-h-0 min-w-0 bg-cladd-bg">
       {mode === 'console' && <ConsoleWorkspace />}
       {mode === 'media' && <MediaWorkspace />}
       {mode === 'roster' && <RosterWorkspace />}
@@ -43,24 +43,25 @@ function Workspace() {
 export function App() {
   const theme = usePicta((state) => state.theme);
   useEffect(() => {
-    document.documentElement.dataset['theme'] = theme;
-  }, [theme]);
-  useEffect(() => {
     window.addEventListener('keydown', handleGlobalKey);
     return () => window.removeEventListener('keydown', handleGlobalKey);
   }, []);
-  // Like native desktop buttons, a button clicked with the mouse does not keep
+  // Like native desktop buttons, a control clicked with the mouse does not keep
   // keyboard focus. Otherwise Space (next media) would re-press the last
-  // stat or Point button the operator clicked. Keyboard focus is untouched.
+  // stat or Point button the operator clicked, or flip the last checkbox.
+  // Keyboard focus is untouched.
   useEffect(() => {
     const release = (event: MouseEvent) => {
       if (event.detail === 0) return;
-      const target = event.target instanceof Element ? event.target.closest('button') : null;
+      const target =
+        event.target instanceof Element
+          ? event.target.closest('button, input[type="checkbox"], input[type="radio"]')
+          : null;
       if (!target || target !== document.activeElement) return;
       if (target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'))
         return;
       if (target.hasAttribute('aria-haspopup') || target.closest('form')) return;
-      target.blur();
+      (target as HTMLElement).blur();
     };
     window.addEventListener('click', release);
     return () => window.removeEventListener('click', release);
@@ -76,8 +77,8 @@ export function App() {
   }, []);
 
   return (
-    <TooltipProvider>
-      <div className="flex h-full flex-col">
+    <PictaProvider theme={theme}>
+      <div className="app-container flex h-full flex-col bg-cladd-bg text-cladd-fg">
         <TopBar />
         <FailureBanner />
         <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -109,6 +110,6 @@ export function App() {
       <ShortcutsDialog />
       <DropOverlay />
       <Toaster theme={theme} />
-    </TooltipProvider>
+    </PictaProvider>
   );
 }

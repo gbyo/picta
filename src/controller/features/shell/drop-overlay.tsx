@@ -1,3 +1,4 @@
+import { Surface } from '@cladd-ui/react';
 import { FileDown, Lock } from 'lucide-react';
 import { usePicta } from '@/state/store';
 import { describeDrop } from '@/boot';
@@ -10,18 +11,24 @@ export function DropOverlay() {
   const description = describeDrop(drag.paths) ?? 'Picta cannot use these files';
   const blocked = description.includes('locked') || description.includes('cannot');
   return (
-    <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-canvas/70 p-8">
-      <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-accent/70 bg-overlay px-10 py-8 shadow-pop">
+    <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-cladd-bg/70 p-8">
+      <Surface
+        level={2}
+        variant="gradient"
+        outline
+        className="rounded-cladd-dialog border-2 border-dashed border-accent/70 shadow-cladd-popover"
+        contentClassName="flex flex-col items-center gap-3 px-10 py-8"
+      >
         {blocked && live ? (
           <Lock className="size-8 text-warn" />
         ) : (
-          <FileDown className="size-8 text-accent" />
+          <FileDown className="size-8 text-cladd-primary" />
         )}
-        <p className="text-[15px] font-semibold text-fg">{description}</p>
-        <p className="text-[12px] text-fg-muted">
+        <p className="text-cladd-md font-semibold">{description}</p>
+        <p className="text-cladd-xs text-cladd-fg-soft">
           {drag.paths.length} file{drag.paths.length === 1 ? '' : 's'}
         </p>
-      </div>
+      </Surface>
     </div>
   );
 }

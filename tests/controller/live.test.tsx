@@ -142,7 +142,7 @@ describe('volleyball score', () => {
     app = await startApp({ show });
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'End set 1' }));
-    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(score()).toMatchObject({ homeSets: 1, homePoints: 0, awayPoints: 0, setNumber: 2 });
   });
 
@@ -152,13 +152,13 @@ describe('volleyball score', () => {
     app = await startApp({ show });
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'End set 1' }));
-    const dialog = await screen.findByRole('alertdialog');
+    const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('not a standard finish');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(score().homeSets).toBe(0);
     await user.click(screen.getByRole('button', { name: 'End set 1' }));
     await user.click(
-      within(await screen.findByRole('alertdialog')).getByRole('button', { name: /End Set/ }),
+      within(await screen.findByRole('dialog')).getByRole('button', { name: /End Set/ }),
     );
     expect(score().homeSets).toBe(1);
   });
@@ -189,9 +189,9 @@ describe('volleyball score', () => {
     const user = userEvent.setup();
     screen.getByRole('button', { name: 'Match options' }).focus();
     await user.keyboard('{Enter}');
-    await user.click(await screen.findByRole('menuitem', { name: /Reset Score/ }));
+    await user.click(await screen.findByRole('menuitem', { name: /Reset Match/ }));
     await user.click(
-      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Reset Score' }),
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reset Score' }),
     );
     expect(score()).toMatchObject({ homeSets: 0, homePoints: 0, setNumber: 1 });
   });

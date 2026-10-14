@@ -1,19 +1,18 @@
-import { useState } from 'react';
+import { Button, List, ListButton, Select } from '@cladd-ui/react';
 import { ArrowDown, ArrowUp, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { PlayerGroup, Team } from '@core/domain.js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Hint } from '@/components/picta/hint';
-import { EmptyState } from '@/components/picta/section';
+import { ActionButton, CommitInput, IconButton } from '@/components/picta/controls';
+import { Banner, EmptyState } from '@/components/picta/feedback';
 import { SortableArea, useSortableItem } from '@/components/picta/sortable';
+import {
+  Inspector,
+  InspectorHeader,
+  InspectorSection,
+  Panel,
+  PropertyRow,
+  Scroll,
+  WorkspaceMain,
+} from '@/components/picta/workspace';
 import { cn } from '@/lib/utils';
 import { usePicta } from '@/state/store';
 import { useTeam } from '@/hooks';
@@ -49,8 +48,10 @@ function MemberRow({
       ref={sortable.ref}
       style={sortable.style}
       className={cn(
-        'flex h-9 items-center gap-2 border-b border-line px-2',
-        sortable.dragging ? 'bg-raised shadow-pop' : 'hover:bg-raised/60',
+        'flex h-cladd-lg items-center gap-2 border-b px-2',
+        sortable.dragging
+          ? 'bg-cladd-surface shadow-cladd-popover'
+          : 'hover:bg-cladd-surface-hover',
       )}
     >
       <button
@@ -59,110 +60,95 @@ function MemberRow({
         {...sortable.attributes}
         {...sortable.listeners}
         aria-label={`Reorder ${player.name}`}
-        className="flex h-7 w-5 cursor-grab items-center justify-center rounded-[4px] text-fg-faint outline-none hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-accent"
+        className="focus-ring flex h-cladd-md w-5 cursor-grab items-center justify-center rounded-cladd-md text-cladd-fg-softer hover:text-cladd-fg-soft"
       >
-        <GripVertical className="size-3.5" />
+        <GripVertical className="size-4" />
       </button>
-      <span className="w-5 text-right text-[10.5px] text-fg-faint tabular">{index + 1}</span>
-      <span className="w-8 text-[13px] font-semibold text-fg tabular">{player.number}</span>
-      <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{player.name}</span>
-      <span className="text-[11px] text-fg-faint">{player.position}</span>
+      <span className="w-5 text-right text-cladd-2xs text-cladd-fg-softer tabular">
+        {index + 1}
+      </span>
+      <span className="w-8 text-cladd-xs font-semibold tabular">{player.number}</span>
+      <span className="min-w-0 flex-1 truncate text-cladd-xs">{player.name}</span>
+      <span className="text-cladd-2xs text-cladd-fg-softer">{player.position}</span>
       <span className="flex">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Move ${player.name} earlier`}
+        <IconButton
+          label={`Move ${player.name} earlier`}
+          size="sm"
           disabled={index === 0}
           onClick={() => nudgeInGroup(group.id, playerId, -1)}
         >
           <ArrowUp />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Move ${player.name} later`}
+        </IconButton>
+        <IconButton
+          label={`Move ${player.name} later`}
+          size="sm"
           disabled={index === group.playerIds.length - 1}
           onClick={() => nudgeInGroup(group.id, playerId, 1)}
         >
           <ArrowDown />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Remove ${player.name} from ${group.name}`}
+        </IconButton>
+        <IconButton
+          label={`Remove ${player.name} from ${group.name}`}
+          size="sm"
           onClick={() => removeFromGroup(group.id, playerId)}
         >
           <X />
-        </Button>
+        </IconButton>
       </span>
     </li>
   );
 }
 
-function GroupEditor({ group, team }: { group: PlayerGroup; team: Team }) {
+/** The group's members: identity and the routine action (add) in the header, order below. */
+function GroupMembers({ group, team }: { group: PlayerGroup; team: Team }) {
   const override = usePicta((state) => state.doc.show.data.event.liveGroups[group.id]);
   const available = team.players.filter((player) => !group.playerIds.includes(player.id));
   const full = group.maxPlayers !== undefined && group.playerIds.length >= group.maxPlayers;
-  const [maxDraft, setMaxDraft] = useState<string | null>(null);
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <h3 className="text-[14px] font-semibold text-fg">{group.name}</h3>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Rename group"
-          onClick={() => void renameGroup(group.id)}
-        >
-          <Pencil />
-        </Button>
-        <span className="text-[12px] text-fg-faint tabular">
-          {group.playerIds.length}
-          {group.maxPlayers !== undefined ? ` of ${group.maxPlayers}` : ''} player
-          {group.playerIds.length === 1 ? '' : 's'}
-        </span>
-        <label className="ml-auto flex items-center gap-1.5 text-[11.5px] text-fg-muted">
-          Limit
-          <Input
-            type="number"
-            min={1}
-            aria-label="Maximum players"
-            placeholder="None"
-            value={maxDraft ?? (group.maxPlayers === undefined ? '' : String(group.maxPlayers))}
-            onChange={(event) => setMaxDraft(event.currentTarget.value)}
-            onBlur={() => {
-              if (maxDraft !== null)
-                setGroupMax(group.id, maxDraft.trim() === '' ? null : Number(maxDraft));
-              setMaxDraft(null);
+    <>
+      <Panel row className="h-cladd-2xl shrink-0 border-b" contentClassName="gap-3 px-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-cladd-sm leading-tight font-semibold">{group.name}</h3>
+          <p className="truncate text-cladd-xs leading-tight text-cladd-fg-soft tabular">
+            {group.playerIds.length}
+            {group.maxPlayers !== undefined ? ` of ${group.maxPlayers}` : ''} player
+            {group.playerIds.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div className="w-44 shrink-0">
+          <Select
+            aria-label="Add a player to this group"
+            disabled={available.length === 0 || full}
+            options={available.map((player) => player.id)}
+            value=""
+            onChange={(value) => {
+              if (value) addToGroup(group.id, value);
             }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.currentTarget.blur();
+            renderOption={({ value }) => {
+              const player = available.find((item) => item.id === value);
+              return player ? playerLabel(player) : value;
             }}
-            className="w-16 tabular"
-          />
-        </label>
-        <Hint label="Delete this group. Players stay on the roster.">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Delete group"
-            className="text-danger hover:text-danger"
-            onClick={() => deleteGroup(group.id)}
           >
-            <Trash2 />
-          </Button>
-        </Hint>
-      </div>
+            <span className="text-cladd-fg-soft">
+              {full
+                ? `${group.name} is full`
+                : available.length === 0
+                  ? 'Everyone is in this group'
+                  : 'Add a player…'}
+            </span>
+          </Select>
+        </div>
+      </Panel>
       {override && (
-        <p className="border-b border-line bg-warn-soft px-3 py-1.5 text-[11.5px] text-fg">
+        <Banner tone="warn">
           Tonight this group has {override.length} player{override.length === 1 ? '' : 's'} from
           substitutions in the Console. This is the saved team order.
-        </p>
+        </Banner>
       )}
-      <ScrollArea className="min-h-0 flex-1">
+      <Scroll>
         {group.playerIds.length === 0 ? (
           <EmptyState title="This group is empty">
-            Add players below. Order matters: lineups present in this order.
+            Add players above. Order matters: lineups present in this order.
           </EmptyState>
         ) : (
           <SortableArea
@@ -176,36 +162,52 @@ function GroupEditor({ group, team }: { group: PlayerGroup; team: Team }) {
             </ol>
           </SortableArea>
         )}
-        <div className="flex items-center gap-2 p-3">
-          <Select
-            value=""
-            disabled={available.length === 0 || full}
-            onValueChange={(value) => {
-              if (value) addToGroup(group.id, String(value));
-            }}
-          >
-            <SelectTrigger className="w-64" aria-label="Add a player to this group">
-              <SelectValue>
-                {() =>
-                  full
-                    ? `${group.name} is full`
-                    : available.length === 0
-                      ? 'Everyone is in this group'
-                      : 'Add a player…'
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {available.map((player) => (
-                <SelectItem key={player.id} value={player.id}>
-                  {playerLabel(player)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </ScrollArea>
-    </div>
+      </Scroll>
+    </>
+  );
+}
+
+/** Properties of the selected group. Deleting is its own section at the end. */
+function GroupInspector({ group }: { group: PlayerGroup }) {
+  return (
+    <>
+      <InspectorHeader
+        title={group.name}
+        subtitle={`${group.playerIds.length} player${group.playerIds.length === 1 ? '' : 's'}`}
+      />
+      <InspectorSection title="Group">
+        <PropertyRow label="Name">
+          <span className="min-w-0 flex-1 truncate">{group.name}</span>
+          <Button size="sm" onClick={() => void renameGroup(group.id)}>
+            <Pencil />
+            Rename…
+          </Button>
+        </PropertyRow>
+        <PropertyRow label="Maximum players">
+          <CommitInput
+            key={`${group.id}-${group.maxPlayers ?? ''}`}
+            type="number"
+            min={1}
+            label="Maximum players"
+            placeholder="None"
+            value={group.maxPlayers === undefined ? '' : String(group.maxPlayers)}
+            onCommit={(value) => setGroupMax(group.id, value.trim() === '' ? null : Number(value))}
+            className="w-24"
+            inputClassName="tabular"
+          />
+        </PropertyRow>
+        <p className="text-cladd-xs leading-snug text-cladd-fg-softer">
+          Lineups present players in the order listed here. Leave the maximum empty for no limit.
+        </p>
+      </InspectorSection>
+      <InspectorSection title="Delete">
+        <ActionButton intent="danger" onClick={() => deleteGroup(group.id)}>
+          <Trash2 />
+          Delete Group
+        </ActionButton>
+        <p className="text-cladd-xs text-cladd-fg-softer">Players stay on the roster.</p>
+      </InspectorSection>
+    </>
   );
 }
 
@@ -215,53 +217,55 @@ export function GroupsPane() {
   if (!team) return null;
   const group = team.groups.find((item) => item.id === selectedId) ?? team.groups[0];
   return (
-    <div className="flex h-full min-h-0">
-      <aside
+    <>
+      <Panel
+        as="aside"
         aria-label="Groups"
-        className="flex w-60 shrink-0 flex-col border-r border-line bg-surface"
+        className="w-56 shrink-0 border-r @max-[860px]/ws:w-48 @max-[700px]/ws:w-40 @max-[560px]/ws:max-h-36 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
       >
-        <ScrollArea className="min-h-0 flex-1">
-          <ul className="flex flex-col p-1.5">
+        <Scroll>
+          <List className="gap-0.5 p-1.5">
             {team.groups.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  aria-current={item.id === group?.id}
-                  onClick={() => selectGroup(item.id)}
-                  className={cn(
-                    'flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                    item.id === group?.id
-                      ? 'bg-raised text-fg'
-                      : 'text-fg-muted hover:bg-raised/60 hover:text-fg',
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                  <span className="text-[11px] text-fg-faint tabular">
+              <ListButton
+                key={item.id}
+                selected={item.id === group?.id}
+                color={item.id === group?.id ? 'brand' : ''}
+                aria-current={item.id === group?.id}
+                onClick={() => selectGroup(item.id)}
+                after={
+                  <span className="text-cladd-fg-softer tabular">
                     {item.playerIds.length}
                     {item.maxPlayers !== undefined ? `/${item.maxPlayers}` : ''}
                   </span>
-                </button>
-              </li>
+                }
+              >
+                <span className="truncate">{item.name}</span>
+              </ListButton>
             ))}
-          </ul>
-        </ScrollArea>
-        <div className="border-t border-line p-2">
+          </List>
+        </Scroll>
+        <div className="border-t p-2">
           <Button className="w-full" onClick={() => void createGroup()}>
             <Plus />
             New Group…
           </Button>
         </div>
-      </aside>
-      <div className="min-w-0 flex-1">
+      </Panel>
+      <WorkspaceMain>
         {group ? (
-          <GroupEditor group={group} team={team} />
+          <GroupMembers group={group} team={team} />
         ) : (
           <EmptyState title="No groups yet">
             Groups are ordered lists of players: a starting lineup, the players on the floor,
             seniors.
           </EmptyState>
         )}
-      </div>
-    </div>
+      </WorkspaceMain>
+      {group && (
+        <Inspector label="Group">
+          <GroupInspector group={group} />
+        </Inspector>
+      )}
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { boot, install } from './boot';
 import { createTauriPlatform } from './platform/tauri';
 import { setState } from './state/store';
 import { storedTheme } from './actions/ui';
+import { applyTheme } from './components/picta/provider';
 import { notify } from './actions/notify';
 
 async function start(): Promise<void> {
@@ -18,7 +19,7 @@ async function start(): Promise<void> {
     : (await import('./platform/demo')).createDemoPlatform();
   install(platform);
   setState({ theme: storedTheme() });
-  document.documentElement.dataset['theme'] = storedTheme();
+  applyTheme(storedTheme());
 
   const root = document.getElementById('root');
   if (!root) throw new Error('Missing #root');

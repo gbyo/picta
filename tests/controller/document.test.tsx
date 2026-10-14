@@ -55,7 +55,7 @@ describe('document dirty state', () => {
     app = await startApp();
     fireEvent.keyDown(document.body, { key: 'q' });
     act(() => app!.platform.emitMenu('new'));
-    const dialog = await screen.findByRole('alertdialog');
+    const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Save changes before starting a new show?');
     await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(getState().doc.show.data.event.score!.homePoints).toBe(1);
@@ -67,9 +67,7 @@ describe('document dirty state', () => {
     act(() => app!.platform.emitMenu('new'));
     await userEvent
       .setup()
-      .click(
-        within(await screen.findByRole('alertdialog')).getByRole('button', { name: "Don't Save" }),
-      );
+      .click(within(await screen.findByRole('dialog')).getByRole('button', { name: "Don't Save" }));
     await waitFor(() => expect(getState().doc.show.dirty).toBe(false));
     expect(getState().doc.show.data.team).toBeUndefined();
   });
@@ -97,7 +95,7 @@ describe('crash recovery', () => {
       teamDirty: false,
     });
     const boot = startApp({ recovery: snapshot });
-    const dialog = await screen.findByRole('alertdialog');
+    const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Recover unsaved work?');
     await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Recover' }));
     app = await boot;
@@ -116,9 +114,7 @@ describe('crash recovery', () => {
     const boot = startApp({ recovery: snapshot });
     await userEvent
       .setup()
-      .click(
-        within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Discard' }),
-      );
+      .click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Discard' }));
     app = await boot;
     expect(app.platform.mocks.recoveryDiscard).toHaveBeenCalled();
     expect(getState().doc.show.dirty).toBe(false);
@@ -140,9 +136,7 @@ describe('quitting', () => {
     const closing = app.platform.requestClose();
     await userEvent
       .setup()
-      .click(
-        within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }),
-      );
+      .click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
     await closing;
     expect(app.platform.mocks.quit).not.toHaveBeenCalled();
   });

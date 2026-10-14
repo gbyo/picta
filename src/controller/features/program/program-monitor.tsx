@@ -1,3 +1,4 @@
+import { SurfaceCut } from '@cladd-ui/react';
 import { usePicta } from '@/state/store';
 import { cn } from '@/lib/utils';
 import { ScreenRender } from '@/components/picta/screen-render';
@@ -23,26 +24,27 @@ export function ProgramMonitor() {
 
   return (
     <section aria-label={live ? 'Program' : 'Preview'} className="flex flex-col gap-1.5">
-      <div className="flex h-6 items-center gap-2">
+      <div className="flex h-cladd-sm items-center gap-2">
         <span
           className={cn(
-            'rounded-[3px] px-1.5 py-0.5 text-[10px] font-bold tracking-[0.1em]',
-            live ? 'bg-live text-live-fg' : 'bg-raised text-fg-muted',
+            'rounded-cladd-3xs px-1.5 py-0.5 text-cladd-2xs font-bold tracking-wider',
+            live ? 'bg-live text-live-fg' : 'bg-cladd-surface-cut text-cladd-fg-soft',
           )}
         >
           {live ? 'PROGRAM' : 'PREVIEW'}
         </span>
-        <span className="min-w-0 truncate text-[12.5px] font-medium text-fg">{screen.name}</span>
-        <span className="ml-auto shrink-0 text-[11px] text-fg-faint tabular">
+        <span className="min-w-0 truncate text-cladd-xs font-semibold">{screen.name}</span>
+        <span className="ml-auto shrink-0 text-cladd-2xs text-cladd-fg-softer tabular">
           {display ? `${display.width}×${display.height}` : '16:9'}
         </span>
       </div>
-      <div
+      <SurfaceCut
+        wrapContent={false}
         className={cn(
-          'rounded-[5px] p-[3px] transition-colors',
-          live ? 'bg-live shadow-[0_0_24px_-8px_var(--live)]' : 'bg-line-strong',
-          phase === 'preparing' && 'bg-warn/60',
+          'rounded-cladd-sm p-[3px] transition-colors',
+          live && 'shadow-[0_0_24px_-8px_var(--live)]',
         )}
+        bgClassName={cn(live && 'bg-live', phase === 'preparing' && 'bg-warn/60')}
       >
         <ScreenRender
           screen={screen}
@@ -50,11 +52,11 @@ export function ProgramMonitor() {
           {...content}
           cue={cue}
           cuePanelId={screen.cueTargetPanelId}
-          className="w-full rounded-[3px]"
+          className="relative w-full rounded-cladd-3xs"
         />
-      </div>
+      </SurfaceCut>
       {!live && (
-        <p className="text-[11px] leading-snug text-fg-faint">
+        <p className="text-cladd-2xs leading-snug text-cladd-fg-softer">
           Not on air. This is what Go Live will show.
         </p>
       )}

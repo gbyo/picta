@@ -1,42 +1,57 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Kbd, KbdGroup } from '@/components/ui/kbd';
+import { Shortcut, Tooltip } from '@cladd-ui/react';
+
+/** Picta writes shortcuts as symbols; Cladd's Shortcut speaks key names. */
+const KEY_NAMES: Record<string, string> = {
+  '⌘': 'cmd',
+  Ctrl: 'ctrl',
+  '⇧': 'shift',
+  '⌥': 'alt',
+  '→': 'right',
+  '←': 'left',
+  '↑': 'up',
+  '↓': 'down',
+  Esc: 'esc',
+  Space: 'space',
+  Enter: 'enter',
+};
+
+/** Keyboard keys for a shortcut, e.g. ['⌘', 'K']. */
+export function Keys({ keys, className }: { keys: string[]; className?: string }) {
+  return (
+    <Shortcut as="span" {...(className ? { className } : {})}>
+      {keys.map((key) => KEY_NAMES[key] ?? key)}
+    </Shortcut>
+  );
+}
 
 /**
- * A tooltip that can show a keyboard shortcut. The trigger element is passed
- * as `children` and rendered as-is through Base UI's render prop.
+ * A tooltip that can show a keyboard shortcut. The trigger is passed as
+ * `children`; it must accept a ref (Cladd controls do). A disabled control
+ * receives no pointer events, so wrap it in a span when its tooltip matters.
  */
 export function Hint({
   label,
   keys,
   side = 'top',
   children,
-  ...forwarded
 }: {
   label: ReactNode;
   keys?: string[];
-  side?: 'top' | 'bottom' | 'left' | 'right';
+  side?: 'top' | 'bottom';
   children: ReactElement;
-} & Record<string, unknown>) {
-  // Props from an outer trigger (a context menu, a popover) are forwarded so
-  // Hint can sit inside another Base UI `render` prop without swallowing them.
+}) {
   return (
-    <Tooltip>
-      <TooltipTrigger {...forwarded} render={children} />
-      <TooltipContent side={side}>
-        <span>{label}</span>
-        {keys && keys.length > 0 && <Keys keys={keys} />}
-      </TooltipContent>
+    <Tooltip
+      position={side}
+      tooltip={
+        <span className="flex items-center gap-2">
+          <span>{label}</span>
+          {keys && keys.length > 0 && <Keys keys={keys} />}
+        </span>
+      }
+    >
+      {children}
     </Tooltip>
-  );
-}
-
-export function Keys({ keys, className }: { keys: string[]; className?: string }) {
-  return (
-    <KbdGroup {...(className ? { className } : {})}>
-      {keys.map((key) => (
-        <Kbd key={key}>{key}</Kbd>
-      ))}
-    </KbdGroup>
   );
 }

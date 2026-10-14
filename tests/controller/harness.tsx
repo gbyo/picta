@@ -285,7 +285,11 @@ export async function startApp(
     armedScreenId: show.defaultScreenId,
     scoreHistory: createScoreHistory(show.event.score ?? defaultVolleyballScore()),
   });
-  render(<App />);
+  // Cladd portals its overlays into #root, as index.html provides.
+  const root = document.createElement('div');
+  root.id = 'root';
+  document.body.append(root);
+  render(<App />, { container: root });
   const dispose = await boot({
     watchDisplays: false,
     checkUpdates: false,

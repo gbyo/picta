@@ -34,6 +34,10 @@ if (typeof document !== 'undefined') {
     dispatchEvent: () => false,
   })) as typeof window.matchMedia;
   Element.prototype.scrollIntoView ??= function scrollIntoView() {};
+  // Cladd's overlays check visibility before advancing their open/close phases.
+  // jsdom has no layout or transitions, so report "not visible": the phases
+  // then complete immediately instead of waiting for a transitionend.
+  (Element.prototype as { checkVisibility?: () => boolean }).checkVisibility ??= () => false;
   Element.prototype.getAnimations ??= function getAnimations() {
     return [];
   };

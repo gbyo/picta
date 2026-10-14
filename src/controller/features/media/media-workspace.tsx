@@ -1,6 +1,8 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, type KeyboardEvent } from 'react';
+import { Button, NumberField, Surface } from '@cladd-ui/react';
 import {
-  ChevronDown,
+  ArrowDownToLine,
+  ArrowUpToLine,
   Clapperboard,
   Clock,
   FilePlus2,
@@ -8,43 +10,43 @@ import {
   FolderOpen,
   FolderSearch,
   Image as ImageIcon,
-  Lock,
+  Link2Off,
   Plus,
   Save,
+  SlidersHorizontal,
   Trash2,
-  TriangleAlert,
   Zap,
-  ArrowUpToLine,
-  ArrowDownToLine,
-  Link2Off,
 } from 'lucide-react';
 import type { MediaItem, MediaSet } from '@core/domain.js';
 import { basename, dirname } from '@core/paths.js';
 import { mediaDurationSeconds } from '@core/media.js';
 import type { MediaPreflightFailure } from '@app/media-preflight.js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { ActionButton, Choice } from '@/components/picta/controls';
+import { Banner, EmptyState } from '@/components/picta/feedback';
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Hint } from '@/components/picta/hint';
+  ContextActions,
+  ContextActionsContent,
+  ContextActionsTrigger,
+  MenuItem,
+  MenuSeparator,
+  OverflowMenu,
+} from '@/components/picta/menu';
 import { MediaThumb } from '@/components/picta/media-thumb';
-import { EmptyState } from '@/components/picta/section';
+import { ResourceMenu, type ResourceAction } from '@/components/picta/resource-menu';
 import { SortableArea, useSortableItem } from '@/components/picta/sortable';
+import {
+  Inspector,
+  InspectorHeader,
+  InspectorSection,
+  PropertyRow,
+  PropertyValue,
+  Scroll,
+  Workspace,
+  WorkspaceBody,
+  WorkspaceHeader,
+  WorkspaceMain,
+} from '@/components/picta/workspace';
+import { Hint } from '@/components/picta/hint';
 import { cn } from '@/lib/utils';
 import { usePicta, getState } from '@/state/store';
 import { useMediaSet } from '@/hooks';
@@ -70,7 +72,8 @@ import {
   saveMedia,
 } from '@/actions/document';
 
-function DurationField({
+/** Whole seconds on screen, committed on blur or Enter. */
+function SecondsField({
   value,
   onCommit,
   disabled,
@@ -81,106 +84,87 @@ function DurationField({
   disabled?: boolean;
   label: string;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const commit = () => {
-    if (draft === null) return;
-    const seconds = Number(draft);
-    if (Number.isFinite(seconds) && seconds >= 1) onCommit(seconds);
-    setDraft(null);
-  };
   return (
-    <span className="relative inline-flex">
-      <Input
-        type="number"
-        min={1}
-        max={86400}
-        aria-label={label}
-        disabled={disabled ?? false}
-        value={draft ?? String(value)}
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') commit();
-          if (event.key === 'Escape') setDraft(null);
-        }}
-        className="w-[72px] pr-7 tabular"
-      />
-      <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-fg-faint">
-        sec
-      </span>
-    </span>
+    <NumberField
+      role="group"
+      aria-label={label}
+      min={1}
+      max={86400}
+      value={value}
+      disabled={disabled ?? false}
+      onChange={onCommit}
+      className="w-full max-w-36"
+    />
   );
 }
 
-function SetMenu({ set, locked }: { set: MediaSet; locked: boolean }) {
+function RotationMenu({ set, locked }: { set: MediaSet; locked: boolean }) {
   const filePath = usePicta((state) => state.doc.mediaFilePath);
   const dirty = usePicta((state) => state.doc.mediaDirty);
   const style = usePicta((state) => state.pathStyle);
   const linked = usePicta((state) => state.doc.show.data.media.kind === 'file');
+  const groups: ResourceAction[][] = [
+    [
+      {
+        id: 'new',
+        label: 'New Empty Rotation',
+        icon: FilePlus2,
+        disabled: locked,
+        onSelect: () => void newMediaSet(),
+      },
+      {
+        id: 'open',
+        label: 'Open Media Set…',
+        icon: FolderOpen,
+        disabled: locked,
+        onSelect: () => void openMediaSet(),
+      },
+    ],
+    [
+      {
+        id: 'save',
+        label: linked ? 'Save Media Set' : 'Save as Media Set…',
+        icon: Save,
+        onSelect: () => void saveMedia(),
+      },
+      ...(linked
+        ? [
+            {
+              id: 'save-as',
+              label: 'Save Media Set As…',
+              icon: Save,
+              onSelect: () => void saveMedia(true),
+            },
+          ]
+        : []),
+      {
+        id: 'reveal',
+        label: 'Reveal Media Set File',
+        icon: FolderSearch,
+        disabled: !filePath,
+        onSelect: () => void reveal('media'),
+      },
+      ...(linked
+        ? [
+            {
+              id: 'embed',
+              label: 'Store in Show Instead',
+              icon: Link2Off,
+              disabled: locked,
+              onSelect: embedMediaSet,
+            },
+          ]
+        : []),
+    ],
+  ];
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            className="h-8 max-w-72 gap-1.5 px-2 text-[13px] font-semibold text-fg"
-          />
-        }
-      >
-        <Clapperboard className="text-fg-muted" />
-        <span className="truncate">{set.name}</span>
-        {dirty && <span className="size-1.5 shrink-0 rounded-full bg-warn" aria-label="Unsaved" />}
-        <span className="truncate text-[11.5px] font-normal text-fg-faint">
-          {linked && filePath ? basename(filePath, style) : 'stored in show'}
-        </span>
-        <ChevronDown className="size-3 text-fg-faint" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-72" align="start">
-        <DropdownMenuLabel>
-          {linked
-            ? 'This rotation is a reusable .pictaset file.'
-            : 'This rotation is stored inside the show. Save it as a .pictaset to reuse it.'}
-        </DropdownMenuLabel>
-        <DropdownMenuItem disabled={locked} onClick={() => void newMediaSet()}>
-          <FilePlus2 />
-          New Empty Rotation
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={locked} onClick={() => void openMediaSet()}>
-          <FolderOpen />
-          Open Media Set…
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void saveMedia()}>
-          <Save />
-          {linked ? 'Save Media Set' : 'Save as Media Set…'}
-        </DropdownMenuItem>
-        {linked && (
-          <DropdownMenuItem onClick={() => void saveMedia(true)}>
-            <Save />
-            Save Media Set As…
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem disabled={!filePath} onClick={() => void reveal('media')}>
-          <FolderSearch />
-          Reveal Media Set File
-        </DropdownMenuItem>
-        {linked && (
-          <DropdownMenuItem disabled={locked} onClick={embedMediaSet}>
-            <Link2Off />
-            Store in Show Instead
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={locked || set.items.length === 0}
-          onClick={clearMedia}
-        >
-          <Trash2 />
-          Remove All Items
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ResourceMenu
+      icon={Clapperboard}
+      name={set.name}
+      dirty={dirty}
+      where={linked && filePath ? basename(filePath, style) : 'stored in show'}
+      groups={groups}
+    />
   );
 }
 
@@ -227,10 +211,10 @@ function MediaCard({
   };
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger
+    <ContextActions>
+      <ContextActionsTrigger
         render={
-          <div
+          <Surface
             ref={sortable.ref}
             style={sortable.style}
             {...sortable.attributes}
@@ -239,20 +223,24 @@ function MediaCard({
             aria-label={`${index + 1}. ${name}${status ? `, ${status}` : ''}`}
             aria-pressed={selected}
             data-media-id={item.id}
-            onClick={(event) => onSelect(event.shiftKey || event.metaKey || event.ctrlKey)}
+            onClick={(event: React.MouseEvent) =>
+              onSelect(event.shiftKey || event.metaKey || event.ctrlKey)
+            }
             onFocus={() => {
               if (!selected) onSelect(false);
             }}
             onKeyDownCapture={onKeyDown}
+            variant={selected ? 'gradient' : 'solid'}
+            color={selected ? 'brand' : ''}
+            outline={selected}
+            hoverable
+            overlayPosition="below"
             className={cn(
-              'group flex flex-col gap-1.5 rounded-lg border p-1.5 outline-none transition-[border-color,background-color,box-shadow]',
-              selected
-                ? 'border-accent bg-accent-soft'
-                : 'border-line bg-raised hover:border-line-strong',
-              'focus-visible:ring-2 focus-visible:ring-accent',
-              sortable.dragging && 'shadow-pop',
+              'focus-ring group rounded-cladd-lg',
+              sortable.dragging && 'shadow-cladd-popover',
               !locked && 'cursor-grab active:cursor-grabbing',
             )}
+            contentClassName="flex flex-col gap-1.5 p-1.5"
           />
         }
       >
@@ -264,12 +252,12 @@ function MediaCard({
             failed={Boolean(failure)}
             typeIcon={false}
           />
-          <span className="absolute top-1 left-1 rounded-[3px] bg-black/70 px-1 text-[10.5px] font-semibold text-white tabular">
+          <span className="absolute top-1 left-1 rounded-cladd-3xs bg-black/70 px-1 text-cladd-2xs font-semibold text-white tabular">
             {index + 1}
           </span>
           <span
             className={cn(
-              'absolute right-1 bottom-1 flex items-center gap-0.5 rounded-[3px] bg-black/70 px-1 text-[10.5px] tabular',
+              'absolute right-1 bottom-1 flex items-center gap-0.5 rounded-cladd-3xs bg-black/70 px-1 text-cladd-2xs tabular',
               custom ? 'text-white' : 'text-white/60',
             )}
           >
@@ -287,10 +275,15 @@ function MediaCard({
           </span>
         </div>
         <div className="min-w-0 px-0.5">
-          <p className="truncate text-[12px] font-medium text-fg" title={item.path}>
+          <p className="truncate text-cladd-xs font-semibold" title={item.path}>
             {name}
           </p>
-          <p className={cn('truncate text-[11px]', status ? 'text-danger' : 'text-fg-faint')}>
+          <p
+            className={cn(
+              'truncate text-cladd-2xs',
+              status ? 'text-danger' : 'text-cladd-fg-softer',
+            )}
+          >
             {status ??
               (item.type === 'video'
                 ? 'Plays to the end'
@@ -299,49 +292,218 @@ function MediaCard({
                   : 'Default time')}
           </p>
         </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-56">
-        <ContextMenuItem
+      </ContextActionsTrigger>
+      <ContextActionsContent className="min-w-56">
+        <MenuItem
+          icon={<Zap />}
           disabled={!live || item.missing === true}
           onClick={() => void showMediaNow(item)}
         >
-          <Zap />
           Show Now
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem disabled={locked || index === 0} onClick={() => moveMedia(index, 0)}>
-          <ArrowUpToLine />
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem
+          icon={<ArrowUpToLine />}
+          disabled={locked || index === 0}
+          onClick={() => moveMedia(index, 0)}
+        >
           Move to Start
-        </ContextMenuItem>
-        <ContextMenuItem
+        </MenuItem>
+        <MenuItem
+          icon={<ArrowDownToLine />}
           disabled={locked || index === set.items.length - 1}
           onClick={() => moveMedia(index, set.items.length - 1)}
         >
-          <ArrowDownToLine />
           Move to End
-        </ContextMenuItem>
-        <ContextMenuItem
+        </MenuItem>
+        <MenuItem
+          icon={<FolderSearch />}
           onClick={() => void revealPath(item.path)}
           disabled={item.missing === true}
         >
-          <FolderSearch />
           Reveal in File Manager
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem
+          destructive
+          icon={<Trash2 />}
+          disabled={locked}
+          onClick={() => removeMedia([item.id])}
+        >
+          Remove from Rotation
+        </MenuItem>
+      </ContextActionsContent>
+    </ContextActions>
+  );
+}
+
+/** With nothing selected the inspector is the rotation's own properties. */
+function RotationInspector({ set, locked }: { set: MediaSet; locked: boolean }) {
+  return (
+    <>
+      <InspectorHeader
+        title="Rotation"
+        subtitle={`${set.items.length} item${set.items.length === 1 ? '' : 's'} · defaults for every item`}
+      />
+      <InspectorSection title="Timing">
+        <PropertyRow label="Image time">
+          <SecondsField
+            label="Default time on screen for images"
+            value={set.imageDurationSeconds}
+            disabled={locked}
+            onCommit={(seconds) => setMediaDefaults({ imageDurationSeconds: seconds })}
+          />
+          <span className="text-cladd-fg-softer">sec</span>
+        </PropertyRow>
+      </InspectorSection>
+      <InspectorSection title="Display">
+        <PropertyRow label="Transition" stacked>
+          <Choice
+            label="Transition"
+            stretch
+            disabled={locked}
+            value={set.transition}
+            onChange={(transition) => setMediaDefaults({ transition })}
+            options={[
+              { value: 'crossfade', label: 'Crossfade' },
+              { value: 'none', label: 'Cut' },
+            ]}
+          />
+        </PropertyRow>
+        <PropertyRow label="Image sizing" stacked>
+          <Choice
+            label="Image sizing"
+            stretch
+            disabled={locked}
+            value={set.imageSizing}
+            onChange={(imageSizing) => setMediaDefaults({ imageSizing })}
+            options={[
+              { value: 'fit', label: 'Fit', hint: 'Show the whole image; letterbox if needed' },
+              { value: 'fill', label: 'Fill', hint: 'Fill the panel; crop the edges if needed' },
+            ]}
+          />
+        </PropertyRow>
+      </InspectorSection>
+      <p className="text-cladd-xs leading-relaxed text-cladd-fg-softer">
+        Select an item to see its details and timing. Drag to reorder, or use Alt+arrow keys.
+      </p>
+    </>
+  );
+}
+
+function ItemInspector({
+  set,
+  item,
+  failure,
+  locked,
+  live,
+}: {
+  set: MediaSet;
+  item: MediaItem;
+  failure: MediaPreflightFailure | undefined;
+  locked: boolean;
+  live: boolean;
+}) {
+  const style = usePicta((state) => state.pathStyle);
+  const index = set.items.findIndex((candidate) => candidate.id === item.id);
+  return (
+    <>
+      <MediaThumb
+        item={item}
+        sizing={set.imageSizing}
+        className="w-full"
+        failed={Boolean(failure)}
+      />
+      <InspectorHeader
+        title={<span title={basename(item.path, style)}>{basename(item.path, style)}</span>}
+        subtitle={<span title={item.path}>{dirname(item.path, style)}</span>}
+      />
+      <InspectorSection title="Details">
+        <PropertyRow label="Position">
+          <PropertyValue>
+            {index + 1} of {set.items.length}
+          </PropertyValue>
+        </PropertyRow>
+        <PropertyRow label="Type">
+          <PropertyValue className="flex items-center gap-1.5">
+            {item.type === 'video' ? <Film className="size-4" /> : <ImageIcon className="size-4" />}
+            {item.type === 'video' ? 'Video' : 'Image'}
+          </PropertyValue>
+        </PropertyRow>
+        <PropertyRow label="Status">
+          <PropertyValue className={cn(item.missing || failure ? 'text-danger' : 'text-ok')}>
+            {item.missing ? 'File is missing' : failure ? failure.message : 'Ready'}
+          </PropertyValue>
+        </PropertyRow>
+      </InspectorSection>
+      <InspectorSection title="On screen for">
+        {item.type === 'image' ? (
+          <>
+            <Choice<'default' | 'custom'>
+              label="On screen for"
+              stretch
+              disabled={locked}
+              value={item.durationSeconds === undefined ? 'default' : 'custom'}
+              onChange={(next) =>
+                setItemDuration(
+                  item.id,
+                  next === 'default' ? null : mediaDurationSeconds(item, set),
+                )
+              }
+              options={[
+                { value: 'default', label: `Default · ${set.imageDurationSeconds}s` },
+                { value: 'custom', label: 'Custom' },
+              ]}
+            />
+            {item.durationSeconds !== undefined && (
+              <PropertyRow label="Time">
+                <SecondsField
+                  label="Custom time on screen"
+                  value={item.durationSeconds}
+                  disabled={locked}
+                  onCommit={(seconds) => setItemDuration(item.id, seconds)}
+                />
+                <span className="text-cladd-fg-softer">sec</span>
+              </PropertyRow>
+            )}
+          </>
+        ) : (
+          <p className="text-cladd-xs text-cladd-fg-soft">
+            Videos play once to the end, then the rotation continues.
+          </p>
+        )}
+      </InspectorSection>
+      <InspectorSection title="Actions">
+        <Hint label="Show once as a cue, then return to the rotation">
+          <span className="flex">
+            <ActionButton
+              intent="cue"
+              className="w-full"
+              disabled={!live || item.missing === true}
+              onClick={() => void showMediaNow(item)}
+            >
+              <Zap />
+              Show Now
+            </ActionButton>
+          </span>
+        </Hint>
+      </InspectorSection>
+      <InspectorSection title="Remove">
+        <ActionButton
+          intent="danger"
+          className="w-full"
           disabled={locked}
           onClick={() => removeMedia([item.id])}
         >
           <Trash2 />
           Remove from Rotation
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+        </ActionButton>
+      </InspectorSection>
+    </>
   );
 }
 
-function Inspector({
+function MediaInspector({
   set,
   items,
   failures,
@@ -354,119 +516,32 @@ function Inspector({
   locked: boolean;
   live: boolean;
 }) {
-  const style = usePicta((state) => state.pathStyle);
-  if (items.length === 0)
-    return (
-      <div className="flex h-full flex-col justify-center px-5 text-center text-[12px] leading-relaxed text-fg-faint">
-        Select an item to see its details and timing. Drag to reorder, or use Alt+arrow keys.
-      </div>
-    );
+  if (items.length === 0) return <RotationInspector set={set} locked={locked} />;
   if (items.length > 1)
     return (
-      <div className="flex flex-col gap-3 p-4">
-        <p className="text-[13px] font-semibold text-fg">{items.length} items selected</p>
-        <Button
-          variant="danger"
-          disabled={locked}
-          onClick={() => removeMedia(items.map((item) => item.id))}
-        >
-          <Trash2 />
-          Remove {items.length} Items
-        </Button>
-      </div>
+      <>
+        <InspectorHeader title={`${items.length} items selected`} />
+        <InspectorSection title="Remove">
+          <ActionButton
+            intent="danger"
+            disabled={locked}
+            onClick={() => removeMedia(items.map((item) => item.id))}
+          >
+            <Trash2 />
+            Remove {items.length} Items
+          </ActionButton>
+        </InspectorSection>
+      </>
     );
   const item = items[0]!;
-  const failure = failures.get(item.id);
-  const index = set.items.findIndex((candidate) => candidate.id === item.id);
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <MediaThumb
-        item={item}
-        sizing={set.imageSizing}
-        className="w-full"
-        failed={Boolean(failure)}
-      />
-      <div className="min-w-0">
-        <p
-          className="truncate text-[13px] font-semibold text-fg"
-          title={basename(item.path, style)}
-        >
-          {basename(item.path, style)}
-        </p>
-        <p className="truncate text-[11px] text-fg-faint" title={item.path}>
-          {dirname(item.path, style)}
-        </p>
-      </div>
-      <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-2 text-[12px]">
-        <dt className="text-fg-faint">Position</dt>
-        <dd className="text-fg tabular">
-          {index + 1} of {set.items.length}
-        </dd>
-        <dt className="text-fg-faint">Type</dt>
-        <dd className="flex items-center gap-1.5 text-fg">
-          {item.type === 'video' ? (
-            <Film className="size-3.5" />
-          ) : (
-            <ImageIcon className="size-3.5" />
-          )}
-          {item.type === 'video' ? 'Video' : 'Image'}
-        </dd>
-        <dt className="text-fg-faint">Status</dt>
-        <dd className={cn(item.missing || failure ? 'text-danger' : 'text-ok')}>
-          {item.missing ? 'File is missing' : failure ? failure.message : 'Ready'}
-        </dd>
-      </dl>
-      {item.type === 'image' ? (
-        <div className="flex flex-col gap-2">
-          <p className="label-caps">On screen for</p>
-          <ToggleGroup
-            value={[item.durationSeconds === undefined ? 'default' : 'custom']}
-            onValueChange={(value) => {
-              const next = value[0];
-              if (next === 'default') setItemDuration(item.id, null);
-              if (next === 'custom') setItemDuration(item.id, mediaDurationSeconds(item, set));
-            }}
-            disabled={locked}
-          >
-            <ToggleGroupItem value="default">Default · {set.imageDurationSeconds}s</ToggleGroupItem>
-            <ToggleGroupItem value="custom">Custom</ToggleGroupItem>
-          </ToggleGroup>
-          {item.durationSeconds !== undefined && (
-            <DurationField
-              label="Custom time on screen"
-              value={item.durationSeconds}
-              disabled={locked}
-              onCommit={(seconds) => setItemDuration(item.id, seconds)}
-            />
-          )}
-        </div>
-      ) : (
-        <p className="text-[12px] text-fg-muted">
-          Videos play once to the end, then the rotation continues.
-        </p>
-      )}
-      <div className="flex flex-col gap-1.5">
-        <Hint label="Show once as a cue, then return to the rotation">
-          <Button
-            variant="cue"
-            disabled={!live || item.missing === true}
-            onClick={() => void showMediaNow(item)}
-          >
-            <Zap />
-            Show Now
-          </Button>
-        </Hint>
-        <Button
-          variant="ghost"
-          disabled={locked}
-          onClick={() => removeMedia([item.id])}
-          className="text-danger hover:text-danger"
-        >
-          <Trash2 />
-          Remove from Rotation
-        </Button>
-      </div>
-    </div>
+    <ItemInspector
+      set={set}
+      item={item}
+      failure={failures.get(item.id)}
+      locked={locked}
+      live={live}
+    />
   );
 }
 
@@ -522,139 +597,126 @@ export function MediaWorkspace() {
     document.querySelector<HTMLElement>(`[data-media-id="${id}"]`)?.focus();
   };
 
+  const failing = failures.size;
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-3 py-2">
-        <SetMenu set={set} locked={locked} />
-        <span className="text-[11.5px] text-fg-faint tabular">
-          {set.items.length} item{set.items.length === 1 ? '' : 's'}
-          {missing > 0 && <span className="text-danger"> · {missing} missing</span>}
-          {failures.size > 0 && <span className="text-danger"> · {failures.size} can't play</span>}
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-1.5 text-[11.5px] text-fg-muted">
-            Images
-            <DurationField
-              label="Default time on screen for images"
-              value={set.imageDurationSeconds}
-              disabled={locked}
-              onCommit={(seconds) => setMediaDefaults({ imageDurationSeconds: seconds })}
-            />
-          </label>
-          <ToggleGroup
-            aria-label="Transition"
-            value={[set.transition]}
-            disabled={locked}
-            onValueChange={(value) => {
-              const next = value[0];
-              if (next === 'none' || next === 'crossfade') setMediaDefaults({ transition: next });
-            }}
-          >
-            <ToggleGroupItem value="crossfade">Crossfade</ToggleGroupItem>
-            <ToggleGroupItem value="none">Cut</ToggleGroupItem>
-          </ToggleGroup>
-          <ToggleGroup
-            aria-label="Image sizing"
-            value={[set.imageSizing]}
-            disabled={locked}
-            onValueChange={(value) => {
-              const next = value[0];
-              if (next === 'fit' || next === 'fill') setMediaDefaults({ imageSizing: next });
-            }}
-          >
-            <Hint label="Show the whole image; letterbox if needed">
-              <ToggleGroupItem value="fit">Fit</ToggleGroupItem>
-            </Hint>
-            <Hint label="Fill the panel; crop the edges if needed">
-              <ToggleGroupItem value="fill">Fill</ToggleGroupItem>
-            </Hint>
-          </ToggleGroup>
-          <Button variant="primary" disabled={locked} onClick={() => void chooseAndAddMedia()}>
+    <Workspace>
+      <WorkspaceHeader
+        title={<RotationMenu set={set} locked={locked} />}
+        meta={
+          <span className="tabular">
+            {set.items.length} item{set.items.length === 1 ? '' : 's'}
+            {missing > 0 && <span className="text-danger"> · {missing} missing</span>}
+            {failing > 0 && <span className="text-danger"> · {failing} can't play</span>}
+          </span>
+        }
+        actions={
+          <ActionButton intent="primary" disabled={locked} onClick={() => void chooseAndAddMedia()}>
             <Plus />
             Add Media
-          </Button>
-        </div>
-      </div>
+          </ActionButton>
+        }
+        menu={
+          <OverflowMenu label="Rotation options">
+            <MenuItem icon={<SlidersHorizontal />} onClick={() => selectMedia([])}>
+              Rotation Settings
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem
+              destructive
+              icon={<Trash2 />}
+              disabled={locked || set.items.length === 0}
+              onClick={clearMedia}
+            >
+              Remove All Items
+            </MenuItem>
+          </OverflowMenu>
+        }
+      />
       {locked && (
-        <div className="flex items-center gap-2 border-b border-line bg-live-soft px-3 py-1.5 text-[12px] text-fg">
-          <Lock className="size-3.5 text-live" />
+        <Banner tone="live">
           The rotation is locked while ON AIR, because the display is playing it. Show Now still
           works.
-        </div>
+        </Banner>
       )}
       {missing > 0 && (
-        <div className="flex items-center gap-2 border-b border-line bg-danger-soft px-3 py-1.5 text-[12px] text-fg">
-          <TriangleAlert className="size-3.5 text-danger" />
+        <Banner
+          tone="danger"
+          actions={
+            <Button disabled={locked} onClick={() => void locateMissingMedia()}>
+              <FolderSearch />
+              Locate…
+            </Button>
+          }
+        >
           {missing} file{missing === 1 ? ' was' : 's were'} moved or deleted. They are skipped until
           found.
-          <Button
-            size="sm"
-            className="ml-auto"
-            disabled={locked}
-            onClick={() => void locateMissingMedia()}
-          >
-            <FolderSearch />
-            Locate…
-          </Button>
-        </div>
+        </Banner>
       )}
-      <div className="flex min-h-0 flex-1">
-        <ScrollArea className="min-h-0 min-w-0 flex-1">
-          {set.items.length === 0 ? (
-            <EmptyState
-              className="h-full min-h-80"
-              icon={<Clapperboard />}
-              title="Build the media rotation"
-              actions={
-                <Button
-                  variant="primary"
-                  disabled={locked}
-                  onClick={() => void chooseAndAddMedia()}
-                >
-                  <Plus />
-                  Add Media…
-                </Button>
-              }
-            >
-              Drop PNG, JPEG, WebP, MP4 or WebM files anywhere on this window, or add them from
-              disk. Files stay where they are; Picta never copies them.
-            </EmptyState>
-          ) : (
-            <SortableArea ids={ids} onMove={moveMediaById} layout="grid" disabled={locked}>
-              <div
-                role="list"
-                aria-label="Media rotation"
-                data-owns-arrows
-                onKeyDown={onGridKey}
-                className="grid gap-2.5 p-3"
-                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))' }}
+      <WorkspaceBody>
+        <WorkspaceMain>
+          <Scroll
+            onClick={(event) => {
+              // A click on the empty canvas shows the rotation's own settings.
+              if (event.target === event.currentTarget) selectMedia([]);
+            }}
+          >
+            {set.items.length === 0 ? (
+              <EmptyState
+                className="h-full min-h-80"
+                icon={<Clapperboard />}
+                title="Build the media rotation"
+                actions={
+                  <ActionButton
+                    intent="primary"
+                    disabled={locked}
+                    onClick={() => void chooseAndAddMedia()}
+                  >
+                    <Plus />
+                    Add Media…
+                  </ActionButton>
+                }
               >
-                {set.items.map((item, index) => (
-                  <MediaCard
-                    key={item.id}
-                    item={item}
-                    index={index}
-                    set={set}
-                    selected={selectedIds.includes(item.id)}
-                    failure={failures.get(item.id)}
-                    locked={locked}
-                    live={live}
-                    onSelect={(extend) => select(item.id, extend)}
-                  />
-                ))}
-              </div>
-            </SortableArea>
-          )}
-        </ScrollArea>
-        <aside
-          aria-label="Media inspector"
-          className="w-72 shrink-0 border-l border-line bg-surface max-[1100px]:w-60"
-        >
-          <ScrollArea className="h-full">
-            <Inspector set={set} items={selected} failures={failures} locked={locked} live={live} />
-          </ScrollArea>
-        </aside>
-      </div>
-    </div>
+                Drop PNG, JPEG, WebP, MP4 or WebM files anywhere on this window, or add them from
+                disk. Files stay where they are; Picta never copies them.
+              </EmptyState>
+            ) : (
+              <SortableArea ids={ids} onMove={moveMediaById} layout="grid" disabled={locked}>
+                <div
+                  role="list"
+                  aria-label="Media rotation"
+                  data-owns-arrows
+                  onKeyDown={onGridKey}
+                  className="grid gap-2.5 p-3"
+                  style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))' }}
+                >
+                  {set.items.map((item, index) => (
+                    <MediaCard
+                      key={item.id}
+                      item={item}
+                      index={index}
+                      set={set}
+                      selected={selectedIds.includes(item.id)}
+                      failure={failures.get(item.id)}
+                      locked={locked}
+                      live={live}
+                      onSelect={(extend) => select(item.id, extend)}
+                    />
+                  ))}
+                </div>
+              </SortableArea>
+            )}
+          </Scroll>
+        </WorkspaceMain>
+        <Inspector label="Media inspector">
+          <MediaInspector
+            set={set}
+            items={selected}
+            failures={failures}
+            locked={locked}
+            live={live}
+          />
+        </Inspector>
+      </WorkspaceBody>
+    </Workspace>
   );
 }
