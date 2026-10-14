@@ -12,8 +12,8 @@ src/controller/   The React controller.
   state/          One Zustand store, pure derivations, and promise-based dialog requests.
   actions/        Every operation the UI can perform, as plain functions.
   shortcuts.ts    The keyboard model and the shortcut table shown in the UI.
-  components/ui/  shadcn/ui primitives on Base UI, restyled with Picta's tokens.
-  components/picta/  Product primitives: ScreenRender, LayoutGlyph, MediaThumb, Hint, sortable lists.
+  components/picta/  Picta's UI grammar on top of Cladd (see "Design system"), plus product
+                  primitives: ScreenRender, LayoutGlyph, MediaThumb, sortable lists.
   features/       Shell, program rail, and the Console, Media, Roster and Screens workspaces.
 ```
 
@@ -27,14 +27,49 @@ Native listeners and the output are created once in `boot()`, outside React, so 
 
 ## Design system
 
-`src/controller/styles/app.css` defines semantic tokens: surfaces (`canvas`, `surface`, `raised`, `overlay`, `sunken`), text (`fg`, `fg-muted`, `fg-faint`) and state colours with fixed meanings:
+**Cladd (`@cladd-ui/react`) is the visual and compositional source of truth.** Surfaces and their depth levels, the `2xs`-`2xl` control sizes, radii, focus rings, light and dark themes, Select, Tabs, Dialog, Popover, Tooltip, Shortcut and the rest of the controls all come from Cladd. Feature code does not invent a second system on top of it.
 
-- `live`: the audience display is ON AIR. Used only for the tally, the status pill, the program frame and the live Screen.
+`src/controller/styles/app.css` is the only place Picta bends Cladd. It tunes the radii and primary tone for a dense desktop app, and defines the operator state colours, each with one fixed meaning:
+
+- `live`: the audience display is ON AIR. Used only for the tally, the status pill, the program frame and the live Screen. It is the only solid red in the application.
 - `cue`: a temporary takeover of the program.
 - `accent`: selection, focus and "what will go live".
 - `warn`, `ok`, `danger`: attention, ready, destructive or failed.
 
-Both a dark (default) and a light theme are defined from the same tokens. Fonts are the operating system's UI fonts; nothing is loaded from the network.
+`PictaProvider` (`components/picta/provider.tsx`) mounts `CladdProvider` once at the root. It follows Picta's theme (Cladd reads a `dark`/`light` class on `<html>`, Picta and the audience renderer read `data-theme`; `applyTheme` keeps both in step) and sets the app-wide component defaults: `md` (28px) controls, squared rather than pill-shaped, flush focus rings, no 0-9 quick-pick hints on Select. Overlays portal into `#root`, and `.app-container` is what a modal makes inert. The root font size is 16px, which Cladd's rem-based spacing assumes.
+
+### The composition layer
+
+Feature code composes these instead of choosing sizes, radii and spacings itself:
+
+| Pattern | Component |
+| --- | --- |
+| Workspace frame: header, optional toolbar, body | `Workspace`, `WorkspaceHeader`, `WorkspaceToolbar`, `WorkspaceBody`, `WorkspaceMain` |
+| Property surface for the selection | `Inspector`, `InspectorHeader`, `InspectorSection`, `PropertyRow` |
+| Selectable rows | `SelectableRow` (and Cladd's `ListButton`) |
+| Status and emptiness | `Banner`, `EmptyState`, `StatusDot` |
+| Menus (actions only) | `ActionMenu`, `OverflowMenu`, `ContextActions`, `ResourceMenu` |
+| Anchored panels and modals | `PictaPopover`, `ModalDialog` |
+| Repeated controls | `ActionButton` (intent), `IconButton`, `Choice`, `CommitInput`, `ColorField`, `Field` |
+
+A workspace reads the same way everywhere: **identity and quiet metadata, then the primary action, then one overflow menu**. A selected thing is shown by the inspector as **identity, named sections of property rows, contextual actions, and anything destructive in its own section at the end**. With nothing selected the inspector shows the parent object's own properties (the rotation, the team).
+
+Text uses only Cladd's `2xs`/`xs`/`sm`/`md` sizes; controls use Cladd's `sm`-`xl` heights; radii and spacing come from Cladd tokens. A new arbitrary pixel value needs a reason (the live score numerals have one).
+
+### What stays outside Cladd, and why
+
+- **Base UI Menu / ContextMenu** (`components/picta/menu.tsx`): Cladd composes menus from Popover + List, which has no menu role, roving focus or typeahead. The behaviour stays on Base UI; the surface, rows, separators, shortcuts and animation are drawn from Cladd tokens so a menu looks like any Cladd popover.
+- **cmdk** (`components/picta/command.tsx`): filtering, ranking and keyboard handling for the command palette, inside a Cladd Dialog with Cladd-styled rows.
+- **Sonner** (`components/picta/toaster.tsx`): toasts with an Undo action, which Cladd's toast does not offer, styled with Cladd tokens.
+- dnd-kit, react-resizable-panels, Zustand and Tauri are unchanged.
+
+### Things to know when writing UI
+
+- Cladd renders `<button>` without a `type`, so inside a `<form>` an unrelated Select, colour editor or segmented option would submit it. Forms use `explicitSubmit` (only Enter in a field or a `type="submit"` button submits).
+- Cladd's Popover does not move focus. `PictaPopover` focuses into the popover, names it, and returns focus to the trigger when it was dismissed from the keyboard. After a mouse dismissal focus is left alone so Space keeps advancing media.
+- Cladd Dialog has `role="dialog"` (not `alertdialog`), traps focus and focuses its confirm button. Picta supplies its own footer so the safe answer is focused (`useInitialFocus`).
+- Global shortcuts stay quiet while any Cladd overlay (`.cladd-dialog`, `.cladd-popup`, `.cladd-popover`) is open.
+- Cladd positions popovers and tooltips with CSS anchor positioning and colours with relative colour syntax. Chromium (WebView2) and recent WebKit support both; see "Platform requirements" in the README.
 
 ## Drag and drop
 

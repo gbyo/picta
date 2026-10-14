@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { Button, Input, Select, Surface, SurfaceCut, ToggleButton } from '@cladd-ui/react';
+import {
+  Button,
+  Input,
+  Select,
+  Surface,
+  SurfaceCut,
+  ToggleButton,
+  ToolbarButton,
+} from '@cladd-ui/react';
 import { Copy, GripVertical, Plus, Radio, Scan, Star, Trash2 } from 'lucide-react';
 import type { PanelContent, Screen, ShowBackground } from '@core/domain.js';
 import {
@@ -127,7 +135,7 @@ function ScreenListItem({
             // Keep dnd-kit's keyboard reordering (Space, arrows, Space).
             sortable.listeners?.['onKeyDown']?.(event);
           }}
-          className="focus-ring flex h-cladd-xl w-5 shrink-0 cursor-grab items-center justify-center rounded-cladd-md text-cladd-fg-softer hover:text-cladd-fg-soft @max-[700px]/ws:hidden"
+          className="focus-ring flex h-cladd-xl w-5 shrink-0 cursor-grab items-center justify-center rounded-cladd-md text-cladd-fg-softer hover:text-cladd-fg-soft @max-[1000px]/ws:hidden"
         >
           <GripVertical className="size-4" />
         </button>
@@ -137,10 +145,10 @@ function ScreenListItem({
           aria-label={`${screen.name}${live ? ', on air' : ''}`}
           title={screen.name}
           onClick={() => editScreen(screen.id)}
-          className="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-cladd-md py-1.5 pr-1 pl-1 text-left @max-[700px]/ws:justify-center @max-[700px]/ws:px-0"
+          className="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-cladd-md py-1.5 pr-1 pl-1 text-left @max-[1000px]/ws:justify-center @max-[1000px]/ws:px-0"
         >
           <LayoutGlyph screen={screen} className="w-10 shrink-0" tone={live ? 'live' : 'default'} />
-          <span className="min-w-0 flex-1 @max-[700px]/ws:hidden">
+          <span className="min-w-0 flex-1 @max-[1000px]/ws:hidden">
             <span className="flex items-center gap-1">
               <span className="truncate text-cladd-xs font-semibold">{screen.name}</span>
               {screen.id === defaultId && (
@@ -427,16 +435,16 @@ function Canvas({ screen }: { screen: Screen }) {
         </span>
         <div className="ml-auto flex items-center gap-2">
           <Hint label="Show a title-safe margin inside each panel (preview only, never saved)">
-            <ToggleButton selected={safe} onChange={toggleSafeArea} size="sm" activeColor="warn">
+            <ToggleButton selected={safe} onChange={toggleSafeArea} activeColor="warn">
               <Scan />
               Safe area
             </ToggleButton>
           </Hint>
           {isLiveOutput && !live && (
-            <Button size="sm" onClick={() => selectScreen(screen.id)}>
+            <ToolbarButton variant="gradient" outline onClick={() => selectScreen(screen.id)}>
               <Radio className="text-live" />
               Switch Display to This Screen
-            </Button>
+            </ToolbarButton>
           )}
         </div>
       </WorkspaceToolbar>
@@ -491,20 +499,20 @@ export function ScreensWorkspace() {
         <Panel
           as="aside"
           aria-label="Screens"
-          className="w-56 shrink-0 border-r @max-[860px]/ws:w-48 @max-[700px]/ws:w-16 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+          className="w-56 shrink-0 border-r @max-[1000px]/ws:w-16 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
           contentClassName="@max-[560px]/ws:flex-row @max-[560px]/ws:items-center"
         >
-          <div className="flex h-cladd-xl shrink-0 items-center border-b pr-2 pl-3 @max-[700px]/ws:justify-center @max-[700px]/ws:px-1 @max-[560px]/ws:border-r @max-[560px]/ws:border-b-0">
+          <div className="flex h-cladd-xl shrink-0 items-center border-b pr-2 pl-3 @max-[1000px]/ws:justify-center @max-[1000px]/ws:px-1 @max-[560px]/ws:border-r @max-[560px]/ws:border-b-0">
             <SectionHeader
-              label={<span className="@max-[700px]/ws:hidden">Screens</span>}
-              className="flex-1 @max-[700px]/ws:flex-none"
+              label={<span className="@max-[1000px]/ws:hidden">Screens</span>}
+              className="flex-1 @max-[1000px]/ws:flex-none"
               actions={
                 <ActionMenu>
                   <ActionMenuTrigger
                     render={
                       <Button size="sm" aria-label="New Screen">
                         <Plus />
-                        <span className="@max-[700px]/ws:hidden">New</span>
+                        <span className="@max-[1000px]/ws:hidden">New</span>
                       </Button>
                     }
                   />
@@ -541,7 +549,7 @@ export function ScreensWorkspace() {
               </ol>
             </SortableArea>
           </Scroll>
-          <p className="border-t px-3 py-2 text-cladd-2xs leading-snug text-cladd-fg-softer @max-[700px]/ws:hidden">
+          <p className="border-t px-3 py-2 text-cladd-2xs leading-snug text-cladd-fg-softer @max-[1000px]/ws:hidden">
             Order here is the switcher order and number keys.
           </p>
         </Panel>

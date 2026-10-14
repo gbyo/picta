@@ -346,14 +346,13 @@ function RotationInspector({ set, locked }: { set: MediaSet; locked: boolean }) 
         subtitle={`${set.items.length} item${set.items.length === 1 ? '' : 's'} · defaults for every item`}
       />
       <InspectorSection title="Timing">
-        <PropertyRow label="Image time">
+        <PropertyRow label="Time per image (seconds)" stacked>
           <SecondsField
             label="Default time on screen for images"
             value={set.imageDurationSeconds}
             disabled={locked}
             onCommit={(seconds) => setMediaDefaults({ imageDurationSeconds: seconds })}
           />
-          <span className="text-cladd-fg-softer">sec</span>
         </PropertyRow>
       </InspectorSection>
       <InspectorSection title="Display">
@@ -456,14 +455,13 @@ function ItemInspector({
               ]}
             />
             {item.durationSeconds !== undefined && (
-              <PropertyRow label="Time">
+              <PropertyRow label="Time on screen (seconds)" stacked>
                 <SecondsField
                   label="Custom time on screen"
                   value={item.durationSeconds}
                   disabled={locked}
                   onCommit={(seconds) => setItemDuration(item.id, seconds)}
                 />
-                <span className="text-cladd-fg-softer">sec</span>
               </PropertyRow>
             )}
           </>

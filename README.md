@@ -192,11 +192,15 @@ Unsaved changes are stored in machine-local crash recovery and offered for resto
 
 ## Development
 
-Picta is built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4, and shadcn/ui components using Base UI, with Lucide icons.
+Picta is built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4 and the Cladd (`@cladd-ui/react`) design system, with Lucide icons.
 
 The audience output uses a separate lightweight renderer (`present.html`), keeping the presentation surface isolated from the operator interface.
 
 For architectural details, see [docs/controller.md](docs/controller.md).
+
+### Platform requirements
+
+The operator interface is built on Cladd, which uses modern CSS: anchor positioning for popovers, menus and tooltips, and relative colour syntax for its themes. The audience output does not use either. Use a current WebView: WebView2 on Windows, a recent WebKit on macOS, and a current WebKitGTK on Linux. The Tauri bundle's `minimumSystemVersion` is not enough on its own to guarantee this on macOS.
 
 ### Requirements
 

@@ -77,9 +77,7 @@ function StatButton({
             />
           }
         >
-          <span className="text-cladd-2xs font-semibold tracking-wide text-cladd-fg-soft">
-            {stat.shortLabel}
-          </span>
+          <span className="text-cladd-xs font-semibold text-cladd-fg-soft">{stat.shortLabel}</span>
           <span
             className={cn(
               'mt-0.5 text-cladd-sm font-semibold tabular',

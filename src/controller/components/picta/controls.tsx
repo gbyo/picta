@@ -309,6 +309,7 @@ export function Choice<T extends string>({
           const button = (
             <ToggleButton
               key={option.value}
+              type="button"
               value={option.value}
               size="sm"
               {...(option.ariaLabel ? { 'aria-label': option.ariaLabel } : {})}
@@ -355,6 +356,7 @@ export function ColorField({
   return (
     <ColorPicker
       ref={trigger}
+      type="button"
       surface="cut"
       alpha={false}
       dropdownIcon={false}

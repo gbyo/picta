@@ -187,6 +187,7 @@ describe('volleyball score', () => {
     show.event.score = { ...show.event.score!, homeSets: 1, homePoints: 4 };
     app = await startApp({ show });
     const user = userEvent.setup();
+    fireEvent.keyDown(document.body, { key: 'Tab' });
     screen.getByRole('button', { name: 'Match options' }).focus();
     await user.keyboard('{Enter}');
     await user.click(await screen.findByRole('menuitem', { name: /Reset Match/ }));

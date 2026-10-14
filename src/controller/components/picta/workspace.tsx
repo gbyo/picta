@@ -14,7 +14,7 @@
  */
 
 import type { ComponentProps, ReactNode } from 'react';
-import { SectionTitle, Surface } from '@cladd-ui/react';
+import { SectionTitle, Surface, Toolbar } from '@cladd-ui/react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -93,13 +93,20 @@ export function WorkspaceHeader({
   );
 }
 
-/** A secondary strip under the header: tabs, filters, view options. */
-export function WorkspaceToolbar({ className, ...props }: ComponentProps<typeof Panel>) {
+/**
+ * A secondary strip under the header: tabs, filters, view options. It is a
+ * Cladd Toolbar run flat and full width, so ToolbarButtons, Segmented and
+ * Tabs inside it pick up the toolbar's size and quiet button style.
+ */
+export function WorkspaceToolbar({
+  className,
+  contentClassName,
+  ...props
+}: ComponentProps<typeof Toolbar>) {
   return (
-    <Panel
-      row
-      className={cn('min-h-cladd-xl shrink-0 border-b', className)}
-      contentClassName="flex-wrap gap-x-3 gap-y-1 px-3 py-1"
+    <Toolbar
+      className={cn('min-h-cladd-xl shrink-0 rounded-none border-b', className)}
+      contentClassName={cn('flex-wrap justify-start gap-x-3 gap-y-1 px-3 py-1', contentClassName)}
       {...props}
     />
   );

@@ -13,6 +13,8 @@ import { goLiveFromUi, startApp, type Started } from './harness.js';
 
 /** Base UI menus open from the keyboard reliably in jsdom; the pointer path is covered in the browser. */
 async function openMenuFromKeyboard(user: ReturnType<typeof userEvent.setup>, name: string) {
+  // A keyboard user arrives with a key press, which is what keeps focus on the button.
+  fireEvent.keyDown(document.body, { key: 'Tab' });
   screen.getByRole('button', { name }).focus();
   await user.keyboard('{Enter}');
 }
@@ -271,6 +273,22 @@ describe('forms', () => {
     });
     await user.click(within(dialog).getByRole('button', { name: 'Create Team' }));
     await waitFor(() => expect(getState().doc.show.data.team?.data?.name).toBe('Falcons'));
+  });
+});
+
+describe('forms: Enter', () => {
+  it('creates the team when Enter is pressed in the name field', async () => {
+    app = await startApp();
+    act(() => setState({ mode: 'roster' }));
+    const user = userEvent.setup();
+    await openMenuFromKeyboard(user, 'Team file');
+    await user.click(await screen.findByRole('menuitem', { name: 'New Team…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New team' });
+    const name = within(dialog).getByRole('textbox', { name: 'Team name' });
+    name.focus();
+    fireEvent.change(name, { target: { value: 'Hawks' } });
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(getState().doc.show.data.team?.data?.name).toBe('Hawks'));
   });
 });
 

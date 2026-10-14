@@ -234,7 +234,7 @@ export function ScreenRender({
             )}
             {showSafeArea && <SafeArea aspect={aspect} rect={panel.rect} />}
             {panelLabel && (
-              <span className="pointer-events-none absolute top-1.5 left-1.5 flex items-center gap-1 rounded-[3px] bg-black/75 px-1.5 py-0.5 text-[10.5px] font-medium text-white">
+              <span className="pointer-events-none absolute top-1.5 left-1.5 flex items-center gap-1 rounded-cladd-3xs bg-black/75 px-1.5 py-0.5 text-cladd-2xs font-medium text-white">
                 <meta.icon className="size-3" />
                 {panelLabel(panel, index)}
               </span>

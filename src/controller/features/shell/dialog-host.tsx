@@ -238,6 +238,7 @@ function NewTeamDialog() {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Sport">
             <Select
+              type="button"
               options={SPORT_IDS}
               value={details.sport}
               onChange={(value) => setDetails({ ...details, sport: value })}

@@ -35,7 +35,10 @@ function MenuSurface({ className, ...props }: ComponentProps<typeof Surface>) {
       {...(theme === 'light' ? { level: 1 } : {})}
       variant={theme === 'light' ? 'solid' : 'gradient'}
       outline={theme === 'dark'}
-      className={cn('z-50 w-fit min-w-44 rounded-cladd-popover shadow-cladd-popover', className)}
+      className={cn(
+        'z-50 w-fit min-w-44 origin-(--transform-origin) rounded-cladd-popover shadow-cladd-popover duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+        className,
+      )}
       contentClassName="max-h-(--available-height) overflow-y-auto p-1"
       {...props}
     />
