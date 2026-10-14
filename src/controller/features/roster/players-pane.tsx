@@ -429,7 +429,7 @@ export function PlayersPane() {
         <div
           role="row"
           style={{ gridTemplateColumns: ROSTER_COLUMNS }}
-          className="grid h-8 shrink-0 items-center gap-1 border-b border-line px-1.5 text-[10.5px] font-semibold tracking-[0.06em] text-fg-faint uppercase"
+          className="grid h-8 shrink-0 items-center gap-1 border-b border-line px-1.5 text-[11px] font-semibold tracking-[0.06em] text-fg-faint uppercase"
         >
           <span />
           <span className="pr-1.5 text-right">#</span>

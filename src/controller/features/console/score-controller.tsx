@@ -136,12 +136,12 @@ function TeamBlock({
       <div className="flex min-w-0 items-center gap-2">
         <InlineName side={side} score={score} />
         {setPoint && !final && (
-          <span className="shrink-0 rounded-[3px] bg-warn-soft px-1.5 py-0.5 text-[9.5px] font-bold tracking-[0.08em] text-warn">
+          <span className="shrink-0 rounded-[3px] bg-warn-soft px-1.5 py-0.5 text-[11px] font-bold tracking-[0.08em] text-warn">
             {isMatchPoint(score) ? 'MATCH PT' : 'SET PT'}
           </span>
         )}
         {winner && (
-          <span className="flex shrink-0 items-center gap-1 rounded-[3px] bg-ok-soft px-1.5 py-0.5 text-[9.5px] font-bold tracking-[0.08em] text-ok">
+          <span className="flex shrink-0 items-center gap-1 rounded-[3px] bg-ok-soft px-1.5 py-0.5 text-[11px] font-bold tracking-[0.08em] text-ok">
             <Trophy className="size-3" />
             WINNER
           </span>
@@ -154,7 +154,7 @@ function TeamBlock({
             disabled={final}
             onClick={() => scoreAction({ type: 'serve', side: serving ? null : side })}
             className={cn(
-              'ml-auto flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10.5px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40',
+              'ml-auto flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[11px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40',
               serving
                 ? 'bg-[#ffe36b] text-black'
                 : 'text-fg-faint hover:bg-raised-hover hover:text-fg-muted',
@@ -174,7 +174,7 @@ function TeamBlock({
         </output>
         <div className="flex flex-col items-end gap-1.5 pb-1">
           <span className="flex items-center gap-1.5">
-            <span className="text-[10.5px] text-fg-faint">Sets</span>
+            <span className="text-[11px] text-fg-faint">Sets</span>
             <SetDots won={sets} needed={needed} color={team.primaryColor} />
             <span
               className="w-3 text-[12px] font-semibold text-fg tabular"

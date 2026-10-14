@@ -59,7 +59,7 @@ export function CustomStatsPane() {
             key={stat.id}
             className="flex h-9 items-center gap-3 border-b border-line px-3 last:border-b-0"
           >
-            <span className="w-4 text-[10.5px] text-fg-faint tabular">{index + 1}</span>
+            <span className="w-4 text-[11px] text-fg-faint tabular">{index + 1}</span>
             <span className="w-12 text-[12px] font-semibold text-fg">{stat.shortLabel}</span>
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{stat.label}</span>
             <span className="text-[11px] text-fg-faint">{stat.id}</span>

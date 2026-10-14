@@ -158,7 +158,7 @@ function ScreenListItem({
             </span>
             <span
               className={cn(
-                'block text-[10.5px]',
+                'block text-[11px]',
                 live ? 'font-semibold text-live' : 'text-fg-faint',
               )}
             >
@@ -279,7 +279,7 @@ function Inspector({ screen }: { screen: Screen }) {
                   if (id !== template) applyTemplate(screen.id, id);
                 }}
                 className={cn(
-                  'flex flex-col items-center gap-1 rounded-md border p-1.5 text-[10.5px] outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  'flex flex-col items-center gap-1 rounded-md border p-1.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   id === template
                     ? 'border-accent bg-accent-soft text-fg'
                     : 'border-line text-fg-muted hover:border-line-strong hover:text-fg',

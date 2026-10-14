@@ -88,7 +88,7 @@
 
 /* Small uppercase section label used throughout the console. */
 @utility label-caps {
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -114,7 +114,7 @@
   --line-strong: rgb(255 255 255 / 0.13);
   --fg: #e8eaed;
   --fg-muted: #a1a7b0;
-  --fg-faint: #6b717a;
+  --fg-faint: #8a909a;
 
   --accent: #5d9cff;
   --accent-fg: #06101f;
@@ -151,7 +151,7 @@
   --line-strong: rgb(15 20 30 / 0.16);
   --fg: #15181c;
   --fg-muted: #535a64;
-  --fg-faint: #858c96;
+  --fg-faint: #636a74;
 
   --accent: #1f6fe5;
   --accent-fg: #ffffff;
@@ -182,6 +182,13 @@
     'Segoe UI', system-ui, Ubuntu, 'Helvetica Neue', Arial, sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
+
+  /*
+   * The root is 13px, so Tailwind's rem-based sizes would shrink (text-xs ≈ 9.75px).
+   * Pin the ones the UI primitives use to pixels that match the console's own text.
+   */
+  --text-xs: 12.5px;
+  --text-sm: 14px;
 
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);

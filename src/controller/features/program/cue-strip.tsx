@@ -76,7 +76,7 @@ export function CueStrip() {
       <div className="flex items-center gap-2.5 px-2.5 py-2">
         <Icon className="size-4 shrink-0 text-cue" />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold tracking-[0.1em] text-cue">
+          <p className="text-[11px] font-bold tracking-[0.1em] text-cue">
             CUE · {cueKind(cue).toUpperCase()} · {target.toUpperCase()}
           </p>
           <p className="truncate text-[12.5px] font-medium text-fg">

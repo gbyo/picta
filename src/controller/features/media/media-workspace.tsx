@@ -264,12 +264,12 @@ function MediaCard({
             failed={Boolean(failure)}
             typeIcon={false}
           />
-          <span className="absolute top-1 left-1 rounded-[3px] bg-black/70 px-1 text-[10.5px] font-semibold text-white tabular">
+          <span className="absolute top-1 left-1 rounded-[3px] bg-black/70 px-1 text-[11px] font-semibold text-white tabular">
             {index + 1}
           </span>
           <span
             className={cn(
-              'absolute right-1 bottom-1 flex items-center gap-0.5 rounded-[3px] bg-black/70 px-1 text-[10.5px] tabular',
+              'absolute right-1 bottom-1 flex items-center gap-0.5 rounded-[3px] bg-black/70 px-1 text-[11px] tabular',
               custom ? 'text-white' : 'text-white/60',
             )}
           >

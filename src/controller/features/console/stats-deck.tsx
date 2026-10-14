@@ -84,7 +84,7 @@ function StatButton({
             />
           }
         >
-          <span className="text-[9.5px] font-semibold tracking-[0.04em] text-fg-faint">
+          <span className="text-[11px] font-semibold tracking-[0.04em] text-fg-faint">
             {stat.shortLabel}
           </span>
           <span
@@ -133,7 +133,7 @@ function Derived({ definition, stats }: { definition: SportDefinition; stats: Ra
   const derived = volleyballDerivedStats(stats);
   const hit = derived.hittingPercentage;
   return (
-    <span className="text-[10.5px] text-fg-faint tabular">
+    <span className="text-[11px] text-fg-faint tabular">
       Hit {hit === null ? '—' : hit.toFixed(3).replace(/^0/, '').replace(/^-0/, '-')} · Blk{' '}
       {derived.totalBlocks} · Pts {derived.points}
     </span>
@@ -167,9 +167,7 @@ function PlayerTile({
           <Derived definition={definition} stats={stats} />
         </span>
         {player.position && (
-          <span className="shrink-0 text-[10.5px] font-medium text-fg-faint">
-            {player.position}
-          </span>
+          <span className="shrink-0 text-[11px] font-medium text-fg-faint">{player.position}</span>
         )}
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -283,7 +281,7 @@ function LineupEditor({ group, members }: { group: PlayerGroup; members: Set<str
                   />
                   <span className="w-6 text-right text-fg-muted tabular">{player.number}</span>
                   <span className="truncate text-fg">{player.name}</span>
-                  <span className="ml-auto text-[10.5px] text-fg-faint">{player.position}</span>
+                  <span className="ml-auto text-[11px] text-fg-faint">{player.position}</span>
                 </label>
               </li>
             );

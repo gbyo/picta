@@ -26,7 +26,7 @@ export function ProgramMonitor() {
       <div className="flex h-6 items-center gap-2">
         <span
           className={cn(
-            'rounded-[3px] px-1.5 py-0.5 text-[10px] font-bold tracking-[0.1em]',
+            'rounded-[3px] px-1.5 py-0.5 text-[11px] font-bold tracking-[0.1em]',
             live ? 'bg-live text-live-fg' : 'bg-raised text-fg-muted',
           )}
         >

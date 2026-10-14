@@ -63,7 +63,7 @@ function MemberRow({
       >
         <GripVertical className="size-3.5" />
       </button>
-      <span className="w-5 text-right text-[10.5px] text-fg-faint tabular">{index + 1}</span>
+      <span className="w-5 text-right text-[11px] text-fg-faint tabular">{index + 1}</span>
       <span className="w-8 text-[13px] font-semibold text-fg tabular">{player.number}</span>
       <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{player.name}</span>
       <span className="text-[11px] text-fg-faint">{player.position}</span>

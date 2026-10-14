@@ -95,7 +95,7 @@ export function ScreenSwitcher() {
                   </span>
                   <span
                     className={cn(
-                      'block text-[10px] font-semibold tracking-[0.08em]',
+                      'block text-[11px] font-semibold tracking-[0.08em]',
                       isLive ? 'text-live' : isCurrent ? 'text-accent' : 'text-transparent',
                     )}
                   >
@@ -103,7 +103,7 @@ export function ScreenSwitcher() {
                   </span>
                 </span>
                 {index < 9 && (
-                  <kbd className="absolute top-1 right-1.5 text-[10px] font-medium text-fg-faint tabular">
+                  <kbd className="absolute top-1 right-1.5 text-[11px] font-medium text-fg-faint tabular">
                     {index + 1}
                   </kbd>
                 )}

@@ -25,7 +25,7 @@ function HoldMeter({ since, durationMs }: { since: number; durationMs: number })
       <div className="h-1 flex-1 overflow-hidden rounded-full bg-sunken">
         <div className="h-full rounded-full bg-fg-muted" style={{ width: `${progress * 100}%` }} />
       </div>
-      <span className="w-7 text-right text-[10.5px] text-fg-faint tabular">{remaining}s</span>
+      <span className="w-7 text-right text-[11px] text-fg-faint tabular">{remaining}s</span>
     </div>
   );
 }
@@ -149,7 +149,7 @@ export function MediaTransport() {
                   isCurrent ? 'bg-live-soft text-fg' : 'text-fg-muted hover:bg-raised',
                 )}
               >
-                <span className="w-5 shrink-0 text-right text-[10.5px] text-fg-faint tabular">
+                <span className="w-5 shrink-0 text-right text-[11px] text-fg-faint tabular">
                   {index + 1}
                 </span>
                 <span
@@ -168,7 +168,7 @@ export function MediaTransport() {
                   {name(item)}
                 </span>
                 {unavailable ? (
-                  <span className="text-[10.5px] text-danger">
+                  <span className="text-[11px] text-danger">
                     {item.missing ? 'Missing' : 'Skipped'}
                   </span>
                 ) : (

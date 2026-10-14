@@ -49,7 +49,7 @@ export function PasteRosterDialog({
           />
           <ScrollArea className="h-64 rounded-md border border-line bg-sunken/40">
             <table className="w-full text-[12px]">
-              <thead className="sticky top-0 bg-surface text-[10.5px] tracking-[0.06em] text-fg-faint uppercase">
+              <thead className="sticky top-0 bg-surface text-[11px] tracking-[0.06em] text-fg-faint uppercase">
                 <tr>
                   <th className="w-12 px-2 py-1.5 text-right font-semibold">#</th>
                   <th className="px-2 py-1.5 text-left font-semibold">Name</th>

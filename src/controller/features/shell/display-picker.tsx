@@ -58,7 +58,7 @@ function Arrangement({
           >
             <span className="text-[15px] font-semibold tabular">{display.index}</span>
             {display.id === controllerId && (
-              <span className="text-[9.5px] text-fg-faint">Picta</span>
+              <span className="text-[11px] text-fg-faint">Picta</span>
             )}
           </button>
         );
@@ -102,7 +102,7 @@ export function DisplayPicker() {
           <span className="text-[12px] font-medium">
             {selected ? `Display ${selected.index}` : 'No display'}
           </span>
-          <span className="mt-0.5 text-[10.5px] font-normal text-fg-faint tabular">
+          <span className="mt-0.5 text-[11px] font-normal text-fg-faint tabular">
             {selected ? `${selected.width}×${selected.height}` : 'Choose output'}
           </span>
         </span>

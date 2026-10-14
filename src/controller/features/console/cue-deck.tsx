@@ -71,7 +71,7 @@ function ManualSession() {
       <div className="flex items-center gap-2 rounded-md border border-cue/40 bg-cue-soft px-2.5 py-2">
         <Hand className="size-4 text-cue" />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold tracking-[0.1em] text-cue">PRESENTING MANUALLY</p>
+          <p className="text-[11px] font-bold tracking-[0.1em] text-cue">PRESENTING MANUALLY</p>
           <p className="truncate text-[12.5px] font-medium text-fg">
             {group?.name ?? 'Lineup'} · {shown} of {players.length} shown
           </p>
@@ -115,7 +115,7 @@ function ManualSession() {
                         : 'border-line bg-raised hover:border-line-strong hover:bg-raised-hover',
                   )}
                 >
-                  <span className="w-4 text-[10.5px] text-fg-faint tabular">{index + 1}</span>
+                  <span className="w-4 text-[11px] text-fg-faint tabular">{index + 1}</span>
                   <span className="w-8 text-[16px] font-bold text-fg tabular">{player.number}</span>
                   <span
                     className={cn(
@@ -207,13 +207,11 @@ function LineupRow({ group, live, busy }: { group: PlayerGroup; live: boolean; b
         <ol className="flex flex-col border-t border-line px-2 py-1.5">
           {players.map((player, index) => (
             <li key={player.id} className="flex h-6 items-center gap-2 text-[12px]">
-              <span className="w-4 text-right text-[10.5px] text-fg-faint tabular">
-                {index + 1}
-              </span>
+              <span className="w-4 text-right text-[11px] text-fg-faint tabular">{index + 1}</span>
               <span className="w-7 font-semibold text-fg tabular">{player.number}</span>
               <span className="min-w-0 flex-1 truncate text-fg-muted">{player.name}</span>
               <PresentationIcon player={player} />
-              <span className="w-16 text-[10.5px] text-fg-faint">
+              <span className="w-16 text-[11px] text-fg-faint">
                 {playerHasVideo(player) ? 'intro video' : 'card · 9s'}
               </span>
             </li>
@@ -265,7 +263,7 @@ function PlayerFinder({ live, busy }: { live: boolean; busy: boolean }) {
                 {player.number}
               </span>
               <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{player.name}</span>
-              <span className="text-[10.5px] text-fg-faint">{player.position}</span>
+              <span className="text-[11px] text-fg-faint">{player.position}</span>
               <Button
                 variant="ghost"
                 size="sm"

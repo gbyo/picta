@@ -51,7 +51,7 @@ function CommandInput({
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          'h-full w-full bg-transparent text-[13px] text-fg outline-none placeholder:text-fg-faint',
+          'h-full w-full bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-faint',
           className,
         )}
         {...props}
@@ -74,7 +74,7 @@ function CommandEmpty(props: React.ComponentProps<typeof CommandPrimitive.Empty>
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
-      className="py-8 text-center text-[12px] text-fg-faint"
+      className="py-8 text-center text-[13px] text-fg-faint"
       {...props}
     />
   );
@@ -88,7 +88,7 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        'overflow-hidden p-0.5 **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-[10.5px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:text-fg-faint **:[[cmdk-group-heading]]:uppercase',
+        'overflow-hidden p-0.5 **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-[12px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:text-fg-faint **:[[cmdk-group-heading]]:uppercase',
         className,
       )}
       {...props}
@@ -101,7 +101,7 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "relative flex h-8 cursor-default items-center gap-2.5 rounded-md px-2 text-[12.5px] outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40 data-[selected=true]:bg-raised-hover [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-fg-muted",
+        "relative flex h-8 cursor-default items-center gap-2.5 rounded-md px-2 text-[13.5px] outline-none select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40 data-[selected=true]:bg-raised-hover [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg]:text-fg-muted",
         className,
       )}
       {...props}
