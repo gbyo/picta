@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { usePicta } from '@/state/store';
 import { useTeam } from '@/hooks';
+import { useWidth } from '@/use-width';
 import {
   addToGroup,
   createGroup,
@@ -174,7 +175,7 @@ function GroupInspector({ group }: { group: PlayerGroup }) {
         subtitle={`${group.playerIds.length} player${group.playerIds.length === 1 ? '' : 's'}`}
       />
       <InspectorSection title="Group">
-        <PropertyRow label="Name">
+        <PropertyRow label="Name" stacked>
           <span className="min-w-0 flex-1 truncate">{group.name}</span>
           <Button size="sm" onClick={() => void renameGroup(group.id)}>
             <Pencil />
@@ -208,61 +209,102 @@ function GroupInspector({ group }: { group: PlayerGroup }) {
   );
 }
 
-export function GroupsPane() {
-  const team = useTeam();
-  const selectedId = usePicta((state) => state.selectedGroupId);
-  if (!team) return null;
-  const group = team.groups.find((item) => item.id === selectedId) ?? team.groups[0];
-  return (
-    <>
+/** The team's groups: a column beside the members, or a strip above them when the workspace is narrow. */
+function GroupList({
+  team,
+  groupId,
+  strip,
+}: {
+  team: Team;
+  groupId: string | undefined;
+  strip: boolean;
+}) {
+  const items = team.groups.map((item) => {
+    const selected = item.id === groupId;
+    return (
+      <ListButton
+        key={item.id}
+        selected={selected}
+        color={selected ? 'brand' : ''}
+        aria-current={selected}
+        onClick={() => selectGroup(item.id)}
+        className={strip ? 'w-auto shrink-0' : ''}
+        after={
+          <span className="text-cladd-fg-softer tabular">
+            {item.playerIds.length}
+            {item.maxPlayers !== undefined ? `/${item.maxPlayers}` : ''}
+          </span>
+        }
+      >
+        <span className="truncate">{item.name}</span>
+      </ListButton>
+    );
+  });
+  if (strip)
+    return (
       <Panel
         as="aside"
         aria-label="Groups"
-        className="w-56 shrink-0 border-r @max-[860px]/ws:w-48 @max-[700px]/ws:w-40 @max-[560px]/ws:max-h-36 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+        row
+        className="shrink-0 border-b"
+        contentClassName="gap-1 overflow-x-auto p-1.5"
       >
-        <Scroll>
-          <List className="gap-0.5 p-1.5">
-            {team.groups.map((item) => (
-              <ListButton
-                key={item.id}
-                selected={item.id === group?.id}
-                color={item.id === group?.id ? 'brand' : ''}
-                aria-current={item.id === group?.id}
-                onClick={() => selectGroup(item.id)}
-                after={
-                  <span className="text-cladd-fg-softer tabular">
-                    {item.playerIds.length}
-                    {item.maxPlayers !== undefined ? `/${item.maxPlayers}` : ''}
-                  </span>
-                }
-              >
-                <span className="truncate">{item.name}</span>
-              </ListButton>
-            ))}
-          </List>
-        </Scroll>
-        <div className="border-t p-2">
-          <Button className="w-full" onClick={() => void createGroup()}>
-            <Plus />
-            New Group…
-          </Button>
-        </div>
+        {items}
+        <Button className="shrink-0" onClick={() => void createGroup()}>
+          <Plus />
+          New Group…
+        </Button>
       </Panel>
-      <WorkspaceMain>
-        {group ? (
-          <GroupMembers group={group} team={team} />
-        ) : (
-          <EmptyState title="No groups yet">
-            Groups are ordered lists of players: a starting lineup, the players on the floor,
-            seniors.
-          </EmptyState>
+    );
+  return (
+    <Panel
+      as="aside"
+      aria-label="Groups"
+      className="w-56 shrink-0 border-r @max-[860px]/ws:w-48 @max-[560px]/ws:max-h-36 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+    >
+      <Scroll>
+        <List className="gap-0.5 p-1.5">{items}</List>
+      </Scroll>
+      <div className="border-t p-2">
+        <Button className="w-full" onClick={() => void createGroup()}>
+          <Plus />
+          New Group…
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+export function GroupsPane() {
+  const team = useTeam();
+  const selectedId = usePicta((state) => state.selectedGroupId);
+  const [ref, width] = useWidth<HTMLDivElement>();
+  if (!team) return null;
+  const group = team.groups.find((item) => item.id === selectedId) ?? team.groups[0];
+  // Three columns need room for a useful member list. Below that the groups
+  // become a strip above. (Unmeasured, as in tests, counts as wide.)
+  const strip = width > 0 && width < 760;
+  return (
+    <div ref={ref} className="flex min-h-0 min-w-0 flex-1 flex-col @max-[560px]/ws:flex-none">
+      {strip && <GroupList team={team} groupId={group?.id} strip />}
+      <div className="flex min-h-0 flex-1 @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col">
+        {!strip && <GroupList team={team} groupId={group?.id} strip={false} />}
+        <WorkspaceMain>
+          {group ? (
+            <GroupMembers group={group} team={team} />
+          ) : (
+            <EmptyState title="No groups yet">
+              Groups are ordered lists of players: a starting lineup, the players on the floor,
+              seniors.
+            </EmptyState>
+          )}
+        </WorkspaceMain>
+        {group && (
+          <Inspector label="Group">
+            <GroupInspector group={group} />
+          </Inspector>
         )}
-      </WorkspaceMain>
-      {group && (
-        <Inspector label="Group">
-          <GroupInspector group={group} />
-        </Inspector>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
