@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Shortcut, Tooltip } from '@cladd-ui/react';
+import { cn } from '@/lib/utils';
 
 /** Picta writes shortcuts as symbols; Cladd's Shortcut speaks key names. */
 const KEY_NAMES: Record<string, string> = {
@@ -19,7 +20,7 @@ const KEY_NAMES: Record<string, string> = {
 /** Keyboard keys for a shortcut, e.g. ['⌘', 'K']. */
 export function Keys({ keys, className }: { keys: string[]; className?: string }) {
   return (
-    <Shortcut as="span" {...(className ? { className } : {})}>
+    <Shortcut as="span" className={cn('font-sans', className)}>
       {keys.map((key) => KEY_NAMES[key] ?? key)}
     </Shortcut>
   );

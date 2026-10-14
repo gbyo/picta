@@ -231,7 +231,8 @@ describe('popovers', () => {
     await goLiveFromUi();
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /Output display/ }));
-    await screen.findByRole('dialog', { name: 'Audience display' });
+    const popover = await screen.findByRole('dialog', { name: 'Audience display' });
+    await waitFor(() => expect(popover).toHaveAttribute('data-open'));
     const before = app.platform.output.callsTo('next').length;
     fireEvent.keyDown(document.body, { key: 'ArrowRight' });
     fireEvent.keyDown(document.body, { key: ' ' });

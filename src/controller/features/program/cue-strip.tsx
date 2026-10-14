@@ -82,7 +82,10 @@ export function CueStrip() {
     >
       <Icon className="size-4 shrink-0 text-cue" />
       <div className="min-w-0 flex-1">
-        <p className="text-cladd-2xs font-bold tracking-wider text-cue">
+        <p
+          className="truncate text-cladd-2xs font-bold tracking-wider text-cue"
+          title={`${cueKind(cue)} · ${target}`}
+        >
           CUE · {cueKind(cue).toUpperCase()} · {target.toUpperCase()}
         </p>
         <p className="truncate text-cladd-xs font-semibold">

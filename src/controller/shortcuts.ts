@@ -60,8 +60,14 @@ const OWNS_ARROWS =
 const OWNS_SPACE =
   'button, summary, a[href], [role="button"], [role="checkbox"], [role="switch"], [role="option"], [role="menuitem"], [role="tab"]';
 const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
-/** Cladd's overlays do not move focus, so their presence is what blocks shortcuts. */
-const OPEN_OVERLAY = '.cladd-dialog, .cladd-popup, .cladd-popover';
+/**
+ * Cladd's overlays do not move focus, so their presence is what blocks
+ * shortcuts. Only an overlay that is open counts (`data-open` is set when it
+ * opens and cleared as it starts closing), so one still fading out can never
+ * leave the keyboard dead.
+ */
+const OPEN_OVERLAY =
+  '.cladd-dialog [data-part="content"][data-open], .cladd-popover [data-part="content"][data-open], .cladd-popup[data-open]';
 
 function overlayOpen(): boolean {
   return document.querySelector(OPEN_OVERLAY) !== null;
