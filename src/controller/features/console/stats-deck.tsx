@@ -1,39 +1,28 @@
 import { useMemo, useState } from 'react';
+import { Button, Checkbox, Select, Surface, ToggleButton } from '@cladd-ui/react';
 import { ArrowLeftRight, Ellipsis, Film, IdCard, Undo2, Users } from 'lucide-react';
 import type { Player, PlayerGroup, RawPlayerStats } from '@core/domain.js';
 import { emptyRawStats, volleyballDerivedStats, type SportDefinition } from '@core/sports.js';
 import { lastStatEntry } from '@core/stat-log.js';
 import { playerHasVideo } from '@core/player-cues.js';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { EmptyState } from '@/components/picta/feedback';
 import { Hint } from '@/components/picta/hint';
-import { EmptyState } from '@/components/picta/section';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  ActionMenu,
+  ActionMenuContent,
+  ActionMenuTrigger,
+  ContextActions,
+  ContextActionsContent,
+  ContextActionsTrigger,
+  MenuItem,
+  MenuSeparator,
+  MenuSub,
+  MenuSubContent,
+  MenuSubTrigger,
+  MenuTitle,
+} from '@/components/picta/menu';
+import { PictaPopover } from '@/components/picta/popover';
+import { Scroll, SectionHeader } from '@/components/picta/workspace';
 import { cn } from '@/lib/utils';
 import { ask } from '@/state/dialogs';
 import { usePicta } from '@/state/store';
@@ -62,53 +51,53 @@ function StatButton({
   compound: string[];
 }) {
   return (
-    <ContextMenu>
+    <ContextActions>
       <Hint
         label={
           <>
             <b className="font-semibold">{stat.label}</b> +1
-            {compound.length > 0 && (
-              <span className="text-fg-muted"> · also counts {compound.join(', ')}</span>
-            )}
-            <span className="text-fg-faint"> · right-click to correct</span>
+            {compound.length > 0 && <span> · also counts {compound.join(', ')}</span>}
+            <span className="text-cladd-fg-softer"> · right-click to correct</span>
           </>
         }
       >
-        <ContextMenuTrigger
+        <ContextActionsTrigger
           render={
-            <button
+            <Surface
+              as="button"
               type="button"
+              hoverable
+              clickable
+              outline
+              variant="gradient"
               onClick={() => recordStat(player.id, stat.id, 1)}
               aria-label={`${stat.label} for ${playerLabel(player)}, now ${value}`}
-              className="flex h-9 min-w-0 flex-col items-center justify-center rounded-[5px] border border-line bg-sunken/50 leading-none outline-none transition-colors hover:border-line-strong hover:bg-raised-hover focus-visible:ring-2 focus-visible:ring-accent active:bg-accent-soft"
+              className="focus-ring h-cladd-xl min-w-0 rounded-cladd-md"
+              contentClassName="flex h-full flex-col items-center justify-center leading-none"
             />
           }
         >
-          <span className="text-[9.5px] font-semibold tracking-[0.04em] text-fg-faint">
-            {stat.shortLabel}
-          </span>
+          <span className="text-cladd-xs font-semibold text-cladd-fg-soft">{stat.shortLabel}</span>
           <span
             className={cn(
-              'mt-0.5 text-[14px] font-semibold tabular',
-              value > 0 ? 'text-fg' : 'text-fg-faint',
+              'mt-0.5 text-cladd-sm font-semibold tabular',
+              value === 0 && 'text-cladd-fg-softer',
             )}
           >
             {value}
           </span>
-        </ContextMenuTrigger>
+        </ContextActionsTrigger>
       </Hint>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onClick={() => recordStat(player.id, stat.id, 1)}>
-          {stat.label} +1
-        </ContextMenuItem>
-        <ContextMenuItem disabled={value === 0} onClick={() => recordStat(player.id, stat.id, -1)}>
+      <ContextActionsContent className="min-w-48">
+        <MenuItem onClick={() => recordStat(player.id, stat.id, 1)}>{stat.label} +1</MenuItem>
+        <MenuItem disabled={value === 0} onClick={() => recordStat(player.id, stat.id, -1)}>
           {stat.label} −1
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => void promptExactStat(player, stat, value)}>
+        </MenuItem>
+        <MenuItem onClick={() => void promptExactStat(player, stat, value)}>
           Set Exact Value…
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+        </MenuItem>
+      </ContextActionsContent>
+    </ContextActions>
   );
 }
 
@@ -133,7 +122,7 @@ function Derived({ definition, stats }: { definition: SportDefinition; stats: Ra
   const derived = volleyballDerivedStats(stats);
   const hit = derived.hittingPercentage;
   return (
-    <span className="text-[10.5px] text-fg-faint tabular">
+    <span className="text-cladd-xs text-cladd-fg-softer tabular">
       Hit {hit === null ? '—' : hit.toFixed(3).replace(/^0/, '').replace(/^-0/, '-')} · Blk{' '}
       {derived.totalBlocks} · Pts {derived.points}
     </span>
@@ -156,65 +145,74 @@ function PlayerTile({
   live: boolean;
 }) {
   return (
-    <article
+    <Surface
+      as="article"
       aria-label={playerLabel(player)}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-2.5"
+      className="min-w-0 rounded-cladd-lg"
+      contentClassName="flex flex-col gap-2 p-2.5"
     >
       <header className="flex min-w-0 items-center gap-2">
-        <span className="w-7 shrink-0 text-[17px] font-bold text-fg tabular">{player.number}</span>
+        <span className="w-7 shrink-0 text-cladd-md font-bold tabular">{player.number}</span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12.5px] font-semibold text-fg">{player.name}</span>
+          <span className="block truncate text-cladd-xs font-semibold">{player.name}</span>
           <Derived definition={definition} stats={stats} />
         </span>
         {player.position && (
-          <span className="shrink-0 text-[10.5px] font-medium text-fg-faint">
+          <span className="shrink-0 text-cladd-xs font-medium text-cladd-fg-softer">
             {player.position}
           </span>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon-sm" aria-label={`${player.name} options`} />}
-          >
-            <Ellipsis />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem
+        <ActionMenu>
+          <ActionMenuTrigger
+            render={
+              <Button
+                square
+                size="sm"
+                variant="transparent"
+                outline={false}
+                aria-label={`${player.name} options`}
+              >
+                <Ellipsis />
+              </Button>
+            }
+          />
+          <ActionMenuContent align="end" className="min-w-56">
+            <MenuItem
+              icon={<IdCard />}
               disabled={!live}
               onClick={() => void presentSinglePlayer(player.id, 'card')}
             >
-              <IdCard />
               Show Player Card
-            </DropdownMenuItem>
-            <DropdownMenuItem
+            </MenuItem>
+            <MenuItem
+              icon={<Film />}
               disabled={!live || !playerHasVideo(player)}
               onClick={() => void presentSinglePlayer(player.id, 'video')}
             >
-              <Film />
               Play Intro Video
-            </DropdownMenuItem>
-            {!live && <DropdownMenuLabel>Go live to present players</DropdownMenuLabel>}
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={bench.length === 0}>
-                <ArrowLeftRight />
+            </MenuItem>
+            {!live && <MenuTitle>Go live to present players</MenuTitle>}
+            <MenuSeparator />
+            <MenuSub>
+              <MenuSubTrigger icon={<ArrowLeftRight />} disabled={bench.length === 0}>
                 Substitute…
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-52">
+              </MenuSubTrigger>
+              <MenuSubContent className="min-w-52">
                 {bench.map((other) => (
-                  <DropdownMenuItem
+                  <MenuItem
                     key={other.id}
                     onClick={() => substitute(group.id, player.id, other.id)}
                   >
                     {playerLabel(other)}
-                  </DropdownMenuItem>
+                  </MenuItem>
                 ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onClick={() => setLiveMembership(group.id, player.id, false)}>
+              </MenuSubContent>
+            </MenuSub>
+            <MenuItem onClick={() => setLiveMembership(group.id, player.id, false)}>
               Take out of {group.name}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </MenuItem>
+          </ActionMenuContent>
+        </ActionMenu>
       </header>
       <div
         className="grid gap-1"
@@ -234,7 +232,7 @@ function PlayerTile({
           />
         ))}
       </div>
-    </article>
+    </Surface>
   );
 }
 
@@ -243,54 +241,57 @@ function LineupEditor({ group, members }: { group: PlayerGroup; members: Set<str
   const overridden = usePicta((state) => group.id in state.doc.show.data.event.liveGroups);
   if (!team) return null;
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <p className="text-[12px] font-medium text-fg">
-          {group.name}
-          <span className="ml-1.5 text-fg-faint tabular">
+    <div className="flex flex-col gap-2 p-3">
+      <SectionHeader
+        label={group.name}
+        detail={
+          <span className="tabular">
             {members.size}
             {group.maxPlayers !== undefined ? ` / ${group.maxPlayers}` : ''}
           </span>
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={!overridden}
-          onClick={() => resetLiveMembership(group.id)}
-        >
-          Use saved group
-        </Button>
-      </div>
-      <ScrollArea className="max-h-72">
-        <ul className="flex flex-col">
-          {team.players.map((player) => {
-            const checked = members.has(player.id);
-            const full = group.maxPlayers !== undefined && members.size >= group.maxPlayers;
-            return (
-              <li key={player.id}>
-                <label
-                  className={cn(
-                    'flex h-7 items-center gap-2 rounded-[4px] px-1.5 text-[12px] hover:bg-raised-hover',
-                    !checked && full && 'opacity-50',
-                  )}
-                >
-                  <Checkbox
-                    checked={checked}
-                    disabled={!checked && full}
-                    onCheckedChange={(value) =>
-                      setLiveMembership(group.id, player.id, value === true)
-                    }
-                  />
-                  <span className="w-6 text-right text-fg-muted tabular">{player.number}</span>
-                  <span className="truncate text-fg">{player.name}</span>
-                  <span className="ml-auto text-[10.5px] text-fg-faint">{player.position}</span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      </ScrollArea>
-      <p className="text-[11px] leading-snug text-fg-faint">
+        }
+        actions={
+          <Button
+            size="sm"
+            variant="transparent"
+            outline={false}
+            disabled={!overridden}
+            onClick={() => resetLiveMembership(group.id)}
+          >
+            Use saved group
+          </Button>
+        }
+      />
+      <ul className="flex max-h-72 flex-col overflow-y-auto">
+        {team.players.map((player) => {
+          const checked = members.has(player.id);
+          const full = group.maxPlayers !== undefined && members.size >= group.maxPlayers;
+          const disabled = !checked && full;
+          return (
+            <li key={player.id}>
+              <label
+                className={cn(
+                  'flex h-cladd-md items-center gap-2 rounded-cladd-md px-1.5 text-cladd-xs hover:bg-cladd-surface-hover',
+                  disabled && 'opacity-50',
+                )}
+              >
+                <Checkbox
+                  as="span"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={(value) => setLiveMembership(group.id, player.id, value)}
+                />
+                <span className="w-6 text-right text-cladd-fg-soft tabular">{player.number}</span>
+                <span className="truncate">{player.name}</span>
+                <span className="ml-auto text-cladd-xs text-cladd-fg-softer">
+                  {player.position}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-cladd-xs leading-snug text-cladd-fg-softer">
         Changes here are tonight only. They are saved with the show, never with the team.
       </p>
     </div>
@@ -363,57 +364,60 @@ export function StatsDeck() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Select value={group.id} onValueChange={(value) => setStatsGroup(value as string)}>
-          <SelectTrigger className="h-7 min-w-36" aria-label="Group">
-            <SelectValue>{() => group.name}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {team.groups.map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.name}
-                {item.id === boardGroupId ? ' · on the board' : ''}
-              </SelectItem>
-            ))}
-          </SelectContent>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label="Group"
+          className="w-44"
+          options={team.groups.map((item) => item.id)}
+          value={group.id}
+          onChange={(value) => setStatsGroup(value)}
+          renderOption={({ value }) => {
+            const item = team.groups.find((candidate) => candidate.id === value);
+            return `${item?.name ?? value}${value === boardGroupId ? ' · on the board' : ''}`;
+          }}
+        >
+          {group.name}
         </Select>
-        <Popover>
-          <PopoverTrigger render={<Button />}>
-            <Users />
-            Lineup
-            <span className="text-fg-faint tabular">
-              {members.length}
-              {group.maxPlayers !== undefined ? `/${group.maxPlayers}` : ''}
-            </span>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 gap-2 p-3">
-            <LineupEditor group={group} members={memberSet} />
-          </PopoverContent>
-        </Popover>
-        <Button
-          variant="ghost"
-          aria-pressed={showBench}
-          onClick={() => setShowBench((value) => !value)}
+        <PictaPopover
+          label={`${group.name} lineup`}
+          width="md"
+          contentClassName="p-0"
+          trigger={
+            <Button>
+              <Users />
+              Lineup
+              <span className="text-cladd-fg-softer tabular">
+                {members.length}
+                {group.maxPlayers !== undefined ? `/${group.maxPlayers}` : ''}
+              </span>
+            </Button>
+          }
+        >
+          <LineupEditor group={group} members={memberSet} />
+        </PictaPopover>
+        <ToggleButton
+          selected={showBench}
+          onChange={setShowBench}
+          variant="transparent"
+          outline={false}
         >
           {showBench ? 'Hide bench' : `Bench (${bench.length})`}
-        </Button>
-        <div className="ml-auto">
+        </ToggleButton>
+        <div className="ml-auto flex max-w-full">
           <Hint
             label={undoLabel ? `Undo the last stat: ${undoLabel}` : 'No stat to undo'}
             keys={['⇧', 'Z']}
           >
-            <Button disabled={!undoLabel} onClick={undoLastStat}>
-              <Undo2 />
-              {undoLabel ? (
-                <span className="max-w-48 truncate">Undo · {undoLabel}</span>
-              ) : (
-                'Undo stat'
-              )}
-            </Button>
+            <span className="inline-flex max-w-full">
+              <Button disabled={!undoLabel} onClick={undoLastStat} className="max-w-full">
+                <Undo2 />
+                <span className="truncate">{undoLabel ? `Undo · ${undoLabel}` : 'Undo stat'}</span>
+              </Button>
+            </span>
           </Hint>
         </div>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <Scroll>
         {members.length === 0 ? (
           <EmptyState title={`Nobody is in ${group.name}`}>
             Use Lineup to choose tonight's players.
@@ -437,8 +441,8 @@ export function StatsDeck() {
           </div>
         )}
         {showBench && bench.length > 0 && (
-          <div className="mt-1 flex flex-col gap-1 border-t border-line pt-2">
-            <p className="label-caps px-0.5 py-1">Bench</p>
+          <div className="mt-1 flex flex-col gap-1 border-t pt-2">
+            <SectionHeader label="Bench" />
             <div
               className="grid gap-2"
               style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))' }}
@@ -458,7 +462,7 @@ export function StatsDeck() {
             </div>
           </div>
         )}
-      </ScrollArea>
+      </Scroll>
     </div>
   );
 }

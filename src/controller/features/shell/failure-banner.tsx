@@ -1,5 +1,7 @@
-import { OctagonX, Radio, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@cladd-ui/react';
+import { Radio, X } from 'lucide-react';
+import { Banner } from '@/components/picta/feedback';
+import { IconButton } from '@/components/picta/controls';
 import { usePicta } from '@/state/store';
 import { dismissFailure, goLive } from '@/actions/output';
 
@@ -10,24 +12,26 @@ export function FailureBanner() {
   const canRetry = usePicta((state) => state.selectedDisplayId !== null);
   if (!failure || phase !== 'off') return null;
   return (
-    <div
+    <Banner
+      tone="danger"
       role="alert"
-      className="flex items-center gap-3 border-b border-danger/30 bg-danger-soft px-3 py-2"
+      className="py-2"
+      actions={
+        <>
+          {canRetry && (
+            <Button onClick={() => void goLive()}>
+              <Radio className="text-live" />
+              Try Again
+            </Button>
+          )}
+          <IconButton label="Dismiss" onClick={dismissFailure}>
+            <X />
+          </IconButton>
+        </>
+      }
     >
-      <OctagonX className="size-4 shrink-0 text-danger" />
-      <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] font-semibold text-fg">{failure.title}</p>
-        <p className="text-[12px] text-fg-muted">{failure.detail}</p>
-      </div>
-      {canRetry && (
-        <Button size="sm" onClick={() => void goLive()}>
-          <Radio className="text-live" />
-          Try Again
-        </Button>
-      )}
-      <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={dismissFailure}>
-        <X />
-      </Button>
-    </div>
+      <p className="text-cladd-xs font-semibold">{failure.title}</p>
+      <p className="text-cladd-xs text-cladd-fg-soft">{failure.detail}</p>
+    </Banner>
   );
 }

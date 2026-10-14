@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
+import { Input, Surface } from '@cladd-ui/react';
 import { Plus, Trash2 } from 'lucide-react';
 import { shortLabelFromLabel, statIdFromLabel } from '@core/custom-stats.js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ActionButton, explicitSubmit, Field, IconButton } from '@/components/picta/controls';
+import { Scroll } from '@/components/picta/workspace';
 import { useTeam } from '@/hooks';
 import { setCustomStats } from '@/actions/team';
 
@@ -20,8 +21,7 @@ export function CustomStatsPane() {
     shortLabel,
   }));
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = explicitSubmit(() => {
     const id = statIdFromLabel(label);
     if (!id) {
       setError('Enter a statistic name with letters or numbers.');
@@ -42,67 +42,67 @@ export function CustomStatsPane() {
     setLabel('');
     setShort('');
     setError(null);
-  };
+  });
 
   return (
-    <div className="flex max-w-2xl flex-col gap-3 p-4">
-      <p className="text-[12px] text-fg-muted">
-        {custom.name} counts these statistics. The first four appear on the stats board and player
-        cards by default.
-      </p>
-      <ol className="flex flex-col rounded-md border border-line">
-        {stats.length === 0 && (
-          <li className="px-3 py-3 text-[12px] text-fg-faint">No statistics yet.</li>
-        )}
-        {stats.map((stat, index) => (
-          <li
-            key={stat.id}
-            className="flex h-9 items-center gap-3 border-b border-line px-3 last:border-b-0"
-          >
-            <span className="w-4 text-[10.5px] text-fg-faint tabular">{index + 1}</span>
-            <span className="w-12 text-[12px] font-semibold text-fg">{stat.shortLabel}</span>
-            <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{stat.label}</span>
-            <span className="text-[11px] text-fg-faint">{stat.id}</span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Remove ${stat.label}`}
-              onClick={() => setCustomStats(stats.filter((item) => item.id !== stat.id))}
+    <Scroll>
+      <div className="flex max-w-2xl flex-col gap-3 p-4">
+        <p className="text-cladd-xs text-cladd-fg-soft">
+          {custom.name} counts these statistics. The first four appear on the stats board and player
+          cards by default.
+        </p>
+        <Surface as="ol" className="rounded-cladd-lg" contentClassName="flex flex-col">
+          {stats.length === 0 && (
+            <li className="px-3 py-3 text-cladd-xs text-cladd-fg-softer">No statistics yet.</li>
+          )}
+          {stats.map((stat, index) => (
+            <li
+              key={stat.id}
+              className="flex h-cladd-lg items-center gap-3 border-b px-3 last:border-b-0"
             >
-              <Trash2 />
-            </Button>
-          </li>
-        ))}
-      </ol>
-      <form
-        onSubmit={submit}
-        className="flex flex-wrap items-start gap-2"
-        aria-label="Add a statistic"
-      >
-        <div className="flex flex-col gap-1">
-          <Input
-            value={label}
-            onChange={(event) => setLabel(event.currentTarget.value)}
-            placeholder="Statistic, e.g. Goals"
-            aria-label="Statistic name"
-            className="w-56"
-            aria-invalid={error !== null}
-          />
-          {error && <span className="text-[11.5px] text-danger">{error}</span>}
-        </div>
-        <Input
-          value={short}
-          onChange={(event) => setShort(event.currentTarget.value)}
-          placeholder={label ? shortLabelFromLabel(label) : 'Short'}
-          aria-label="Short label"
-          maxLength={4}
-          className="w-20"
-        />
-        <Button type="submit" variant="primary" disabled={!label.trim()}>
-          <Plus />
-          Add
-        </Button>
-      </form>
-    </div>
+              <span className="w-4 text-cladd-xs text-cladd-fg-softer tabular">{index + 1}</span>
+              <span className="w-12 text-cladd-xs font-semibold">{stat.shortLabel}</span>
+              <span className="min-w-0 flex-1 truncate text-cladd-xs">{stat.label}</span>
+              <span className="text-cladd-xs text-cladd-fg-softer">{stat.id}</span>
+              <IconButton
+                label={`Remove ${stat.label}`}
+                size="sm"
+                onClick={() => setCustomStats(stats.filter((item) => item.id !== stat.id))}
+              >
+                <Trash2 />
+              </IconButton>
+            </li>
+          ))}
+        </Surface>
+        <form
+          onSubmit={submit}
+          className="flex flex-wrap items-start gap-2"
+          aria-label="Add a statistic"
+        >
+          <Field label="Statistic" htmlFor="stat-name" error={error} className="w-56">
+            <Input
+              inputId="stat-name"
+              value={label}
+              onChange={setLabel}
+              placeholder="e.g. Goals"
+              valid={error === null}
+            />
+          </Field>
+          <Field label="Short label" htmlFor="stat-short" className="w-24">
+            <Input
+              inputId="stat-short"
+              value={short}
+              onChange={setShort}
+              placeholder={label ? shortLabelFromLabel(label) : 'Short'}
+              maxLength={4}
+            />
+          </Field>
+          <ActionButton type="submit" intent="primary" disabled={!label.trim()} className="mt-5">
+            <Plus />
+            Add
+          </ActionButton>
+        </form>
+      </div>
+    </Scroll>
   );
 }

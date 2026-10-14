@@ -1,17 +1,17 @@
+import { Surface } from '@cladd-ui/react';
 import { Pencil, Star } from 'lucide-react';
 import { usePicta, usePictaShallow } from '@/state/store';
 import { cn } from '@/lib/utils';
 import { LayoutGlyph } from '@/components/picta/layout-glyph';
-import { SectionHeader } from '@/components/picta/section';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/picta/controls';
+import { SectionHeader } from '@/components/picta/workspace';
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
-import { Hint } from '@/components/picta/hint';
+  ContextActions,
+  ContextActionsContent,
+  ContextActionsTrigger,
+  MenuItem,
+  MenuSeparator,
+} from '@/components/picta/menu';
 import { selectScreen } from '@/actions/output';
 import { editScreen, setDefaultScreen } from '@/actions/screens';
 
@@ -33,21 +33,14 @@ export function ScreenSwitcher() {
   const compact = usePicta((state) => state.doc.show.data.screens.length > 6);
 
   return (
-    <section aria-label="Screens" className="flex flex-col gap-1">
+    <section aria-label="Screens" className="flex shrink-0 flex-col gap-1">
       <SectionHeader
         label="Screens"
         detail={live ? 'Click to switch the display' : 'Click to choose what goes live'}
         actions={
-          <Hint label="Edit Screens">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Edit Screens"
-              onClick={() => editScreen(currentId)}
-            >
-              <Pencil />
-            </Button>
-          </Hint>
+          <IconButton label="Edit Screens" size="sm" onClick={() => editScreen(currentId)}>
+            <Pencil />
+          </IconButton>
         }
       />
       <div
@@ -59,22 +52,22 @@ export function ScreenSwitcher() {
           const isCurrent = screen.id === currentId;
           const isLive = live && screen.id === liveId;
           return (
-            <ContextMenu key={screen.id}>
-              <ContextMenuTrigger
+            <ContextActions key={screen.id}>
+              <ContextActionsTrigger
                 render={
-                  <button
+                  <Surface
+                    as="button"
                     type="button"
                     aria-pressed={isCurrent}
                     disabled={locked}
+                    hoverable={!locked}
+                    clickable={!locked}
+                    outline={isCurrent}
+                    variant={isCurrent ? 'gradient' : 'solid'}
+                    color={isLive ? 'live' : isCurrent ? 'brand' : ''}
                     onClick={() => selectScreen(screen.id)}
-                    className={cn(
-                      'group relative flex min-w-0 items-center gap-2 rounded-md border p-1.5 pr-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50',
-                      isLive
-                        ? 'border-live bg-live-soft'
-                        : isCurrent
-                          ? 'border-accent/70 bg-accent-soft'
-                          : 'border-line bg-raised hover:border-line-strong hover:bg-raised-hover',
-                    )}
+                    className="focus-ring group relative min-w-0 rounded-cladd-md text-left disabled:opacity-50"
+                    contentClassName="flex items-center gap-2 p-1.5 pr-2"
                   />
                 }
               >
@@ -85,45 +78,43 @@ export function ScreenSwitcher() {
                 />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1">
-                    <span className="truncate text-[12px] font-medium text-fg">{screen.name}</span>
+                    <span className="truncate text-cladd-xs font-semibold">{screen.name}</span>
                     {screen.id === defaultId && (
                       <Star
-                        className="size-2.5 shrink-0 fill-fg-faint text-fg-faint"
+                        className="size-2.5 shrink-0 fill-cladd-fg-softer text-cladd-fg-softer"
                         aria-label="Default"
                       />
                     )}
                   </span>
                   <span
                     className={cn(
-                      'block text-[10px] font-semibold tracking-[0.08em]',
-                      isLive ? 'text-live' : isCurrent ? 'text-accent' : 'text-transparent',
+                      'block text-cladd-xs font-semibold tracking-wider',
+                      isLive ? 'text-live' : isCurrent ? 'text-cladd-primary' : 'text-transparent',
                     )}
                   >
                     {isLive ? 'ON AIR' : isCurrent ? (live ? '' : 'GOES LIVE') : '·'}
                   </span>
                 </span>
                 {index < 9 && (
-                  <kbd className="absolute top-1 right-1.5 text-[10px] font-medium text-fg-faint tabular">
+                  <kbd className="absolute top-1 right-1.5 font-sans text-cladd-xs font-medium text-cladd-fg-softer tabular">
                     {index + 1}
                   </kbd>
                 )}
-              </ContextMenuTrigger>
-              <ContextMenuContent className="w-52">
-                <ContextMenuItem disabled={locked} onClick={() => selectScreen(screen.id)}>
+              </ContextActionsTrigger>
+              <ContextActionsContent className="min-w-52">
+                <MenuItem disabled={locked} onClick={() => selectScreen(screen.id)}>
                   {live ? 'Switch to This Screen' : 'Go Live With This Screen'}
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={() => editScreen(screen.id)}>
-                  Edit Screen…
-                </ContextMenuItem>
-                <ContextMenuItem
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem onClick={() => editScreen(screen.id)}>Edit Screen…</MenuItem>
+                <MenuItem
                   disabled={screen.id === defaultId}
                   onClick={() => setDefaultScreen(screen.id)}
                 >
                   Make Default
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+                </MenuItem>
+              </ContextActionsContent>
+            </ContextActions>
           );
         })}
       </div>

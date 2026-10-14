@@ -120,9 +120,14 @@ export function resolveCurrent(value: unknown): void {
   current.resolve(value);
 }
 
-export function cancelCurrent(): void {
+/**
+ * Cancel the current request. With an `id`, only if that request is still the
+ * current one: a dialog that finishes closing late must not cancel the
+ * request that replaced it.
+ */
+export function cancelCurrent(id?: number): void {
   const current = dialogStore.getState().queue[0];
-  if (current) resolveCurrent(current.cancelValue);
+  if (current && (id === undefined || current.id === id)) resolveCurrent(current.cancelValue);
 }
 
 export function useCurrentDialog(): Pending | null {

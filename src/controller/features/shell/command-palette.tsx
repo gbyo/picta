@@ -27,9 +27,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
-} from '@/components/ui/command';
-import { Keys } from '@/components/picta/hint';
+} from '@/components/picta/command';
 import { usePicta } from '@/state/store';
 import { scoreInUse } from '@/state/derive';
 import { openPalette, setMode } from '@/actions/ui';
@@ -52,7 +50,7 @@ import {
   presentSinglePlayer,
 } from '@/actions/cues';
 import { MODES } from './modes';
-import { mod } from '@/shortcuts';
+import { modKey } from '@/shortcuts';
 
 function Item({
   value,
@@ -72,6 +70,8 @@ function Item({
   return (
     <CommandItem
       value={value}
+      icon={icon}
+      keys={keys}
       disabled={disabled ?? false}
       onSelect={() => {
         openPalette(false);
@@ -79,13 +79,7 @@ function Item({
         setTimeout(onSelect, 0);
       }}
     >
-      {icon}
-      <span className="truncate">{children}</span>
-      {keys && (
-        <CommandShortcut>
-          <Keys keys={keys} />
-        </CommandShortcut>
-      )}
+      {children}
     </CommandItem>
   );
 }
@@ -245,7 +239,7 @@ export function CommandPalette() {
                 value={`go to ${mode.label}`}
                 onSelect={() => setMode(mode.id)}
                 icon={<mode.icon />}
-                keys={[mod.replace('+', ''), mode.key]}
+                keys={[modKey, mode.key]}
               >
                 {mode.label}
               </Item>

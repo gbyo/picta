@@ -1,129 +1,82 @@
 import { useState } from 'react';
+import { Button, Tab, TabPanel, Tabs, TabsList } from '@cladd-ui/react';
 import {
-  ChevronDown,
+  ChartColumn,
   ClipboardPaste,
   FilePlus2,
   FolderOpen,
   FolderSearch,
   ListOrdered,
   Save,
-  ChartColumn,
   Users,
 } from 'lucide-react';
 import { basename } from '@core/paths.js';
-import { Button } from '@/components/ui/button';
+import { ActionButton, CommitInput } from '@/components/picta/controls';
+import { EmptyState } from '@/components/picta/feedback';
+import { useDialogHost } from '@/components/picta/dialog';
+import { OverflowMenu } from '@/components/picta/menu';
+import { ResourceMenuItems, type ResourceAction } from '@/components/picta/resource-menu';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { EmptyState } from '@/components/picta/section';
+  Workspace,
+  WorkspaceBody,
+  WorkspaceHeader,
+  WorkspaceToolbar,
+} from '@/components/picta/workspace';
 import { usePicta } from '@/state/store';
 import { useDefinition, useTeam } from '@/hooks';
 import { createNewTeam, openTeam, reveal, saveTeam } from '@/actions/document';
-import { locateMissingTeamMedia, renameTeam, setTeamColor } from '@/actions/team';
+import { locateMissingTeamMedia, renameTeam } from '@/actions/team';
 import { PlayersPane } from './players-pane';
 import { GroupsPane } from './groups-pane';
 import { CustomStatsPane } from './custom-stats-pane';
 import { PasteRosterDialog } from './paste-roster-dialog';
 
-function TeamName({ name }: { name: string }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <input
-      aria-label="Team name"
-      value={draft ?? name}
-      onChange={(event) => setDraft(event.currentTarget.value)}
-      onBlur={() => {
-        if (draft !== null) renameTeam(draft);
-        setDraft(null);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur();
-        if (event.key === 'Escape') {
-          setDraft(null);
-          event.currentTarget.blur();
-        }
-      }}
-      className="h-8 min-w-0 rounded-md border border-transparent bg-transparent px-1.5 text-[15px] font-semibold text-fg outline-none hover:border-line-strong focus:border-accent focus:bg-sunken"
-      style={{ width: `${Math.max(8, (draft ?? name).length + 2)}ch` }}
-    />
-  );
-}
-
-function ColorSwatch({ which, color }: { which: 'primary' | 'secondary'; color: string }) {
-  return (
-    <label
-      className="relative block size-6 cursor-pointer overflow-hidden rounded-[5px] ring-1 ring-line-strong"
-      style={{ background: color }}
-    >
-      <input
-        type="color"
-        aria-label={which === 'primary' ? 'Primary team colour' : 'Secondary team colour'}
-        defaultValue={color}
-        key={color}
-        onBlur={(event) => setTeamColor(which, event.currentTarget.value)}
-        onChange={(event) => {
-          // Commit when the native picker closes; preview the swatch live.
-          event.currentTarget.parentElement!.style.background = event.currentTarget.value;
-        }}
-        className="absolute inset-0 cursor-pointer opacity-0"
-      />
-    </label>
-  );
-}
-
-function TeamMenu() {
+/** The team's file actions: everything about where the team lives. */
+function TeamFileMenu() {
   const filePath = usePicta((state) => state.doc.teamFilePath);
-  const dirty = usePicta((state) => state.doc.teamDirty);
-  const style = usePicta((state) => state.pathStyle);
+  const groups: ResourceAction[][] = [
+    [
+      { id: 'new', label: 'New Team…', icon: FilePlus2, onSelect: () => void createNewTeam() },
+      { id: 'open', label: 'Open Team…', icon: FolderOpen, onSelect: () => void openTeam() },
+    ],
+    [
+      {
+        id: 'save',
+        label: filePath ? 'Save Team' : 'Save as Team File…',
+        icon: Save,
+        onSelect: () => void saveTeam(),
+      },
+      ...(filePath
+        ? [
+            {
+              id: 'save-as',
+              label: 'Save Team As…',
+              icon: Save,
+              onSelect: () => void saveTeam(true),
+            },
+          ]
+        : []),
+      {
+        id: 'reveal',
+        label: 'Reveal Team File',
+        icon: FolderSearch,
+        disabled: !filePath,
+        onSelect: () => void reveal('team'),
+      },
+    ],
+    [
+      {
+        id: 'locate',
+        label: 'Locate Missing Photos & Videos…',
+        icon: FolderSearch,
+        onSelect: () => void locateMissingTeamMedia(),
+      },
+    ],
+  ];
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" className="gap-1.5 text-fg-muted" />}>
-        {dirty && <span className="size-1.5 rounded-full bg-warn" aria-label="Unsaved" />}
-        {filePath ? basename(filePath, style) : 'stored in show'}
-        <ChevronDown className="size-3" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>
-          {filePath
-            ? 'A reusable .pictateam file.'
-            : 'Stored inside the show. Save it as a .pictateam to reuse it.'}
-        </DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => void createNewTeam()}>
-          <FilePlus2 />
-          New Team…
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void openTeam()}>
-          <FolderOpen />
-          Open Team…
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void saveTeam()}>
-          <Save />
-          {filePath ? 'Save Team' : 'Save as Team File…'}
-        </DropdownMenuItem>
-        {filePath && (
-          <DropdownMenuItem onClick={() => void saveTeam(true)}>
-            <Save />
-            Save Team As…
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem disabled={!filePath} onClick={() => void reveal('team')}>
-          <FolderSearch />
-          Reveal Team File
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void locateMissingTeamMedia()}>
-          <FolderSearch />
-          Locate Missing Photos & Videos…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <OverflowMenu label="Team file">
+      <ResourceMenuItems groups={groups} />
+    </OverflowMenu>
   );
 }
 
@@ -131,8 +84,11 @@ function TeamMenu() {
 export function RosterWorkspace() {
   const team = useTeam();
   const definition = useDefinition();
+  const filePath = usePicta((state) => state.doc.teamFilePath);
+  const dirty = usePicta((state) => state.doc.teamDirty);
+  const style = usePicta((state) => state.pathStyle);
   const [tab, setTab] = useState<'players' | 'groups' | 'stats'>('players');
-  const [pasting, setPasting] = useState(false);
+  const paste = useDialogHost<true>();
 
   if (!team || !definition)
     return (
@@ -142,10 +98,10 @@ export function RosterWorkspace() {
         title="No team in this show"
         actions={
           <>
-            <Button variant="primary" onClick={() => void createNewTeam()}>
+            <ActionButton intent="primary" onClick={() => void createNewTeam()}>
               <FilePlus2 />
               New Team…
-            </Button>
+            </ActionButton>
             <Button onClick={() => void openTeam()}>
               <FolderOpen />
               Open Team…
@@ -163,62 +119,86 @@ export function RosterWorkspace() {
   ).length;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
-        <ColorSwatch which="primary" color={team.colors.primary} />
-        <ColorSwatch which="secondary" color={team.colors.secondary} />
-        <TeamName name={team.name} />
-        <span className="text-[12px] text-fg-faint">
-          {definition.name} · {team.players.length} player{team.players.length === 1 ? '' : 's'}
-          {missingMedia > 0 && (
-            <span className="text-danger"> · {missingMedia} with missing media</span>
-          )}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          {tab === 'players' && (
-            <Button variant="ghost" onClick={() => setPasting(true)}>
-              <ClipboardPaste />
-              Paste Roster…
-            </Button>
-          )}
-          <TeamMenu />
-        </div>
-      </div>
-      <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as typeof tab)}
-        className="min-h-0 flex-1"
-      >
-        <TabsList className="border-b border-line px-3">
-          <TabsTrigger value="players">
-            <Users />
-            Players
-          </TabsTrigger>
-          <TabsTrigger value="groups">
-            <ListOrdered />
-            Groups
-            <span className="text-fg-faint tabular">{team.groups.length}</span>
-          </TabsTrigger>
+    <Workspace>
+      <WorkspaceHeader
+        title={
+          <CommitInput
+            variant="inline"
+            label="Team name"
+            value={team.name}
+            onCommit={renameTeam}
+            maxLength={60}
+            autoWidth
+            className="h-cladd-lg max-w-72 text-cladd-sm font-semibold"
+          />
+        }
+        meta={
+          <>
+            {definition.name} · {team.players.length} player{team.players.length === 1 ? '' : 's'}
+            {missingMedia > 0 && (
+              <span className="text-danger"> · {missingMedia} with missing media</span>
+            )}
+            <span>
+              {' · '}
+              {filePath ? basename(filePath, style) : 'stored in show'}
+              {dirty && <span className="text-warn"> · unsaved</span>}
+            </span>
+          </>
+        }
+        actions={
+          <Button onClick={() => paste.open(true)}>
+            <ClipboardPaste />
+            Paste Roster…
+          </Button>
+        }
+        menu={<TeamFileMenu />}
+      />
+      <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)}>
+        <WorkspaceToolbar>
+          <TabsList>
+            <Tab value="players">
+              <Users />
+              Players
+            </Tab>
+            <Tab value="groups">
+              <ListOrdered />
+              Groups
+              <span className="text-cladd-fg-softer tabular">{team.groups.length}</span>
+            </Tab>
+            {team.sport === 'custom' && (
+              <Tab value="stats">
+                <ChartColumn />
+                Statistics
+              </Tab>
+            )}
+          </TabsList>
+        </WorkspaceToolbar>
+        <WorkspaceBody>
+          <TabPanel
+            value="players"
+            className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col"
+          >
+            <PlayersPane />
+          </TabPanel>
+          <TabPanel
+            value="groups"
+            className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col"
+          >
+            <GroupsPane />
+          </TabPanel>
           {team.sport === 'custom' && (
-            <TabsTrigger value="stats">
-              <ChartColumn />
-              Statistics
-            </TabsTrigger>
+            <TabPanel
+              value="stats"
+              className="flex min-h-0 min-w-0 flex-1 outline-none @max-[560px]/ws:flex-none @max-[560px]/ws:flex-col"
+            >
+              <CustomStatsPane />
+            </TabPanel>
           )}
-        </TabsList>
-        <TabsContent value="players" className="min-h-0">
-          <PlayersPane />
-        </TabsContent>
-        <TabsContent value="groups" className="min-h-0">
-          <GroupsPane />
-        </TabsContent>
-        {team.sport === 'custom' && (
-          <TabsContent value="stats" className="min-h-0">
-            <CustomStatsPane />
-          </TabsContent>
-        )}
+        </WorkspaceBody>
       </Tabs>
-      <PasteRosterDialog open={pasting} onOpenChange={setPasting} />
-    </div>
+      {paste.state && (
+        <PasteRosterDialog key={paste.state.key} onClose={paste.closeFor(paste.state.key)} />
+      )}
+    </Workspace>
   );
 }

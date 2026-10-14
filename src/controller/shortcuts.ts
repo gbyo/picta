@@ -21,7 +21,8 @@ const isMac =
   typeof navigator !== 'undefined' &&
   /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
-export const mod = isMac ? '⌘' : 'Ctrl+';
+/** The platform's command key as a shortcut symbol. */
+export const modKey = isMac ? '⌘' : 'Ctrl';
 
 export interface ShortcutInfo {
   keys: string[];
@@ -35,21 +36,21 @@ export const SHORTCUTS: ShortcutInfo[] = [
   { keys: ['Space'], label: 'Next media (when no button has focus)', group: 'Output' },
   { keys: ['←'], label: 'Previous media', group: 'Output' },
   { keys: ['Esc'], label: 'End the cue on air (never stops output)', group: 'Output' },
-  { keys: ['1', '–', '9'], label: 'Switch to Screen 1–9 (arms it while off air)', group: 'Output' },
+  { keys: ['1–9'], label: 'Switch to Screen 1–9 (arms it while off air)', group: 'Output' },
   { keys: ['Q'], label: 'Point to the left team (they serve)', group: 'Score' },
   { keys: ['P'], label: 'Point to the right team (they serve)', group: 'Score' },
   { keys: ['Z'], label: 'Undo the last score change', group: 'Score' },
   { keys: ['⇧', 'Z'], label: 'Undo the last stat', group: 'Stats' },
-  { keys: [mod.replace('+', ''), 'K'], label: 'Command palette', group: 'Workspace' },
+  { keys: [modKey, 'K'], label: 'Command palette', group: 'Workspace' },
   {
-    keys: [mod.replace('+', ''), '1–4'],
+    keys: [modKey, '1–4'],
     label: 'Console, Media, Roster, Screens',
     group: 'Workspace',
   },
   { keys: ['?'], label: 'Keyboard shortcuts', group: 'Workspace' },
-  { keys: [mod.replace('+', ''), 'N'], label: 'New show', group: 'Show' },
-  { keys: [mod.replace('+', ''), 'O'], label: 'Open show', group: 'Show' },
-  { keys: [mod.replace('+', ''), 'S'], label: 'Save show', group: 'Show' },
+  { keys: [modKey, 'N'], label: 'New show', group: 'Show' },
+  { keys: [modKey, 'O'], label: 'Open show', group: 'Show' },
+  { keys: [modKey, 'S'], label: 'Save show', group: 'Show' },
 ];
 
 const TYPING =
@@ -59,6 +60,23 @@ const OWNS_ARROWS =
 const OWNS_SPACE =
   'button, summary, a[href], [role="button"], [role="checkbox"], [role="switch"], [role="option"], [role="menuitem"], [role="tab"]';
 const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+/**
+ * Cladd's overlays do not move focus, so their presence is what blocks
+ * shortcuts. Only an overlay that is open counts (`data-open` is set when it
+ * opens and cleared as it starts closing), so one still fading out can never
+ * leave the keyboard dead.
+ */
+const OPEN_OVERLAY =
+  '.cladd-dialog [data-part="content"][data-open], .cladd-popover [data-part="content"][data-open], .cladd-popup[data-open]';
+
+/** Any Cladd overlay in the document, even one still fading out. */
+function overlayPresent(): boolean {
+  return document.querySelector('.cladd-dialog, .cladd-popover, .cladd-popup') !== null;
+}
+
+function overlayOpen(): boolean {
+  return document.querySelector(OPEN_OVERLAY) !== null;
+}
 
 export function isTypingTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(TYPING) !== null;
@@ -82,7 +100,7 @@ export function handleGlobalKey(event: KeyboardEvent): void {
       openPalette(!state.paletteOpen);
       return;
     }
-    if (isTypingTarget(target) || anyDialogOpen()) return;
+    if (isTypingTarget(target) || anyDialogOpen() || overlayOpen()) return;
     const modes = { '1': 'console', '2': 'media', '3': 'roster', '4': 'screens' } as const;
     if (key in modes) {
       event.preventDefault();
@@ -104,9 +122,19 @@ export function handleGlobalKey(event: KeyboardEvent): void {
     }
     return;
   }
+  // Escape that dismisses an overlay must not also reach the cue underneath
+  // while the overlay is still fading out.
+  if (event.key === 'Escape' && overlayPresent()) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.repeat && !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-  if (isTypingTarget(target) || anyDialogOpen() || state.paletteOpen || state.shortcutsOpen) return;
+  if (
+    isTypingTarget(target) ||
+    anyDialogOpen() ||
+    overlayOpen() ||
+    state.paletteOpen ||
+    state.shortcutsOpen
+  )
+    return;
   if (inOverlay(target)) return;
 
   const element = target instanceof Element ? target : null;

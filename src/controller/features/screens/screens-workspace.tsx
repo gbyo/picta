@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import {
-  Copy,
-  GripVertical,
-  Info,
-  LayoutTemplate,
-  Plus,
-  Radio,
-  Scan,
-  Star,
-  Trash2,
-} from 'lucide-react';
+  Button,
+  Input,
+  Select,
+  Surface,
+  SurfaceCut,
+  ToggleButton,
+  ToolbarButton,
+} from '@cladd-ui/react';
+import { Copy, GripVertical, Plus, Radio, Scan, Star, Trash2 } from 'lucide-react';
 import type { PanelContent, Screen, ShowBackground } from '@core/domain.js';
 import {
   SCREEN_TEMPLATES,
@@ -17,36 +16,38 @@ import {
   screenTemplateId,
   type ScreenTemplateId,
 } from '@core/screens.js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { ActionButton, Choice, Field } from '@/components/picta/controls';
+import { Banner } from '@/components/picta/feedback';
 import { Hint } from '@/components/picta/hint';
 import { LayoutGlyph } from '@/components/picta/layout-glyph';
 import { CONTENT_META } from '@/components/picta/content-meta';
+import {
+  ActionMenu,
+  ActionMenuContent,
+  ActionMenuTrigger,
+  ContextActions,
+  ContextActionsContent,
+  ContextActionsTrigger,
+  MenuItem,
+  MenuSeparator,
+  MenuTitle,
+} from '@/components/picta/menu';
 import { ScreenRender } from '@/components/picta/screen-render';
 import { SortableArea, useSortableItem } from '@/components/picta/sortable';
+import {
+  Inspector,
+  InspectorHeader,
+  InspectorSection,
+  Panel,
+  PropertyRow,
+  Scroll,
+  SectionHeader,
+  SelectableRow,
+  Workspace,
+  WorkspaceBody,
+  WorkspaceMain,
+  WorkspaceToolbar,
+} from '@/components/picta/workspace';
 import { cn } from '@/lib/utils';
 import { usePicta, usePictaShallow } from '@/state/store';
 import { boardGroupFor, panelPlace } from '@/state/derive';
@@ -105,17 +106,16 @@ function ScreenListItem({
   const selected = screen.id === editingId;
   const live = screen.id === liveId;
   return (
-    <ContextMenu>
-      <ContextMenuTrigger
+    <ContextActions>
+      <ContextActionsTrigger
         render={
-          <li
+          <SelectableRow
+            as="li"
             ref={sortable.ref}
             style={sortable.style}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md border pr-1 transition-colors',
-              selected ? 'border-accent/70 bg-accent-soft' : 'border-transparent hover:bg-raised',
-              sortable.dragging && 'bg-raised shadow-pop',
-            )}
+            selected={selected}
+            className={cn('@max-[560px]/ws:shrink-0', sortable.dragging && 'shadow-cladd-popover')}
+            contentClassName="flex items-center gap-1"
           />
         }
       >
@@ -135,65 +135,58 @@ function ScreenListItem({
             // Keep dnd-kit's keyboard reordering (Space, arrows, Space).
             sortable.listeners?.['onKeyDown']?.(event);
           }}
-          className="flex h-10 w-5 cursor-grab items-center justify-center rounded-[4px] text-fg-faint outline-none hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring flex h-cladd-xl w-5 shrink-0 cursor-grab items-center justify-center rounded-cladd-md text-cladd-fg-softer hover:text-cladd-fg-soft @max-[1000px]/ws:w-4"
         >
-          <GripVertical className="size-3.5" />
+          <GripVertical className="size-4" />
         </button>
         <button
           type="button"
           aria-current={selected}
+          aria-label={`${screen.name}${live ? ', on air' : ''}`}
+          title={screen.name}
           onClick={() => editScreen(screen.id)}
-          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-cladd-md py-1.5 pr-1 pl-1 text-left @max-[1000px]/ws:justify-center @max-[1000px]/ws:px-0"
         >
-          <LayoutGlyph screen={screen} className="w-10" tone={live ? 'live' : 'default'} />
-          <span className="min-w-0 flex-1">
+          <LayoutGlyph screen={screen} className="w-10 shrink-0" tone={live ? 'live' : 'default'} />
+          <span className="min-w-0 flex-1 @max-[1000px]/ws:hidden">
             <span className="flex items-center gap-1">
-              <span className="truncate text-[12.5px] font-medium text-fg">{screen.name}</span>
+              <span className="truncate text-cladd-xs font-semibold">{screen.name}</span>
               {screen.id === defaultId && (
                 <Star
-                  className="size-2.5 shrink-0 fill-fg-faint text-fg-faint"
+                  className="size-2.5 shrink-0 fill-cladd-fg-softer text-cladd-fg-softer"
                   aria-label="Default Screen"
                 />
               )}
             </span>
             <span
               className={cn(
-                'block text-[10.5px]',
-                live ? 'font-semibold text-live' : 'text-fg-faint',
+                'block text-cladd-xs',
+                live ? 'font-semibold text-live' : 'text-cladd-fg-softer',
               )}
             >
               {live ? 'ON AIR' : `Key ${index + 1}`}
             </span>
           </span>
         </button>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
-        <ContextMenuItem onClick={() => void promptRenameScreen(screen.id)}>
-          Rename…
-        </ContextMenuItem>
-        <ContextMenuItem onClick={() => duplicateScreen(screen.id)}>Duplicate</ContextMenuItem>
-        <ContextMenuItem disabled={index === 0} onClick={() => nudgeScreen(screen.id, -1)}>
+      </ContextActionsTrigger>
+      <ContextActionsContent className="min-w-52">
+        <MenuItem onClick={() => void promptRenameScreen(screen.id)}>Rename…</MenuItem>
+        <MenuItem onClick={() => duplicateScreen(screen.id)}>Duplicate</MenuItem>
+        <MenuItem disabled={index === 0} onClick={() => nudgeScreen(screen.id, -1)}>
           Move Up
-        </ContextMenuItem>
-        <ContextMenuItem disabled={index === count - 1} onClick={() => nudgeScreen(screen.id, 1)}>
+        </MenuItem>
+        <MenuItem disabled={index === count - 1} onClick={() => nudgeScreen(screen.id, 1)}>
           Move Down
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={screen.id === defaultId}
-          onClick={() => setDefaultScreen(screen.id)}
-        >
+        </MenuItem>
+        <MenuItem disabled={screen.id === defaultId} onClick={() => setDefaultScreen(screen.id)}>
           Make Default
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          disabled={live}
-          onClick={() => deleteScreen(screen.id)}
-        >
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem destructive disabled={live} onClick={() => deleteScreen(screen.id)}>
           Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+        </MenuItem>
+      </ContextActionsContent>
+    </ContextActions>
   );
 }
 
@@ -201,14 +194,15 @@ function NameField({ screen }: { screen: Screen }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="flex flex-col gap-1">
+    <Field label="Name" htmlFor="screen-name" error={error}>
       <Input
-        aria-label="Screen name"
+        inputId="screen-name"
         value={draft ?? screen.name}
         maxLength={40}
-        aria-invalid={error !== null}
-        onChange={(event) => {
-          setDraft(event.currentTarget.value);
+        valid={error === null}
+        inputComponentProps={{ 'aria-label': 'Screen name' }}
+        onChange={(next) => {
+          setDraft(next);
           setError(null);
         }}
         onBlur={() => {
@@ -224,14 +218,36 @@ function NameField({ screen }: { screen: Screen }) {
             setError(null);
           }
         }}
-        className="text-[13px] font-semibold"
       />
-      {error && <p className="text-[11.5px] text-danger">{error}</p>}
-    </div>
+    </Field>
   );
 }
 
-function Inspector({ screen }: { screen: Screen }) {
+function LayoutOption({ id, active, onPick }: { id: Template; active: boolean; onPick(): void }) {
+  return (
+    <Hint label={active ? 'Current layout' : `Use the ${TEMPLATE_LABELS[id]} layout`}>
+      <Surface
+        as="button"
+        type="button"
+        aria-pressed={active}
+        aria-label={`${TEMPLATE_LABELS[id]} layout`}
+        onClick={onPick}
+        hoverable
+        clickable
+        outline={active}
+        variant={active ? 'gradient' : 'solid'}
+        color={active ? 'brand' : ''}
+        className="focus-ring rounded-cladd-md text-cladd-xs font-medium"
+        contentClassName="flex flex-col items-center gap-1 p-1.5"
+      >
+        <LayoutGlyph screen={PREVIEW_TEMPLATES[id]} className="w-full" />
+        {TEMPLATE_LABELS[id]}
+      </Surface>
+    </Hint>
+  );
+}
+
+function ScreenInspector({ screen }: { screen: Screen }) {
   const team = useTeam();
   const selectedPanelId = usePicta((state) => state.selectedPanelId);
   const defaultId = usePicta((state) => state.doc.show.data.defaultScreenId);
@@ -247,174 +263,132 @@ function Inspector({ screen }: { screen: Screen }) {
   );
   const backgrounds: { kind: ShowBackground['kind']; label: string; color: string }[] = [
     { kind: 'black', label: 'Black', color: '#000000' },
-    { kind: 'primary', label: 'Team primary', color: team?.colors.primary ?? '#111111' },
-    { kind: 'secondary', label: 'Team secondary', color: team?.colors.secondary ?? '#ffffff' },
+    { kind: 'primary', label: 'Primary', color: team?.colors.primary ?? '#111111' },
+    { kind: 'secondary', label: 'Secondary', color: team?.colors.secondary ?? '#ffffff' },
   ];
+  const kinds = Object.keys(CONTENT_META) as PanelContent['kind'][];
   return (
-    <div className="flex flex-col gap-5 p-4">
-      <section className="flex flex-col gap-2">
-        <h3 className="label-caps">Screen</h3>
+    <>
+      <InspectorHeader
+        media={
+          <LayoutGlyph
+            screen={screen}
+            className="w-14"
+            tone={screen.id === liveId ? 'live' : 'default'}
+          />
+        }
+        title={screen.name}
+        subtitle={`${screen.panels.length} panel${screen.panels.length === 1 ? '' : 's'}${screen.id === defaultId ? ' · Default' : ''}`}
+      />
+      <InspectorSection title="Screen">
         <NameField key={screen.id} screen={screen} />
-      </section>
-      <section className="flex flex-col gap-2">
-        <h3 className="label-caps">Layout</h3>
+      </InspectorSection>
+      <InspectorSection title="Layout">
         {template === 'imported' && (
-          <p className="flex gap-1.5 rounded-md bg-warn-soft px-2.5 py-2 text-[11.5px] leading-snug text-fg">
-            <Info className="mt-px size-3.5 shrink-0 text-warn" />
+          <Banner tone="warn" variant="inline" className="items-start">
             Imported from an older show with {screen.panels.length} panels. It is kept exactly until
             you choose a template below, which resets it.
-          </p>
+          </Banner>
         )}
         <div className="grid grid-cols-3 gap-1.5">
           {SCREEN_TEMPLATES.map((id) => (
-            <Hint
+            <LayoutOption
               key={id}
-              label={id === template ? 'Current layout' : `Use the ${TEMPLATE_LABELS[id]} layout`}
-            >
-              <button
-                type="button"
-                aria-pressed={id === template}
-                aria-label={`${TEMPLATE_LABELS[id]} layout`}
-                onClick={() => {
-                  if (id !== template) applyTemplate(screen.id, id);
-                }}
-                className={cn(
-                  'flex flex-col items-center gap-1 rounded-md border p-1.5 text-[10.5px] outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                  id === template
-                    ? 'border-accent bg-accent-soft text-fg'
-                    : 'border-line text-fg-muted hover:border-line-strong hover:text-fg',
-                )}
-              >
-                <LayoutGlyph screen={PREVIEW_TEMPLATES[id]} className="w-full" />
-                {TEMPLATE_LABELS[id]}
-              </button>
-            </Hint>
+              id={id}
+              active={id === template}
+              onPick={() => {
+                if (id !== template) applyTemplate(screen.id, id);
+              }}
+            />
           ))}
         </div>
-      </section>
-      <section className="flex flex-col gap-2">
-        <h3 className="label-caps">
-          {panelPlace(screen, panelIndex)} panel
-          {screen.panels.length > 1 ? ` · ${panelIndex + 1} of ${screen.panels.length}` : ''}
-        </h3>
-        <div role="group" aria-label="Panel content" className="grid grid-cols-2 gap-1.5">
-          {(Object.keys(CONTENT_META) as PanelContent['kind'][]).map((kind) => {
-            const meta = CONTENT_META[kind];
-            const active = panel.content.kind === kind;
-            return (
-              <Hint
-                key={kind}
-                label={
-                  kind === 'media' && hasOtherMedia && !active
-                    ? 'Moves the rotation here from the other panel'
-                    : meta.hint
-                }
-              >
-                <button
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setPanelContent(screen.id, panel.id, kind)}
-                  className={cn(
-                    'flex h-9 items-center gap-2 rounded-md border px-2.5 text-[12px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                    active
-                      ? 'border-accent bg-accent-soft text-fg'
-                      : 'border-line text-fg-muted hover:border-line-strong hover:text-fg',
-                  )}
-                >
-                  <meta.icon className="size-3.5" />
-                  {meta.label}
-                </button>
-              </Hint>
-            );
-          })}
-        </div>
+      </InspectorSection>
+      <InspectorSection
+        title={`${panelPlace(screen, panelIndex)} panel`}
+        detail={
+          screen.panels.length > 1 ? `${panelIndex + 1} of ${screen.panels.length}` : undefined
+        }
+      >
+        <Choice<PanelContent['kind']>
+          label="Panel content"
+          stretch
+          value={panel.content.kind}
+          onChange={(kind) => setPanelContent(screen.id, panel.id, kind)}
+          options={kinds.map((kind) => ({
+            value: kind,
+            label: CONTENT_META[kind].label,
+            hint:
+              kind === 'media' && hasOtherMedia && panel.content.kind !== 'media'
+                ? 'Moves the rotation here from the other panel'
+                : CONTENT_META[kind].hint,
+          }))}
+        />
         {panel.content.kind === 'stats' &&
           (team ? (
-            <label className="flex flex-col gap-1 text-[11.5px] text-fg-muted">
-              Shows the group
+            <PropertyRow label="Group">
               <Select
+                aria-label="Stats group"
+                options={team.groups.map((group) => group.id)}
                 value={boardGroupFor(screen, team)?.id ?? ''}
-                onValueChange={(value) => setPanelStatsGroup(screen.id, panel.id, String(value))}
+                onChange={(value) => setPanelStatsGroup(screen.id, panel.id, value)}
+                renderOption={({ value }) =>
+                  team.groups.find((group) => group.id === value)?.name ?? value
+                }
               >
-                <SelectTrigger className="w-full" aria-label="Stats group">
-                  <SelectValue>
-                    {(value: string) =>
-                      team.groups.find((group) => group.id === value)?.name ?? 'Choose a group'
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {team.groups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                {boardGroupFor(screen, team)?.name ?? 'Choose a group'}
               </Select>
-              <span className="text-fg-faint">
-                Substitutions in the Console change who appears.
-              </span>
-            </label>
+            </PropertyRow>
           ) : (
-            <p className="text-[11.5px] text-warn">Stats needs a team. Add one in Roster.</p>
+            <p className="text-cladd-xs text-warn">Stats needs a team. Add one in Roster.</p>
           ))}
-        {panel.content.kind === 'media' && (
-          <p className="text-[11.5px] leading-snug text-fg-faint">
-            The media rotation plays here, and player cues appear here.
-          </p>
-        )}
-        {!screen.panels.some((item) => item.content.kind === 'media') && (
-          <p className="text-[11.5px] leading-snug text-fg-faint">
-            No media panel: the rotation pauses on this Screen and cues cover the full display.
-          </p>
-        )}
-      </section>
-      <section className="flex flex-col gap-2">
-        <h3 className="label-caps">Background</h3>
-        <ToggleGroup
-          value={[screen.background.kind]}
-          onValueChange={(value) => {
-            const next = value[0] as ShowBackground['kind'] | undefined;
-            if (next) setScreenBackground(screen.id, next);
-          }}
-          className="h-8 w-full"
-        >
-          {backgrounds.map((item) => (
-            <Hint
-              key={item.kind}
-              label={`${item.label}${item.kind !== 'black' && !team ? ' (no team loaded)' : ''}`}
-            >
-              <ToggleGroupItem value={item.kind} className="flex-1" aria-label={item.label}>
+        <p className="text-cladd-xs leading-snug text-cladd-fg-softer">
+          {panel.content.kind === 'media'
+            ? 'The media rotation plays here, and player cues appear here.'
+            : panel.content.kind === 'stats' && team
+              ? 'Substitutions in the Console change who appears.'
+              : !screen.panels.some((item) => item.content.kind === 'media')
+                ? 'No media panel: the rotation pauses on this Screen and cues cover the full display.'
+                : CONTENT_META[panel.content.kind].hint}
+        </p>
+      </InspectorSection>
+      <InspectorSection title="Background">
+        <Choice<ShowBackground['kind']>
+          label="Background"
+          vertical
+          value={screen.background.kind}
+          onChange={(kind) => setScreenBackground(screen.id, kind)}
+          options={backgrounds.map((item) => ({
+            value: item.kind,
+            ariaLabel: item.label,
+            hint: `${item.label}${item.kind !== 'black' && !team ? ' (no team loaded)' : ''}`,
+            label: (
+              <span className="flex items-center gap-1.5">
                 <span
-                  className="size-3 rounded-[3px] ring-1 ring-line-strong"
+                  className="size-3 rounded-cladd-3xs shadow-[0_0_0_1px_var(--color-cladd-outline)]"
                   style={{ background: item.color }}
                 />
-                {item.kind === 'black'
-                  ? 'Black'
-                  : item.kind === 'primary'
-                    ? 'Primary'
-                    : 'Secondary'}
-              </ToggleGroupItem>
-            </Hint>
-          ))}
-        </ToggleGroup>
-        <p className="text-[11px] text-fg-faint">
+                {item.kind === 'black' ? 'Black' : `Team ${item.label.toLowerCase()}`}
+              </span>
+            ),
+          }))}
+        />
+        <p className="text-cladd-xs text-cladd-fg-softer">
           Shows behind Blank panels and around letterboxed media.
         </p>
-      </section>
-      <section className="flex flex-wrap gap-1.5">
-        <Button size="sm" onClick={() => duplicateScreen(screen.id)}>
-          <Copy />
-          Duplicate
-        </Button>
-        <Button
-          size="sm"
-          disabled={screen.id === defaultId}
-          onClick={() => setDefaultScreen(screen.id)}
-        >
-          <Star />
-          {screen.id === defaultId ? 'Default Screen' : 'Make Default'}
-        </Button>
+      </InspectorSection>
+      <InspectorSection title="Actions">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => duplicateScreen(screen.id)}>
+            <Copy />
+            Duplicate
+          </Button>
+          <Button disabled={screen.id === defaultId} onClick={() => setDefaultScreen(screen.id)}>
+            <Star />
+            {screen.id === defaultId ? 'Default Screen' : 'Make Default'}
+          </Button>
+        </div>
+      </InspectorSection>
+      <InspectorSection title="Delete Screen">
         <Hint
           label={
             screen.id === liveId
@@ -422,19 +396,19 @@ function Inspector({ screen }: { screen: Screen }) {
               : 'Delete this Screen (Undo is offered)'
           }
         >
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-danger hover:text-danger"
-            disabled={screen.id === liveId}
-            onClick={() => deleteScreen(screen.id)}
-          >
-            <Trash2 />
-            Delete
-          </Button>
+          <span className="flex">
+            <ActionButton
+              intent="danger"
+              disabled={screen.id === liveId}
+              onClick={() => deleteScreen(screen.id)}
+            >
+              <Trash2 />
+              Delete
+            </ActionButton>
+          </span>
         </Hint>
-      </section>
-    </div>
+      </InspectorSection>
+    </>
   );
 }
 
@@ -452,44 +426,47 @@ function Canvas({ screen }: { screen: Screen }) {
     state.displays.find((item) => item.id === state.selectedDisplayId),
   );
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3">
-        <span className="text-[12px] text-fg-muted">
+    <>
+      <WorkspaceToolbar>
+        <span className="text-cladd-xs text-cladd-fg-soft">
           {display
             ? `Display ${display.index} · ${display.width}×${display.height}`
             : '16:9 preview'}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-2">
           <Hint label="Show a title-safe margin inside each panel (preview only, never saved)">
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-pressed={safe}
-              onClick={toggleSafeArea}
-              className={cn(safe && 'text-warn')}
-            >
+            <ToggleButton selected={safe} onChange={toggleSafeArea} activeColor="warn">
               <Scan />
               Safe area
-            </Button>
+            </ToggleButton>
           </Hint>
           {isLiveOutput && !live && (
-            <Button size="sm" onClick={() => selectScreen(screen.id)}>
+            <ToolbarButton variant="gradient" outline onClick={() => selectScreen(screen.id)}>
               <Radio className="text-live" />
               Switch Display to This Screen
-            </Button>
+            </ToolbarButton>
           )}
         </div>
-      </div>
+      </WorkspaceToolbar>
       {live && (
-        <p className="flex items-center gap-2 border-b border-line bg-live-soft px-3 py-1.5 text-[12px] text-fg">
-          <span className="size-2 rounded-full bg-live" />
-          This Screen is on air. Changes appear on the audience display immediately.
-        </p>
+        <Banner tone="live" icon={false}>
+          <span className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-live" />
+            This Screen is on air. Changes appear on the audience display immediately.
+          </span>
+        </Banner>
       )}
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-sunken/40 p-6">
+      <SurfaceCut
+        outline={false}
+        className="flex min-h-0 flex-1 rounded-none"
+        contentClassName="flex min-h-0 flex-1 items-center justify-center p-6"
+      >
         <div
-          className={cn('w-full rounded-[4px] p-[3px]', live ? 'bg-live' : 'bg-line-strong')}
-          style={{ maxWidth: `min(100%, calc((100vh - 260px) * ${aspect}))` }}
+          className={cn(
+            'w-full rounded-cladd-3xs p-[3px] shadow-cladd-popover',
+            live ? 'bg-live' : 'bg-cladd-outline',
+          )}
+          style={{ maxWidth: `min(100%, calc((100vh - 280px) * ${aspect}))` }}
         >
           <ScreenRender
             screen={screen}
@@ -504,8 +481,8 @@ function Canvas({ screen }: { screen: Screen }) {
             className="w-full rounded-[2px]"
           />
         </div>
-      </div>
-    </div>
+      </SurfaceCut>
+    </>
   );
 }
 
@@ -517,54 +494,72 @@ export function ScreensWorkspace() {
   );
   const screen = screens.find((item) => item.id === editingId) ?? screens[0]!;
   return (
-    <div className="flex h-full min-h-0">
-      <aside
-        aria-label="Screens"
-        className="flex w-56 shrink-0 flex-col border-r border-line bg-surface"
-      >
-        <div className="flex h-10 items-center justify-between border-b border-line pr-1.5 pl-3">
-          <h2 className="label-caps">Screens</h2>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" />}>
-              <Plus />
-              New
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Start from a layout</DropdownMenuLabel>
-              {SCREEN_TEMPLATES.map((id) => (
-                <DropdownMenuItem key={id} onClick={() => createScreen(id)}>
-                  <LayoutGlyph screen={PREVIEW_TEMPLATES[id]} className="w-8" />
-                  {TEMPLATE_LABELS[id]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <SortableArea ids={screens.map((item) => item.id)} onMove={moveScreen}>
-            <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Screens in switcher order">
-              {screens.map((item, index) => (
-                <ScreenListItem key={item.id} screen={item} index={index} count={screens.length} />
-              ))}
-            </ol>
-          </SortableArea>
-        </ScrollArea>
-        <p className="border-t border-line px-3 py-2 text-[11px] leading-snug text-fg-faint">
-          <LayoutTemplate className="mr-1 inline size-3" />
-          Order here is the switcher order and number keys.
-        </p>
-      </aside>
-      <div className="min-w-0 flex-1">
-        <Canvas screen={screen} />
-      </div>
-      <aside
-        aria-label="Screen inspector"
-        className="w-72 shrink-0 border-l border-line bg-surface max-[1150px]:w-60"
-      >
-        <ScrollArea className="h-full">
-          <Inspector screen={screen} />
-        </ScrollArea>
-      </aside>
-    </div>
+    <Workspace>
+      <WorkspaceBody>
+        <Panel
+          as="aside"
+          aria-label="Screens"
+          className="w-56 shrink-0 border-r @max-[1000px]/ws:w-20 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+          contentClassName="@max-[560px]/ws:flex-row @max-[560px]/ws:items-center"
+        >
+          <div className="flex h-cladd-xl shrink-0 items-center border-b pr-2 pl-3 @max-[1000px]/ws:justify-center @max-[1000px]/ws:px-1 @max-[560px]/ws:border-r @max-[560px]/ws:border-b-0">
+            <SectionHeader
+              label={<span className="@max-[1000px]/ws:hidden">Screens</span>}
+              className="flex-1 @max-[1000px]/ws:flex-none"
+              actions={
+                <ActionMenu>
+                  <ActionMenuTrigger
+                    render={
+                      <Button size="sm" aria-label="New Screen">
+                        <Plus />
+                        <span className="@max-[1000px]/ws:hidden">New</span>
+                      </Button>
+                    }
+                  />
+                  <ActionMenuContent align="end" className="min-w-56">
+                    <MenuTitle>Start from a layout</MenuTitle>
+                    {SCREEN_TEMPLATES.map((id) => (
+                      <MenuItem
+                        key={id}
+                        icon={<LayoutGlyph screen={PREVIEW_TEMPLATES[id]} className="w-8" />}
+                        onClick={() => createScreen(id)}
+                      >
+                        {TEMPLATE_LABELS[id]}
+                      </MenuItem>
+                    ))}
+                  </ActionMenuContent>
+                </ActionMenu>
+              }
+            />
+          </div>
+          <Scroll className="@max-[560px]/ws:min-w-0 @max-[560px]/ws:overflow-x-auto @max-[560px]/ws:overflow-y-hidden">
+            <SortableArea ids={screens.map((item) => item.id)} onMove={moveScreen} layout="grid">
+              <ol
+                className="flex flex-col gap-0.5 p-1.5 @max-[560px]/ws:flex-row"
+                aria-label="Screens in switcher order"
+              >
+                {screens.map((item, index) => (
+                  <ScreenListItem
+                    key={item.id}
+                    screen={item}
+                    index={index}
+                    count={screens.length}
+                  />
+                ))}
+              </ol>
+            </SortableArea>
+          </Scroll>
+          <p className="border-t px-3 py-2 text-cladd-xs leading-snug text-cladd-fg-softer @max-[1000px]/ws:hidden">
+            Order here is the switcher order and number keys.
+          </p>
+        </Panel>
+        <WorkspaceMain>
+          <Canvas screen={screen} />
+        </WorkspaceMain>
+        <Inspector label="Screen inspector">
+          <ScreenInspector screen={screen} />
+        </Inspector>
+      </WorkspaceBody>
+    </Workspace>
   );
 }

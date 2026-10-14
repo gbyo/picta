@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  ArrowLeftRight,
-  Ellipsis,
-  Flag,
-  Minus,
-  Plus,
-  RotateCcw,
-  Trophy,
-  Undo2,
-  Volleyball,
-} from 'lucide-react';
+import { Button, Chip, Surface } from '@cladd-ui/react';
+import { Flag, Minus, Plus, RotateCcw, Trophy, Undo2, Volleyball } from 'lucide-react';
 import type { ScoreSide, VolleyballScoreState } from '@core/domain.js';
 import {
   isMatchPoint,
@@ -22,22 +13,14 @@ import {
   sideSets,
   undoDescription,
 } from '@core/score.js';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ActionButton, IconButton, INLINE_INPUT } from '@/components/picta/controls';
 import { Hint, Keys } from '@/components/picta/hint';
+import { SectionHeader } from '@/components/picta/workspace';
 import { cn } from '@/lib/utils';
 import { usePicta } from '@/state/store';
 import { useScore } from '@/hooks';
 import { endSet, rally, resetMatch, scoreAction, undoScoreAction } from '@/actions/match';
+import { MatchMenu } from './match-menu';
 
 function InlineName({ side, score }: { side: ScoreSide; score: VolleyballScoreState }) {
   const [editing, setEditing] = useState(false);
@@ -53,7 +36,7 @@ function InlineName({ side, score }: { side: ScoreSide; score: VolleyballScoreSt
         defaultValue={name}
         maxLength={40}
         aria-label={`${side === 'home' ? 'Left' : 'Right'} team name`}
-        className="h-7 w-full min-w-0 rounded-[4px] border border-accent bg-sunken px-1.5 text-[14px] font-semibold text-fg outline-none"
+        className={cn(INLINE_INPUT, 'h-cladd-lg text-cladd-sm font-semibold')}
         onBlur={(event) => {
           scoreAction({ type: 'team-name', side, value: event.currentTarget.value });
           setEditing(false);
@@ -75,7 +58,7 @@ function InlineName({ side, score }: { side: ScoreSide; score: VolleyballScoreSt
             setEditing(true);
           }
         }}
-        className="h-7 min-w-0 truncate rounded-[4px] px-1 text-left text-[14px] font-semibold text-fg outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="focus-ring h-cladd-lg min-w-0 truncate rounded-cladd-md px-1 text-left text-cladd-sm font-semibold"
       >
         {name}
       </button>
@@ -91,7 +74,7 @@ function SetDots({ won, needed, color }: { won: number; needed: number; color: s
           key={index}
           className={cn(
             'size-2.5 rounded-full border',
-            index < won ? 'border-transparent' : 'border-line-strong',
+            index < won ? 'border-transparent' : 'border-cladd-outline',
           )}
           style={index < won ? { background: color } : undefined}
         />
@@ -121,12 +104,12 @@ function TeamBlock({
   const winner = matchWinner(score) === side;
   const sideLabel = side === 'home' ? 'left' : 'right';
   return (
-    <section
+    <Surface
+      as="section"
       aria-label={`${team.name} (${sideLabel})`}
-      className={cn(
-        'relative flex min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-lg border bg-raised p-3 pl-4',
-        serving ? 'border-line-strong' : 'border-line',
-      )}
+      outline={serving}
+      className="@container/team min-w-0 flex-1 overflow-hidden rounded-cladd-lg"
+      contentClassName="flex flex-col gap-2 p-3 pl-4"
     >
       <span
         className="absolute inset-y-0 left-0 w-1"
@@ -136,91 +119,89 @@ function TeamBlock({
       <div className="flex min-w-0 items-center gap-2">
         <InlineName side={side} score={score} />
         {setPoint && !final && (
-          <span className="shrink-0 rounded-[3px] bg-warn-soft px-1.5 py-0.5 text-[9.5px] font-bold tracking-[0.08em] text-warn">
+          <Chip color="warn" variant="gradient" className="shrink-0 font-bold tracking-wider">
             {isMatchPoint(score) ? 'MATCH PT' : 'SET PT'}
-          </span>
+          </Chip>
         )}
         {winner && (
-          <span className="flex shrink-0 items-center gap-1 rounded-[3px] bg-ok-soft px-1.5 py-0.5 text-[9.5px] font-bold tracking-[0.08em] text-ok">
-            <Trophy className="size-3" />
+          <Chip
+            color="ok"
+            variant="gradient"
+            icon={Trophy}
+            className="shrink-0 font-bold tracking-wider"
+          >
             WINNER
-          </span>
+          </Chip>
         )}
         <Hint label={serving ? `${team.name} is serving` : `Give ${team.name} the serve`}>
-          <button
-            type="button"
+          <Button
+            size="sm"
+            rounded
             aria-pressed={serving}
             aria-label={`${team.name} serving`}
             disabled={final}
+            // The yellow is the ball: serve is data, not a warning.
+            color={serving ? 'yellow' : ''}
+            variant={serving ? 'gradient-fill' : 'transparent'}
+            outline={serving}
+            className="ml-auto shrink-0"
             onClick={() => scoreAction({ type: 'serve', side: serving ? null : side })}
-            className={cn(
-              'ml-auto flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10.5px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40',
-              serving
-                ? 'bg-[#ffe36b] text-black'
-                : 'text-fg-faint hover:bg-raised-hover hover:text-fg-muted',
-            )}
           >
-            <Volleyball className="size-3" />
-            {serving ? 'SERVING' : 'Serve'}
-          </button>
+            <Volleyball />
+            <span className="@max-[280px]/team:sr-only">{serving ? 'SERVING' : 'Serve'}</span>
+          </Button>
         </Hint>
       </div>
       <div className="flex items-end justify-between gap-2">
         <output
           aria-label={`${team.name} points`}
-          className="text-[clamp(44px,7vw,76px)] leading-[0.85] font-bold tracking-[-0.04em] text-fg tabular"
+          className="text-[clamp(44px,7vw,76px)] leading-[0.85] font-bold tracking-[-0.04em] tabular"
         >
           {points}
         </output>
         <div className="flex flex-col items-end gap-1.5 pb-1">
-          <span className="flex items-center gap-1.5">
-            <span className="text-[10.5px] text-fg-faint">Sets</span>
+          <span className="flex items-center gap-1.5 text-cladd-xs">
+            <span className="text-cladd-fg-softer">Sets</span>
             <SetDots won={sets} needed={needed} color={team.primaryColor} />
-            <span
-              className="w-3 text-[12px] font-semibold text-fg tabular"
-              aria-label={`${team.name} sets won`}
-            >
+            <span className="w-3 font-semibold tabular" aria-label={`${team.name} sets won`}>
               {sets}
             </span>
           </span>
-          <span className="flex gap-0.5">
-            <Hint label={`Take a point away from ${team.name} (correction)`}>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove a point from ${team.name}`}
-                disabled={points === 0}
-                onClick={() => scoreAction({ type: 'point', side, delta: -1 })}
-              >
-                <Minus />
-              </Button>
-            </Hint>
-          </span>
+          <IconButton
+            label={`Remove a point from ${team.name}`}
+            size="sm"
+            disabled={points === 0}
+            onClick={() => scoreAction({ type: 'point', side, delta: -1 })}
+          >
+            <Minus />
+          </IconButton>
         </div>
       </div>
       <Hint label={`${team.name} won the rally: +1 and they serve`} keys={[shortcut]}>
         <Button
-          variant="default"
-          className="h-11 w-full justify-between bg-raised-hover px-3 text-[14px] font-semibold hover:brightness-125"
+          size="xl"
+          className="w-full text-cladd-sm"
+          contentClassName="justify-between"
           disabled={final}
           onClick={() => rally(side)}
           aria-label={`Point ${team.name}`}
         >
           <span className="flex items-center gap-2">
-            <Plus className="size-4" />
+            <Plus />
             Point
           </span>
           <Keys keys={[shortcut]} />
         </Button>
       </Hint>
-    </section>
+    </Surface>
   );
 }
 
 /**
  * Volleyball scoring as an operator console: one big target per team, the
  * serve follows the rally, Undo names what it reverses, and End Set says what
- * it is about to do before it does it.
+ * it is about to do before it does it. Setup, corrections, swapping sides and
+ * resetting live in the overflow menu, away from the scoring targets.
  */
 export function ScoreController() {
   const score = useScore();
@@ -232,11 +213,11 @@ export function ScoreController() {
   const final = winner !== null;
 
   return (
-    <section aria-label="Match" className="flex flex-col gap-2">
-      <div className="flex h-8 items-center gap-2">
-        <h2 className="label-caps">Match</h2>
-        <span className="text-[12px] text-fg-muted">
-          {final ? (
+    <section aria-label="Match" className="flex flex-col gap-1">
+      <SectionHeader
+        label="Match"
+        detail={
+          final ? (
             <span className="font-semibold text-ok">
               Final · {score[winner].name} wins {sideSets(score, winner)}–
               {sideSets(score, winner === 'home' ? 'away' : 'home')}
@@ -245,12 +226,10 @@ export function ScoreController() {
             <>
               Set {score.setNumber} of {matchSetLimit(score)} · to {setPointTarget(score)}, win by 2
             </>
-          )}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          <MatchMenu score={score} />
-        </div>
-      </div>
+          )
+        }
+        actions={<MatchMenu score={score} />}
+      />
       <div className="flex gap-2">
         <TeamBlock
           side="home"
@@ -267,18 +246,14 @@ export function ScoreController() {
           setPoint={setPoint === 'away'}
         />
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="mt-1 flex flex-wrap items-center gap-2">
         <Hint label={undoLabel ? `Undo: ${undoLabel}` : 'Nothing to undo'} keys={['Z']}>
-          <Button disabled={!undoLabel} onClick={undoScoreAction} className="max-w-[46%]">
-            <Undo2 />
-            <span className="truncate">{undoLabel ? `Undo · ${undoLabel}` : 'Undo'}</span>
-          </Button>
-        </Hint>
-        <Hint label="Swap the teams' sides on the scoreboard">
-          <Button variant="ghost" onClick={() => scoreAction({ type: 'swap-sides' })}>
-            <ArrowLeftRight />
-            Swap sides
-          </Button>
+          <span className="inline-flex max-w-[55%]">
+            <Button disabled={!undoLabel} onClick={undoScoreAction} className="max-w-full">
+              <Undo2 />
+              <span className="truncate">{undoLabel ? `Undo · ${undoLabel}` : 'Undo'}</span>
+            </Button>
+          </span>
         </Hint>
         <div className="ml-auto">
           {final ? (
@@ -295,8 +270,8 @@ export function ScoreController() {
               }
             >
               {preview.regulation ? (
-                <Button
-                  variant="primary"
+                <ActionButton
+                  intent="primary"
                   onClick={() => void endSet()}
                   aria-label={`End set ${score.setNumber}`}
                 >
@@ -304,16 +279,16 @@ export function ScoreController() {
                   End Set {score.setNumber} · {score[preview.winner].name} {preview.winnerPoints}–
                   {preview.loserPoints}
                   {preview.endsMatch ? ' · Final' : ''}
-                </Button>
+                </ActionButton>
               ) : (
-                <Button
-                  variant="ghost"
+                <ActionButton
+                  intent="quiet"
                   onClick={() => void endSet()}
                   aria-label={`End set ${score.setNumber}`}
                 >
                   <Flag />
                   End Set {score.setNumber}…
-                </Button>
+                </ActionButton>
               )}
             </Hint>
           ) : (
@@ -325,109 +300,5 @@ export function ScoreController() {
         </div>
       </div>
     </section>
-  );
-}
-
-function MatchMenu({ score }: { score: VolleyballScoreState }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" aria-label="Match options" />}
-      >
-        <Ellipsis />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>Format</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={score.matchFormat}
-          onValueChange={(value) =>
-            scoreAction({
-              type: 'match-format',
-              value: value === 'best-of-3' ? 'best-of-3' : 'best-of-5',
-            })
-          }
-        >
-          <DropdownMenuRadioItem value="best-of-5">
-            Best of 5 · first to 3 sets
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="best-of-3">
-            Best of 3 · first to 2 sets
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Corrections</DropdownMenuLabel>
-        <DropdownMenuItem
-          disabled={score.setNumber <= 1}
-          onClick={() => scoreAction({ type: 'set-number', value: score.setNumber - 1 })}
-        >
-          Set number − 1 (now {score.setNumber})
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={score.setNumber >= matchSetLimit(score)}
-          onClick={() => scoreAction({ type: 'set-number', value: score.setNumber + 1 })}
-        >
-          Set number + 1
-        </DropdownMenuItem>
-        {(['home', 'away'] as const).map((side) => (
-          <DropdownMenuItem
-            key={`${side}-up`}
-            onClick={() =>
-              scoreAction({ type: 'sets-won', side, value: sideSets(score, side) + 1 })
-            }
-          >
-            {score[side].name} sets + 1
-          </DropdownMenuItem>
-        ))}
-        {(['home', 'away'] as const).map((side) => (
-          <DropdownMenuItem
-            key={`${side}-down`}
-            disabled={sideSets(score, side) === 0}
-            onClick={() =>
-              scoreAction({ type: 'sets-won', side, value: sideSets(score, side) - 1 })
-            }
-          >
-            {score[side].name} sets − 1
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuItem
-          disabled={score.serving === null}
-          onClick={() => scoreAction({ type: 'serve', side: null })}
-        >
-          Clear serve
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <TeamColorItems score={score} />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={() => void resetMatch()}>
-          <RotateCcw />
-          Reset Score for a New Match…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function TeamColorItems({ score }: { score: VolleyballScoreState }) {
-  return (
-    <div className="flex flex-col gap-1 px-2 py-1">
-      <p className="text-[11px] text-fg-faint">Accent colours on the scoreboard</p>
-      {(['home', 'away'] as const).map((side) => (
-        <label key={side} className="flex items-center gap-2 text-[12px] text-fg">
-          <input
-            type="color"
-            key={score[side].primaryColor}
-            defaultValue={score[side].primaryColor}
-            // Commit once when the picker closes, not on every drag step, so
-            // Undo reverses the colour change in one step.
-            onBlur={(event) =>
-              scoreAction({ type: 'team-color', side, value: event.currentTarget.value })
-            }
-            className="h-5 w-7 cursor-pointer rounded-[3px] border border-line-strong bg-transparent p-0"
-            aria-label={`${score[side].name} colour`}
-          />
-          <span className="truncate">{score[side].name}</span>
-        </label>
-      ))}
-    </div>
   );
 }

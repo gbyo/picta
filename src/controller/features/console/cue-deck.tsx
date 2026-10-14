@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Button, List, ListButton, SearchField, Surface } from '@cladd-ui/react';
 import {
   Check,
   ChevronRight,
@@ -7,7 +8,6 @@ import {
   IdCard,
   ListOrdered,
   Play,
-  Search,
   Undo2,
   Users,
   X,
@@ -15,11 +15,10 @@ import {
 import type { Player, PlayerGroup } from '@core/domain.js';
 import { playerHasVideo } from '@core/player-cues.js';
 import { manualPlayerShown, manualShownCount } from '@core/manual-group.js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ActionButton } from '@/components/picta/controls';
+import { Banner, EmptyState } from '@/components/picta/feedback';
 import { Hint } from '@/components/picta/hint';
-import { EmptyState, SectionHeader } from '@/components/picta/section';
+import { Scroll, SectionHeader } from '@/components/picta/workspace';
 import { cn } from '@/lib/utils';
 import { usePicta } from '@/state/store';
 import { cueTargetFor, describeCueTarget, effectiveGroupIds, programScreen } from '@/state/derive';
@@ -36,9 +35,9 @@ import {
 
 function PresentationIcon({ player }: { player: Player }) {
   return playerHasVideo(player) ? (
-    <Film className="size-3.5 text-fg-muted" aria-label="Intro video" />
+    <Film className="text-cladd-fg-soft" aria-label="Intro video" />
   ) : (
-    <IdCard className="size-3.5 text-fg-faint" aria-label="Player card" />
+    <IdCard className="text-cladd-fg-softer" aria-label="Player card" />
   );
 }
 
@@ -47,9 +46,9 @@ function CueTargetNote() {
   const live = usePicta((state) => state.output.phase === 'live');
   const full = cueTargetFor(screen) === 'full-board';
   return (
-    <p className="text-[11.5px] text-fg-muted">
+    <p className="text-cladd-xs text-cladd-fg-soft">
       {live ? 'Cues appear in ' : 'When live, cues appear in '}
-      <span className="font-medium text-fg">{describeCueTarget(screen).toLowerCase()}</span>
+      <span className="font-semibold text-cladd-fg">{describeCueTarget(screen).toLowerCase()}</span>
       {full ? ` because ${screen.name} has no media panel` : ` of ${screen.name}`}, then the
       rotation resumes.
     </p>
@@ -68,18 +67,26 @@ function ManualSession() {
   const shown = manualShownCount(session);
   return (
     <section aria-label="Manual lineup" className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center gap-2 rounded-md border border-cue/40 bg-cue-soft px-2.5 py-2">
+      <Surface
+        color="cue"
+        variant="solid"
+        outline
+        level={2}
+        className="shrink-0 rounded-cladd-md"
+        contentClassName="flex items-center gap-2 px-2.5 py-2"
+      >
         <Hand className="size-4 text-cue" />
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold tracking-[0.1em] text-cue">PRESENTING MANUALLY</p>
-          <p className="truncate text-[12.5px] font-medium text-fg">
+          <p className="text-cladd-xs font-bold tracking-wider text-cue">PRESENTING MANUALLY</p>
+          <p className="truncate text-cladd-xs font-semibold">
             {group?.name ?? 'Lineup'} · {shown} of {players.length} shown
           </p>
         </div>
         <Hint label="Unmark the most recently shown player">
           <Button
-            variant="ghost"
             size="sm"
+            variant="transparent"
+            outline={false}
             disabled={shown === 0 || session.currentPlayerId !== null}
             onClick={undoManualLineup}
           >
@@ -87,62 +94,60 @@ function ManualSession() {
             Undo last
           </Button>
         </Hint>
-        <Button variant="cue" size="sm" onClick={endManualLineup}>
+        <ActionButton intent="cue" size="sm" onClick={endManualLineup}>
           <X />
           End Lineup
-        </Button>
-      </div>
-      <p className="text-[11.5px] text-fg-muted">
+        </ActionButton>
+      </Surface>
+      <p className="text-cladd-xs text-cladd-fg-soft">
         Click players as the announcer calls them. A shown player can be shown again.
       </p>
-      <ScrollArea className="min-h-0 flex-1">
-        <ol className="flex flex-col gap-1">
+      <Scroll>
+        <List className="gap-1 p-0">
           {players.map((player, index) => {
             const wasShown = manualPlayerShown(session, player.id);
             const presenting = session.currentPlayerId === player.id;
             return (
-              <li key={player.id}>
-                <button
-                  type="button"
-                  disabled={!presenting && (cueActive || session.currentPlayerId !== null)}
-                  onClick={() => void presentManualPlayer(player.id)}
+              <ListButton
+                key={player.id}
+                size="xl"
+                selected={presenting}
+                color={presenting ? 'cue' : ''}
+                outline={!presenting}
+                variant="solid"
+                disabled={!presenting && (cueActive || session.currentPlayerId !== null)}
+                onClick={() => void presentManualPlayer(player.id)}
+                titleClassName="gap-3"
+                after={
+                  presenting ? (
+                    <span className="font-semibold text-cue">ON AIR</span>
+                  ) : wasShown ? (
+                    <span className="inline-flex items-center gap-1 text-ok">
+                      <Check />
+                      Shown
+                    </span>
+                  ) : null
+                }
+              >
+                <span className="w-4 text-cladd-xs text-cladd-fg-softer tabular">{index + 1}</span>
+                <span className="w-8 text-cladd-md font-bold tabular">{player.number}</span>
+                <span
                   className={cn(
-                    'flex h-11 w-full items-center gap-3 rounded-md border px-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50',
-                    presenting
-                      ? 'border-cue bg-cue-soft'
-                      : wasShown
-                        ? 'border-line bg-raised/50'
-                        : 'border-line bg-raised hover:border-line-strong hover:bg-raised-hover',
+                    'min-w-0 flex-1 truncate text-cladd-sm',
+                    wasShown && 'text-cladd-fg-soft',
                   )}
                 >
-                  <span className="w-4 text-[10.5px] text-fg-faint tabular">{index + 1}</span>
-                  <span className="w-8 text-[16px] font-bold text-fg tabular">{player.number}</span>
-                  <span
-                    className={cn(
-                      'min-w-0 flex-1 truncate text-[13px] font-medium',
-                      wasShown ? 'text-fg-muted' : 'text-fg',
-                    )}
-                  >
-                    {player.name}
-                  </span>
-                  <span className="text-[11px] text-fg-faint">{player.position}</span>
-                  <PresentationIcon player={player} />
-                  <span className="w-16 text-right text-[11px]">
-                    {presenting ? (
-                      <span className="font-semibold text-cue">ON AIR</span>
-                    ) : wasShown ? (
-                      <span className="inline-flex items-center gap-1 text-ok">
-                        <Check className="size-3.5" />
-                        Shown
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-              </li>
+                  {player.name}
+                </span>
+                <span className="text-cladd-xs font-normal text-cladd-fg-softer">
+                  {player.position}
+                </span>
+                <PresentationIcon player={player} />
+              </ListButton>
             );
           })}
-        </ol>
-      </ScrollArea>
+        </List>
+      </Scroll>
     </section>
   );
 }
@@ -158,23 +163,23 @@ function LineupRow({ group, live, busy }: { group: PlayerGroup; live: boolean; b
   const videos = players.filter(playerHasVideo).length;
   const empty = players.length === 0;
   return (
-    <li className="rounded-md border border-line bg-raised">
+    <Surface as="li" className="rounded-cladd-lg">
       <div className="flex items-center gap-2 p-2">
         <button
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[4px] text-left outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring flex min-w-0 flex-1 items-center gap-1.5 rounded-cladd-md text-left"
         >
           <ChevronRight
             className={cn(
-              'size-3.5 shrink-0 text-fg-faint transition-transform',
+              'size-4 shrink-0 text-cladd-fg-softer transition-transform',
               open && 'rotate-90',
             )}
           />
           <span className="min-w-0">
-            <span className="block truncate text-[12.5px] font-medium text-fg">{group.name}</span>
-            <span className="block truncate text-[11px] text-fg-faint">
+            <span className="block truncate text-cladd-xs font-semibold">{group.name}</span>
+            <span className="block truncate text-cladd-xs text-cladd-fg-softer">
               {empty
                 ? 'No players'
                 : `${players.length} player${players.length === 1 ? '' : 's'} · ${videos ? `${videos} intro video${videos === 1 ? '' : 's'}, ` : ''}${players.length - videos} card${players.length - videos === 1 ? '' : 's'}`}
@@ -182,15 +187,15 @@ function LineupRow({ group, live, busy }: { group: PlayerGroup; live: boolean; b
           </span>
         </button>
         <Hint label="Present each player in this order, one after another">
-          <Button
-            variant="cue"
+          <ActionButton
+            intent="cue"
             size="sm"
             disabled={!live || busy || empty}
             onClick={() => void playGroupInOrder(group, ids)}
           >
-            <Play className="size-3" />
+            <Play />
             Play in order
-          </Button>
+          </ActionButton>
         </Hint>
         <Hint label="Show players one at a time as the announcer calls them">
           <Button
@@ -198,29 +203,29 @@ function LineupRow({ group, live, busy }: { group: PlayerGroup; live: boolean; b
             disabled={!live || busy || empty}
             onClick={() => beginManualLineup(group, ids)}
           >
-            <Hand className="size-3" />
+            <Hand />
             Manually
           </Button>
         </Hint>
       </div>
       {open && (
-        <ol className="flex flex-col border-t border-line px-2 py-1.5">
+        <ol className="flex flex-col border-t px-2 py-1.5">
           {players.map((player, index) => (
-            <li key={player.id} className="flex h-6 items-center gap-2 text-[12px]">
-              <span className="w-4 text-right text-[10.5px] text-fg-faint tabular">
+            <li key={player.id} className="flex h-6 items-center gap-2 text-cladd-xs">
+              <span className="w-4 text-right text-cladd-xs text-cladd-fg-softer tabular">
                 {index + 1}
               </span>
-              <span className="w-7 font-semibold text-fg tabular">{player.number}</span>
-              <span className="min-w-0 flex-1 truncate text-fg-muted">{player.name}</span>
+              <span className="w-7 font-semibold tabular">{player.number}</span>
+              <span className="min-w-0 flex-1 truncate text-cladd-fg-soft">{player.name}</span>
               <PresentationIcon player={player} />
-              <span className="w-16 text-[10.5px] text-fg-faint">
+              <span className="w-16 text-cladd-xs text-cladd-fg-softer">
                 {playerHasVideo(player) ? 'intro video' : 'card · 9s'}
               </span>
             </li>
           ))}
         </ol>
       )}
-    </li>
+    </Surface>
   );
 }
 
@@ -241,34 +246,28 @@ function PlayerFinder({ live, busy }: { live: boolean; busy: boolean }) {
   return (
     <section aria-label="Present a player" className="flex min-h-0 flex-1 flex-col gap-1.5">
       <SectionHeader label="Players" />
-      <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-fg-faint" />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder="Number or name"
-          aria-label="Find a player"
-          className="pl-7"
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setQuery('');
-          }}
-        />
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        placeholder="Number or name"
+        inputComponentProps={{ 'aria-label': 'Find a player' }}
+      />
+      <Scroll>
         <ul className="flex flex-col">
           {players.map((player) => (
             <li
               key={player.id}
-              className="group flex h-8 items-center gap-2 rounded-[4px] px-1.5 hover:bg-raised"
+              className="group flex h-cladd-lg items-center gap-2 rounded-cladd-md px-1.5 hover:bg-cladd-surface-hover"
             >
-              <span className="w-7 text-right text-[12.5px] font-semibold text-fg tabular">
+              <span className="w-7 text-right text-cladd-xs font-semibold tabular">
                 {player.number}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{player.name}</span>
-              <span className="text-[10.5px] text-fg-faint">{player.position}</span>
+              <span className="min-w-0 flex-1 truncate text-cladd-xs">{player.name}</span>
+              <span className="text-cladd-xs text-cladd-fg-softer">{player.position}</span>
               <Button
-                variant="ghost"
                 size="sm"
+                variant="transparent"
+                outline={false}
                 disabled={!live || busy}
                 onClick={() => void presentSinglePlayer(player.id, 'card')}
                 aria-label={`Show card for ${playerLabel(player)}`}
@@ -277,21 +276,24 @@ function PlayerFinder({ live, busy }: { live: boolean; busy: boolean }) {
                 Card
               </Button>
               <Hint label={playerHasVideo(player) ? 'Play intro video' : 'No usable intro video'}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!live || busy || !playerHasVideo(player)}
-                  onClick={() => void presentSinglePlayer(player.id, 'video')}
-                  aria-label={`Play intro for ${playerLabel(player)}`}
-                >
-                  <Film />
-                  Intro
-                </Button>
+                <span className="inline-flex">
+                  <Button
+                    size="sm"
+                    variant="transparent"
+                    outline={false}
+                    disabled={!live || busy || !playerHasVideo(player)}
+                    onClick={() => void presentSinglePlayer(player.id, 'video')}
+                    aria-label={`Play intro for ${playerLabel(player)}`}
+                  >
+                    <Film />
+                    Intro
+                  </Button>
+                </span>
               </Hint>
             </li>
           ))}
         </ul>
-      </ScrollArea>
+      </Scroll>
     </section>
   );
 }
@@ -315,9 +317,9 @@ export function CueDeck() {
     <div className="flex h-full min-h-0 flex-col gap-3">
       <CueTargetNote />
       {!live && (
-        <p className="rounded-md bg-raised px-2.5 py-1.5 text-[11.5px] text-fg-muted">
+        <Banner tone="info" variant="inline" icon={false}>
           Cues need a live output. Everything here is ready as soon as you Go Live.
-        </p>
+        </Banner>
       )}
       <section aria-label="Lineups" className="flex flex-col gap-1.5">
         <SectionHeader

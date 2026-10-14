@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Check, Monitor, MonitorOff, ScanEye, TriangleAlert } from 'lucide-react';
+import { Button, List, ListButton, SectionTitle, Surface, SurfaceCut } from '@cladd-ui/react';
+import { Check, Monitor, MonitorOff, ScanEye } from 'lucide-react';
 import { describeDisplay, type DisplayInfo } from '@core/monitors.js';
-import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Banner } from '@/components/picta/feedback';
+import { PictaPopover } from '@/components/picta/popover';
 import { cn } from '@/lib/utils';
 import { usePicta, usePictaShallow } from '@/state/store';
 import { chooseDisplay, identifyDisplays } from '@/actions/output';
@@ -30,25 +31,29 @@ function Arrangement({
     return { minX, minY, width, height };
   }, [displays]);
   return (
-    <div
-      className="relative w-full rounded-md bg-sunken"
+    <SurfaceCut
+      wrapContent={false}
+      className="relative w-full rounded-cladd-md"
       style={{ aspectRatio: `${bounds.width} / ${bounds.height}` }}
     >
       {displays.map((display) => {
         const selected = display.id === selectedId;
         return (
-          <button
+          <Surface
             key={display.id}
+            as="button"
             type="button"
             disabled={disabled}
+            hoverable={!disabled}
+            clickable={!disabled}
+            outline
+            variant={selected ? 'gradient' : 'solid'}
+            color={selected ? 'brand' : ''}
             onClick={() => chooseDisplay(display.id)}
             aria-label={`Display ${display.index}`}
-            className={cn(
-              'absolute flex flex-col items-center justify-center gap-0.5 rounded-[3px] border text-[11px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed',
-              selected
-                ? 'border-accent bg-accent-soft text-fg'
-                : 'border-line-strong bg-raised text-fg-muted hover:bg-raised-hover hover:text-fg',
-            )}
+            aria-pressed={selected}
+            className="focus-ring absolute rounded-cladd-xs disabled:opacity-60"
+            contentClassName="flex h-full flex-col items-center justify-center gap-0.5"
             style={{
               left: `${((display.x - bounds.minX) / bounds.width) * 100}%`,
               top: `${((display.y - bounds.minY) / bounds.height) * 100}%`,
@@ -56,17 +61,29 @@ function Arrangement({
               height: `calc(${(display.height / bounds.height) * 100}% - 4px)`,
             }}
           >
-            <span className="text-[15px] font-semibold tabular">{display.index}</span>
+            <span
+              className={cn(
+                'text-cladd-md font-semibold tabular',
+                selected && 'text-cladd-primary',
+              )}
+            >
+              {display.index}
+            </span>
             {display.id === controllerId && (
-              <span className="text-[9.5px] text-fg-faint">Picta</span>
+              <span className="text-cladd-xs text-cladd-fg-softer">Picta</span>
             )}
-          </button>
+          </Surface>
         );
       })}
-    </div>
+    </SurfaceCut>
   );
 }
 
+/**
+ * Choosing the audience display is a quick anchored decision made right
+ * before Go Live, so it stays a popover (not a modal sheet) with the
+ * topology map first, the list as the keyboard path, and at most one notice.
+ */
 export function DisplayPicker() {
   const { displays, selectedId, controllerId, phase, ambiguous } = usePictaShallow((state) => ({
     displays: state.displays,
@@ -80,109 +97,103 @@ export function DisplayPicker() {
   const locked = phase !== 'off';
   const sameAsController = selected !== null && selected.id === controllerId;
 
+  const notice = locked
+    ? ({ tone: 'info', text: 'Stop output to choose a different display.' } as const)
+    : sameAsController
+      ? ({
+          tone: 'warn',
+          text: 'This is the display Picta is on. The output would cover this window.',
+        } as const)
+      : ambiguous && !selected
+        ? ({
+            tone: 'warn',
+            text: 'Two identical displays are connected, so Picta will not guess. Use Identify, then choose one.',
+          } as const)
+        : lost && !selected
+          ? ({
+              tone: 'info',
+              text: 'Waiting for the previous display to come back. Picta will select it when it can identify it exactly.',
+            } as const)
+          : null;
+
   return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            className={cn(
-              'h-8 gap-2 px-2',
-              !selected && 'text-warn hover:text-warn',
-              sameAsController && !locked && 'text-warn',
-            )}
-            aria-label={
-              selected ? `Output display: Display ${selected.index}` : 'Choose output display'
-            }
+    <PictaPopover
+      label="Audience display"
+      position="bottom-end"
+      width="md"
+      initialFocus={['[role="option"][aria-selected="true"]', '[role="option"]:not([disabled])']}
+      contentClassName="gap-3 p-3"
+      trigger={
+        <Button
+          variant="transparent"
+          outline={false}
+          color={!selected || (sameAsController && !locked) ? 'warn' : ''}
+          aria-label={
+            selected ? `Output display: Display ${selected.index}` : 'Choose output display'
+          }
+        >
+          {selected ? <Monitor /> : <MonitorOff />}
+          <span className="flex flex-col items-start leading-none">
+            <span>{selected ? `Display ${selected.index}` : 'No display'}</span>
+            <span className="mt-0.5 text-cladd-xs font-normal text-cladd-fg-soft tabular">
+              {selected ? `${selected.width}×${selected.height}` : 'Choose output'}
+            </span>
+          </span>
+        </Button>
+      }
+    >
+      <SectionTitle className="items-center">
+        <span className="flex-1">Audience display</span>
+        <Button
+          size="sm"
+          variant="transparent"
+          outline={false}
+          onClick={() => void identifyDisplays()}
+        >
+          <ScanEye />
+          Identify
+        </Button>
+      </SectionTitle>
+      {displays.length === 0 ? (
+        <p className="text-cladd-xs text-cladd-fg-soft">No displays were found.</p>
+      ) : (
+        <>
+          <Arrangement
+            displays={displays}
+            selectedId={selectedId}
+            controllerId={controllerId}
+            disabled={locked}
           />
-        }
-      >
-        {selected ? <Monitor className="size-4" /> : <MonitorOff className="size-4" />}
-        <span className="flex flex-col items-start leading-none">
-          <span className="text-[12px] font-medium">
-            {selected ? `Display ${selected.index}` : 'No display'}
-          </span>
-          <span className="mt-0.5 text-[10.5px] font-normal text-fg-faint tabular">
-            {selected ? `${selected.width}×${selected.height}` : 'Choose output'}
-          </span>
-        </span>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 gap-3 p-3">
-        <div className="flex items-center justify-between">
-          <p className="label-caps">Audience display</p>
-          <Button variant="ghost" size="sm" onClick={() => void identifyDisplays()}>
-            <ScanEye />
-            Identify
-          </Button>
-        </div>
-        {displays.length === 0 ? (
-          <p className="text-[12px] text-fg-muted">No displays were found.</p>
-        ) : (
-          <>
-            <Arrangement
-              displays={displays}
-              selectedId={selectedId}
-              controllerId={controllerId}
-              disabled={locked}
-            />
-            <ul className="flex flex-col gap-px" role="listbox" aria-label="Displays">
-              {displays.map((display) => {
-                const isSelected = display.id === selectedId;
-                return (
-                  <li key={display.id}>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      disabled={locked}
-                      onClick={() => chooseDisplay(display.id)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none hover:bg-raised-hover focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:hover:bg-transparent',
-                        isSelected && 'bg-raised',
-                      )}
-                    >
-                      <span className="flex size-6 items-center justify-center rounded-[4px] bg-sunken text-[12px] font-semibold tabular">
-                        {display.index}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12.5px] text-fg">
-                          {display.name?.trim() || `Display ${display.index}`}
-                        </span>
-                        <span className="block truncate text-[11px] text-fg-faint">
-                          {describeDisplay(display).split(' · ').slice(1).join(' · ')}
-                          {display.id === controllerId ? ' · Picta is here' : ''}
-                        </span>
-                      </span>
-                      {isSelected && <Check className="size-4 text-accent" />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-        {locked && (
-          <p className="text-[11.5px] text-fg-muted">Stop output to choose a different display.</p>
-        )}
-        {!locked && sameAsController && (
-          <p className="flex gap-1.5 text-[11.5px] text-warn">
-            <TriangleAlert className="mt-px size-3.5 shrink-0" />
-            This is the display Picta is on. The output would cover this window.
-          </p>
-        )}
-        {!locked && ambiguous && !selected && (
-          <p className="text-[11.5px] text-warn">
-            Two identical displays are connected, so Picta will not guess. Use Identify, then choose
-            one.
-          </p>
-        )}
-        {!locked && lost && !selected && (
-          <p className="text-[11.5px] text-fg-muted">
-            Waiting for the previous display to come back. Picta will select it when it can identify
-            it exactly.
-          </p>
-        )}
-      </PopoverContent>
-    </Popover>
+          <List role="listbox" aria-label="Displays" className="gap-0.5 p-0">
+            {displays.map((display) => {
+              const isSelected = display.id === selectedId;
+              return (
+                <ListButton
+                  key={display.id}
+                  role="option"
+                  aria-selected={isSelected}
+                  disabled={locked}
+                  selected={isSelected}
+                  onClick={() => chooseDisplay(display.id)}
+                  icon={<span className="w-4 text-center tabular">{display.index}</span>}
+                  footer={
+                    describeDisplay(display).split(' · ').slice(1).join(' · ') +
+                    (display.id === controllerId ? ' · Picta is here' : '')
+                  }
+                  after={isSelected ? <Check className="text-cladd-primary" /> : undefined}
+                >
+                  {display.name?.trim() || `Display ${display.index}`}
+                </ListButton>
+              );
+            })}
+          </List>
+        </>
+      )}
+      {notice && (
+        <Banner tone={notice.tone} variant="inline" className="items-start">
+          {notice.text}
+        </Banner>
+      )}
+    </PictaPopover>
   );
 }

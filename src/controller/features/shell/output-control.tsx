@@ -1,6 +1,7 @@
+import { Button } from '@cladd-ui/react';
 import { CircleStop, Loader2, Radio } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Hint } from '@/components/picta/hint';
+import { HintWhenDisabled } from '@/components/picta/controls';
 import { cn } from '@/lib/utils';
 import { usePicta } from '@/state/store';
 import { armedScreen, selectedDisplay } from '@/state/derive';
@@ -23,7 +24,10 @@ function Elapsed({ since }: { since: number }) {
   return <span className="tabular">{formatElapsed(now - since)}</span>;
 }
 
-/** The one place that says whether the audience display is live, and changes it. */
+/**
+ * The one place that says whether the audience display is live, and changes
+ * it. ON AIR is the only solid red in the application.
+ */
 export function OutputControl() {
   const phase = usePicta((state) => state.output.phase);
   const stage = usePicta((state) => state.output.stage);
@@ -47,12 +51,13 @@ export function OutputControl() {
                 : 'Off air'
         }
         className={cn(
-          'flex h-7 items-center gap-2 rounded-md px-2.5 text-[11.5px] font-semibold tracking-[0.06em] whitespace-nowrap',
+          'flex h-cladd-md items-center gap-2 rounded-cladd-md px-2.5 text-cladd-xs font-semibold tracking-wider whitespace-nowrap',
           phase === 'live' &&
             'bg-live text-live-fg shadow-[0_0_0_1px_rgb(255_255_255/0.12),0_0_18px_-4px_var(--live)]',
-          phase === 'preparing' && 'bg-warn-soft text-warn',
-          phase === 'stopping' && 'bg-raised text-fg-muted',
-          phase === 'off' && (failure ? 'bg-danger-soft text-danger' : 'bg-raised text-fg-faint'),
+          phase === 'preparing' && 'bg-warn/15 text-warn',
+          phase === 'stopping' && 'bg-cladd-surface-cut text-cladd-fg-soft',
+          phase === 'off' &&
+            (failure ? 'bg-danger/15 text-danger' : 'bg-cladd-surface-cut text-cladd-fg-soft'),
         )}
       >
         {phase === 'live' && (
@@ -76,9 +81,8 @@ export function OutputControl() {
         {phase === 'off' && (failure ? 'START FAILED' : 'OFF AIR')}
       </div>
       {phase === 'live' || phase === 'stopping' ? (
-        <Hint label="Blank and close the audience display">
+        <Hint label="Blank and close the audience display" side="bottom">
           <Button
-            variant="default"
             size="lg"
             disabled={phase === 'stopping'}
             onClick={() => void requestStopOutput()}
@@ -88,7 +92,7 @@ export function OutputControl() {
           </Button>
         </Hint>
       ) : (
-        <Hint
+        <HintWhenDisabled
           label={
             hasDisplay
               ? `Prepare the output hidden, then reveal ${armedName} when it is ready`
@@ -96,16 +100,14 @@ export function OutputControl() {
           }
         >
           <Button
-            variant="default"
             size="lg"
             disabled={phase === 'preparing' || !hasDisplay}
             onClick={() => void goLive()}
-            className="border-live/50 pr-3"
           >
             <Radio className="text-live" />
             Go Live
           </Button>
-        </Hint>
+        </HintWhenDisabled>
       )}
     </div>
   );

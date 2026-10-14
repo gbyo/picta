@@ -82,7 +82,7 @@ describe('stopping output', () => {
     await goLiveFromUi();
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Stop' }));
-    const dialog = await screen.findByRole('alertdialog');
+    const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Stop output?');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(getState().output.phase).toBe('live');
@@ -90,7 +90,7 @@ describe('stopping output', () => {
 
     await user.click(screen.getByRole('button', { name: 'Stop' }));
     await user.click(
-      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Stop Output' }),
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Stop Output' }),
     );
     await waitFor(() => expect(getState().output.phase).toBe('off'));
     expect(app.platform.output.callsTo('stop').at(-1)!.args[0]).toBe('user');

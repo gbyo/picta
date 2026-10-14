@@ -1,18 +1,25 @@
+import { useMemo } from 'react';
+import { Button, List, ListButton, ListItem } from '@cladd-ui/react';
 import { CircleAlert, CircleCheck, Info, Loader2, OctagonX, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { SectionHeader } from '@/components/picta/section';
+import { SectionHeader } from '@/components/picta/workspace';
 import { cn } from '@/lib/utils';
 import { usePicta, usePictaShallow } from '@/state/store';
 import { readiness, type ReadinessItem } from '@/state/derive';
 import { refreshPreflight } from '@/actions/output';
 import { setMode } from '@/actions/ui';
-import { useMemo } from 'react';
 
 const ICONS = {
   ok: CircleCheck,
   warn: CircleAlert,
   block: OctagonX,
   info: Info,
+};
+
+const TONE = {
+  ok: 'text-ok',
+  warn: 'text-warn',
+  block: 'text-danger',
+  info: 'text-cladd-fg-softer',
 };
 
 /** Off air, the rail answers "what will happen when I press Go Live?" */
@@ -45,8 +52,9 @@ export function Readiness() {
         actions={
           hasMedia ? (
             <Button
-              variant="ghost"
               size="sm"
+              variant="transparent"
+              outline={false}
               disabled={running}
               onClick={() => void refreshPreflight()}
             >
@@ -56,38 +64,32 @@ export function Readiness() {
           ) : null
         }
       />
-      <ul className="flex flex-col gap-px">
+      <List className="gap-0.5 p-0">
         {items.map((item) => {
           const Icon = ICONS[item.level];
+          const icon = <Icon className={cn('size-4 shrink-0 self-start', TONE[item.level])} />;
           const actionable = item.id === 'media' || item.id === 'team';
-          return (
-            <li key={item.id}>
-              <button
-                type="button"
-                disabled={!actionable}
-                onClick={() => open(item)}
-                className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left outline-none enabled:hover:bg-raised focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <Icon
-                  className={cn(
-                    'mt-px size-3.5 shrink-0',
-                    item.level === 'ok' && 'text-ok',
-                    item.level === 'warn' && 'text-warn',
-                    item.level === 'block' && 'text-danger',
-                    item.level === 'info' && 'text-fg-faint',
-                  )}
-                />
-                <span className="min-w-0">
-                  <span className="block text-[12px] text-fg">{item.label}</span>
-                  <span className="block text-[11px] leading-snug text-fg-faint">
-                    {item.detail}
-                  </span>
-                </span>
-              </button>
-            </li>
+          return actionable ? (
+            <ListButton
+              key={item.id}
+              icon={icon}
+              footer={item.detail}
+              onClick={() => open(item)}
+              className="text-left"
+            >
+              {item.label}
+            </ListButton>
+          ) : (
+            <ListItem key={item.id} className="min-h-0 items-start gap-2 px-2 py-1.5">
+              {icon}
+              <span className="min-w-0">
+                <span className="block font-semibold">{item.label}</span>
+                <span className="block text-cladd-fg-softer">{item.detail}</span>
+              </span>
+            </ListItem>
           );
         })}
-      </ul>
+      </List>
     </section>
   );
 }

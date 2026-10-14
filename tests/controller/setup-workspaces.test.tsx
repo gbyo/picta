@@ -60,7 +60,7 @@ describe('media workspace', () => {
       .setup()
       .click(await screen.findByRole('button', { name: /Remove from Rotation/ }));
     expect(items().map((item) => item.id)).toEqual(['m1', 'm3']);
-    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     const undo = await screen.findByRole('button', { name: 'Undo' });
     await userEvent.setup().click(undo);
     expect(items().map((item) => item.id)).toEqual(['m1', 'm2', 'm3']);

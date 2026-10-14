@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Film, Image, Square, UserRound } from 'lucide-react';
 import type { Cue } from '@core/domain.js';
-import { Button } from '@/components/ui/button';
+import { Surface } from '@cladd-ui/react';
+import { ActionButton, IconButton } from '@/components/picta/controls';
 import { Hint } from '@/components/picta/hint';
 import { usePicta, usePictaShallow } from '@/state/store';
 import { endCue, nextCue, previousCue, playerLabel } from '@/actions/cues';
@@ -68,58 +69,60 @@ export function CueStrip() {
   const target = cue.target === 'full-board' ? 'Full screen' : 'Media panel';
 
   return (
-    <section
+    <Surface
+      as="section"
       aria-label="Cue on air"
       aria-live="polite"
-      className="relative overflow-hidden rounded-md border border-cue/40 bg-cue-soft"
+      color="cue"
+      variant="solid"
+      outline
+      level={2}
+      className="shrink-0 overflow-hidden rounded-cladd-md"
+      contentClassName="flex items-center gap-2.5 px-2.5 py-2"
     >
-      <div className="flex items-center gap-2.5 px-2.5 py-2">
-        <Icon className="size-4 shrink-0 text-cue" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold tracking-[0.1em] text-cue">
-            CUE · {cueKind(cue).toUpperCase()} · {target.toUpperCase()}
-          </p>
-          <p className="truncate text-[12.5px] font-medium text-fg">
-            {cueTitle(cue)}
-            {ordered && (
-              <span className="ml-1.5 text-fg-muted tabular">
-                {context.label} {state.index + 1}/{state.total}
-              </span>
-            )}
-          </p>
-        </div>
-        {ordered && (
-          <>
-            <Hint label="Previous in lineup">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Previous in lineup"
-                disabled={state.index <= 0}
-                onClick={previousCue}
-              >
-                <ChevronLeft />
-              </Button>
-            </Hint>
-            <Hint label="Skip to next in lineup">
-              <Button variant="ghost" size="icon-sm" aria-label="Next in lineup" onClick={nextCue}>
-                <ChevronRight />
-              </Button>
-            </Hint>
-          </>
-        )}
-        <Hint label="End the cue and return to the rotation. Output stays live." keys={['Esc']}>
-          <Button variant="cue" size="sm" onClick={endCue}>
-            <Square className="size-2.5 fill-current" />
-            {ordered ? 'End Lineup' : context?.kind === 'single-player' ? 'End Player' : 'End Cue'}
-          </Button>
-        </Hint>
+      <Icon className="size-4 shrink-0 text-cue" />
+      <div className="min-w-0 flex-1">
+        <p
+          className="truncate text-cladd-xs font-bold tracking-wider text-cue"
+          title={`${cueKind(cue)} · ${target}`}
+        >
+          CUE · {cueKind(cue).toUpperCase()} · {target.toUpperCase()}
+        </p>
+        <p className="truncate text-cladd-xs font-semibold">
+          {cueTitle(cue)}
+          {ordered && (
+            <span className="ml-1.5 font-normal text-cladd-fg-soft tabular">
+              {context.label} {state.index + 1}/{state.total}
+            </span>
+          )}
+        </p>
       </div>
+      {ordered && (
+        <>
+          <IconButton
+            label="Previous in lineup"
+            size="sm"
+            disabled={state.index <= 0}
+            onClick={previousCue}
+          >
+            <ChevronLeft />
+          </IconButton>
+          <IconButton label="Skip to next in lineup" size="sm" onClick={nextCue}>
+            <ChevronRight />
+          </IconButton>
+        </>
+      )}
+      <Hint label="End the cue and return to the rotation. Output stays live." keys={['Esc']}>
+        <ActionButton intent="cue" size="sm" onClick={endCue}>
+          <Square className="size-2.5 fill-current" />
+          {ordered ? 'End Lineup' : context?.kind === 'single-player' ? 'End Player' : 'End Cue'}
+        </ActionButton>
+      </Hint>
       {holdMs !== null ? (
         <CueProgress since={since} holdMs={holdMs} />
       ) : (
         <div className="absolute inset-x-0 bottom-0 h-0.5 animate-pulse bg-cue/60" />
       )}
-    </section>
+    </Surface>
   );
 }
