@@ -45,6 +45,19 @@ describe('overlay buttons and focus', () => {
     expect(box).toHaveFocus();
   });
 
+  it('leaves a submenu trigger alone: an open menu owns keyboard focus', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    const sub = document.createElement('div');
+    sub.setAttribute('aria-haspopup', 'menu');
+    sub.tabIndex = -1;
+    menu.append(sub);
+    document.body.append(menu);
+    fireEvent.pointerDown(sub);
+    sub.focus();
+    expect(sub).toHaveFocus();
+  });
+
   it('does not touch ordinary buttons', () => {
     const button = document.createElement('button');
     document.body.append(button);

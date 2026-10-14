@@ -16,6 +16,7 @@ export function ShortcutsDialog() {
       title="Keyboard shortcuts"
       text="Shortcuts never fire while you are typing, and Space only advances media when no button has focus."
       size="lg"
+      dismissOnBackdrop
       actions={<Button onClick={() => openShortcuts(false)}>Close</Button>}
     >
       <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">

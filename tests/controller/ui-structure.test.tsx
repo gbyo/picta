@@ -5,10 +5,13 @@
  * how overlays treat focus and shortcuts.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getState, setState } from '../../src/controller/state/store.js';
 import { setTheme } from '../../src/controller/actions/ui.js';
+import { useDialogHost } from '../../src/controller/components/picta/dialog.js';
+import { ask, cancelCurrent, dialogStore } from '../../src/controller/state/dialogs.js';
+import { installInertGuard } from '../../src/controller/lib/focus.js';
 import { goLiveFromUi, startApp, type Started } from './harness.js';
 
 /** Base UI menus open from the keyboard reliably in jsdom; the pointer path is covered in the browser. */
@@ -324,5 +327,92 @@ describe('dialogs', () => {
     await waitFor(() =>
       expect(document.querySelector('.app-container')).toHaveProperty('inert', true),
     );
+  });
+});
+
+describe('review hardening', () => {
+  it('does not cancel a question when the backdrop is clicked', async () => {
+    app = await startApp();
+    await goLiveFromUi();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    const dialog = await screen.findByRole('dialog');
+    // Cladd draws the backdrop as the dialog element's first child.
+    fireEvent.click(dialog.firstElementChild!);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(getState().output.phase).toBe('live');
+  });
+
+  it('only cancels the request a late dismissal belongs to', async () => {
+    dialogStore.setState({ queue: [] });
+    const first = ask.confirm({ title: 'A', body: '', confirmLabel: 'Yes' });
+    const second = ask.confirm({ title: 'B', body: '', confirmLabel: 'Yes' });
+    const firstId = dialogStore.getState().queue[0]!.id;
+    cancelCurrent(firstId);
+    await expect(first).resolves.toBe(false);
+    // A stale report from the first dialog must not cancel the second.
+    cancelCurrent(firstId);
+    expect(dialogStore.getState().queue).toHaveLength(1);
+    cancelCurrent();
+    await expect(second).resolves.toBe(false);
+  });
+
+  it('keeps a reopened dialog open when the previous one reports closed late', () => {
+    const { result } = renderHook(() => useDialogHost<string>());
+    act(() => result.current.open('setup'));
+    const firstKey = result.current.state!.key;
+    act(() => result.current.open('setup'));
+    act(() => result.current.closeFor(firstKey)());
+    expect(result.current.state?.value).toBe('setup');
+    act(() => result.current.closeFor(result.current.state!.key)());
+    expect(result.current.state).toBeNull();
+  });
+
+  it('lifts a stuck inert container once no modal is left', async () => {
+    const root = document.createElement('div');
+    const container = document.createElement('div');
+    container.className = 'app-container';
+    root.append(container);
+    document.body.append(root);
+    const stop = installInertGuard(root);
+    container.inert = true;
+    const dialog = document.createElement('div');
+    dialog.className = 'cladd-dialog';
+    root.append(dialog);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(container.inert).toBe(true);
+    dialog.remove();
+    await waitFor(() => expect(container.inert).toBe(false));
+    stop();
+    root.remove();
+  });
+
+  it('names the number input and both step buttons', async () => {
+    app = await startApp();
+    act(() => setState({ mode: 'media', selectedMediaIds: [] }));
+    const inspector = await screen.findByRole('complementary', { name: 'Media inspector' });
+    const name = 'Default time on screen for images';
+    expect(within(inspector).getByRole('spinbutton', { name })).toBeInTheDocument();
+    expect(within(inspector).getByRole('button', { name: `Increase ${name}` })).toBeInTheDocument();
+    expect(within(inspector).getByRole('button', { name: `Decrease ${name}` })).toBeInTheDocument();
+  });
+
+  it('does not let Escape end the cue while an overlay is still fading out', async () => {
+    app = await startApp();
+    await goLiveFromUi();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: /Cues/ }));
+    await user.click(screen.getByRole('button', { name: 'Show card for #1 Ada' }));
+    (document.activeElement as HTMLElement | null)?.blur();
+    // An overlay that has started closing (no data-open) but is still in the document.
+    const fading = document.createElement('div');
+    fading.className = 'cladd-popover';
+    document.body.append(fading);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(app.platform.output.callsTo('cancelCue')).toHaveLength(0);
+    fading.remove();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(app.platform.output.callsTo('cancelCue')).toHaveLength(1);
   });
 });

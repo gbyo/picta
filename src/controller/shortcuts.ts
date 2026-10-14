@@ -69,6 +69,11 @@ const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="li
 const OPEN_OVERLAY =
   '.cladd-dialog [data-part="content"][data-open], .cladd-popover [data-part="content"][data-open], .cladd-popup[data-open]';
 
+/** Any Cladd overlay in the document, even one still fading out. */
+function overlayPresent(): boolean {
+  return document.querySelector('.cladd-dialog, .cladd-popover, .cladd-popup') !== null;
+}
+
 function overlayOpen(): boolean {
   return document.querySelector(OPEN_OVERLAY) !== null;
 }
@@ -117,6 +122,9 @@ export function handleGlobalKey(event: KeyboardEvent): void {
     }
     return;
   }
+  // Escape that dismisses an overlay must not also reach the cue underneath
+  // while the overlay is still fading out.
+  if (event.key === 'Escape' && overlayPresent()) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.repeat && !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
   if (

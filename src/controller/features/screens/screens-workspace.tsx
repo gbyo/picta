@@ -135,7 +135,7 @@ function ScreenListItem({
             // Keep dnd-kit's keyboard reordering (Space, arrows, Space).
             sortable.listeners?.['onKeyDown']?.(event);
           }}
-          className="focus-ring flex h-cladd-xl w-5 shrink-0 cursor-grab items-center justify-center rounded-cladd-md text-cladd-fg-softer hover:text-cladd-fg-soft @max-[1000px]/ws:hidden"
+          className="focus-ring flex h-cladd-xl w-5 shrink-0 cursor-grab items-center justify-center rounded-cladd-md text-cladd-fg-softer hover:text-cladd-fg-soft @max-[1000px]/ws:w-4"
         >
           <GripVertical className="size-4" />
         </button>
@@ -499,7 +499,7 @@ export function ScreensWorkspace() {
         <Panel
           as="aside"
           aria-label="Screens"
-          className="w-56 shrink-0 border-r @max-[1000px]/ws:w-16 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
+          className="w-56 shrink-0 border-r @max-[1000px]/ws:w-20 @max-[560px]/ws:w-full @max-[560px]/ws:border-r-0 @max-[560px]/ws:border-b"
           contentClassName="@max-[560px]/ws:flex-row @max-[560px]/ws:items-center"
         >
           <div className="flex h-cladd-xl shrink-0 items-center border-b pr-2 pl-3 @max-[1000px]/ws:justify-center @max-[1000px]/ws:px-1 @max-[560px]/ws:border-r @max-[560px]/ws:border-b-0">
@@ -533,7 +533,7 @@ export function ScreensWorkspace() {
             />
           </div>
           <Scroll className="@max-[560px]/ws:min-w-0 @max-[560px]/ws:overflow-x-auto @max-[560px]/ws:overflow-y-hidden">
-            <SortableArea ids={screens.map((item) => item.id)} onMove={moveScreen}>
+            <SortableArea ids={screens.map((item) => item.id)} onMove={moveScreen} layout="grid">
               <ol
                 className="flex flex-col gap-0.5 p-1.5 @max-[560px]/ws:flex-row"
                 aria-label="Screens in switcher order"

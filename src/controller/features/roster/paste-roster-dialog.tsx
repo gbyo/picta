@@ -9,24 +9,14 @@ import { useDefinition } from '@/hooks';
 import { importRoster } from '@/actions/team';
 
 /** Paste a roster from a spreadsheet or email, see exactly what will be added, then add it. */
-export function PasteRosterDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange(open: boolean): void;
-}) {
+export function PasteRosterDialog({ onClose }: { onClose(): void }) {
   const definition = useDefinition();
   const [text, setText] = useState('');
   const parsed = useMemo(
     () => parseRosterText(text, definition?.positions ?? []),
     [text, definition],
   );
-  const close = () => {
-    setText('');
-    onOpenChange(false);
-  };
-  if (!open) return null;
+  const close = onClose;
   return (
     <ModalDialog
       onOpenChange={(value) => !value && close()}

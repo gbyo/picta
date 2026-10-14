@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Input, NumberField } from '@cladd-ui/react';
+import { Button, Input } from '@cladd-ui/react';
 import type { MatchFormat, ScoreSide, VolleyballScoreState } from '@core/domain.js';
 import { matchSetLimit, sideSets } from '@core/score.js';
 import {
@@ -7,6 +7,7 @@ import {
   Choice,
   ColorField,
   explicitSubmit,
+  StepperField,
   Field,
 } from '@/components/picta/controls';
 import { ModalDialog } from '@/components/picta/dialog';
@@ -138,7 +139,8 @@ export function CorrectScoreDialog({
     >
       <div className="flex flex-col gap-2">
         <PropertyRow label="Set number">
-          <NumberField
+          <StepperField
+            label="Set number"
             min={1}
             max={matchSetLimit(score)}
             value={setNumber}
@@ -148,7 +150,8 @@ export function CorrectScoreDialog({
         </PropertyRow>
         {SIDES.map(({ side }) => (
           <PropertyRow key={side} label={`${score[side].name} sets`}>
-            <NumberField
+            <StepperField
+              label={`${score[side].name} sets won`}
               min={0}
               max={Math.ceil(matchSetLimit(score) / 2)}
               value={sets[side]}

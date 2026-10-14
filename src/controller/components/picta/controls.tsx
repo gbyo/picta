@@ -6,6 +6,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -13,7 +14,15 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { Button, ColorPicker, Input, SurfaceCut, ToggleButton, ToggleGroup } from '@cladd-ui/react';
+import {
+  Button,
+  ColorPicker,
+  Input,
+  NumberField,
+  SurfaceCut,
+  ToggleButton,
+  ToggleGroup,
+} from '@cladd-ui/react';
 import { cn, defined } from '@/lib/utils';
 import { restoreFocusIfKeyboard } from '@/lib/focus';
 import { Hint } from './hint';
@@ -394,4 +403,39 @@ export function explicitSubmit(handler: () => void) {
     if (submitter && !submitter.hasAttribute('type')) return;
     handler();
   };
+}
+
+/* Numbers -------------------------------------------------------------------- */
+
+/**
+ * A Cladd NumberField that is also nameable. NumberField forwards extra props
+ * to its outer surface, leaving the number input and the two step buttons
+ * without names, so the names are applied to those parts directly.
+ */
+export function StepperField({
+  label,
+  className,
+  ...props
+}: ComponentProps<typeof NumberField> & { label: string }) {
+  const root = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    element.querySelector('input[type="number"]')?.setAttribute('aria-label', label);
+    element
+      .querySelector('[data-part="decrease"]')
+      ?.setAttribute('aria-label', `Decrease ${label}`);
+    element
+      .querySelector('[data-part="increase"]')
+      ?.setAttribute('aria-label', `Increase ${label}`);
+  });
+  return (
+    <NumberField
+      ref={root}
+      role="group"
+      aria-label={label}
+      {...(className ? { className } : {})}
+      {...props}
+    />
+  );
 }

@@ -8,7 +8,7 @@
  * Picta supplies its own footer through `actions`.
  */
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from '@cladd-ui/react';
 import { cn } from '@/lib/utils';
 import { restoreMenuFocus } from '@/lib/focus';
@@ -25,6 +25,7 @@ export function ModalDialog({
   title,
   text,
   size = 'md',
+  dismissOnBackdrop = false,
   actions,
   className,
   children,
@@ -36,6 +37,12 @@ export function ModalDialog({
   /** A sentence of explanation. Also the dialog's accessible description. */
   text?: ReactNode;
   size?: keyof typeof SIZES;
+  /**
+   * Whether a click outside the dialog dismisses it. Off by default: a stray
+   * click must never discard a question (such as crash recovery) or a draft.
+   * Escape and the Cancel button always dismiss.
+   */
+  dismissOnBackdrop?: boolean;
   /** The footer buttons, dismissive first. */
   actions: ReactNode;
   className?: string;
@@ -47,6 +54,7 @@ export function ModalDialog({
       open={open}
       {...(onOpenChange ? { onOpenChange } : {})}
       title={title}
+      closeOnBackdropClick={dismissOnBackdrop}
       {...(text ? { text } : {})}
       className={cn(SIZES[size], className)}
       contentClassName="gap-3 p-4"
@@ -80,4 +88,24 @@ export function useInitialFocus<T extends HTMLElement>(options: { select?: boole
     };
   }, [select]);
   return ref;
+}
+
+/**
+ * State for a dialog opened from somewhere else (a menu item, a button).
+ * Cladd reports a dismissal when the close transition ends, a moment after
+ * Escape. Each opening gets a key, and a late report only closes the opening
+ * it belongs to, so reopening in that moment is not undone.
+ */
+export function useDialogHost<T>() {
+  const [state, setState] = useState<{ key: number; value: T } | null>(null);
+  const counter = useRef(0);
+  const open = useCallback((value: T) => {
+    counter.current += 1;
+    setState({ key: counter.current, value });
+  }, []);
+  const closeFor = useCallback(
+    (key: number) => () => setState((current) => (current?.key === key ? null : current)),
+    [],
+  );
+  return { state, open, closeFor };
 }

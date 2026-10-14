@@ -101,6 +101,9 @@ export function PictaPopover({
         onClose={() => {
           // Runs as the close transition begins, while focus is still inside.
           if (content.current?.contains(document.activeElement)) anchor.current?.focus();
+          // Cladd reports onOpenChange only when the fade ends; follow the close now so
+          // the trigger's state is right during it.
+          setOpen(false);
         }}
         className={cn(WIDTHS[width], className)}
         contentClassName={cn('max-h-[min(70vh,32rem)] flex-col', contentClassName)}

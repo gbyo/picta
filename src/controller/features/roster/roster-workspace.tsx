@@ -13,6 +13,7 @@ import {
 import { basename } from '@core/paths.js';
 import { ActionButton, CommitInput } from '@/components/picta/controls';
 import { EmptyState } from '@/components/picta/feedback';
+import { useDialogHost } from '@/components/picta/dialog';
 import { OverflowMenu } from '@/components/picta/menu';
 import { ResourceMenuItems, type ResourceAction } from '@/components/picta/resource-menu';
 import {
@@ -87,7 +88,7 @@ export function RosterWorkspace() {
   const dirty = usePicta((state) => state.doc.teamDirty);
   const style = usePicta((state) => state.pathStyle);
   const [tab, setTab] = useState<'players' | 'groups' | 'stats'>('players');
-  const [pasting, setPasting] = useState(false);
+  const paste = useDialogHost<true>();
 
   if (!team || !definition)
     return (
@@ -145,7 +146,7 @@ export function RosterWorkspace() {
           </>
         }
         actions={
-          <Button onClick={() => setPasting(true)}>
+          <Button onClick={() => paste.open(true)}>
             <ClipboardPaste />
             Paste Roster…
           </Button>
@@ -195,7 +196,9 @@ export function RosterWorkspace() {
           )}
         </WorkspaceBody>
       </Tabs>
-      <PasteRosterDialog open={pasting} onOpenChange={setPasting} />
+      {paste.state && (
+        <PasteRosterDialog key={paste.state.key} onClose={paste.closeFor(paste.state.key)} />
+      )}
     </Workspace>
   );
 }

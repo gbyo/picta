@@ -21,8 +21,9 @@ import {
   type TextRequest,
 } from '@/state/dialogs';
 
-const dismiss = (open: boolean) => {
-  if (!open) cancelCurrent();
+/** Cladd reports a dismissal when the close ends; only cancel the request it belongs to. */
+const dismissFor = (id: number) => (open: boolean) => {
+  if (!open) cancelCurrent(id);
 };
 
 const CONFIRM_INTENT: Record<NonNullable<ConfirmRequest['tone']> | 'default', Intent> = {
@@ -32,11 +33,11 @@ const CONFIRM_INTENT: Record<NonNullable<ConfirmRequest['tone']> | 'default', In
 };
 
 /** A question with a yes and a no. The safe answer (cancel) is focused. */
-function ConfirmDialog({ request }: { request: ConfirmRequest }) {
+function ConfirmDialog({ request, id }: { request: ConfirmRequest; id: number }) {
   const cancel = useInitialFocus<HTMLButtonElement>();
   return (
     <ModalDialog
-      onOpenChange={dismiss}
+      onOpenChange={dismissFor(id)}
       title={
         <span className="flex items-center gap-2">
           {request.tone === 'danger' && <TriangleAlert className="size-4 text-danger" />}
@@ -73,11 +74,11 @@ function NameList({ names }: { names: string[] }) {
   );
 }
 
-function SaveChangesDialog({ request }: { request: SaveChangesRequest }) {
+function SaveChangesDialog({ request, id }: { request: SaveChangesRequest; id: number }) {
   const save = useInitialFocus<HTMLButtonElement>();
   return (
     <ModalDialog
-      onOpenChange={dismiss}
+      onOpenChange={dismissFor(id)}
       title={`Save changes before ${request.reason}?`}
       text="These have unsaved changes:"
       actions={
@@ -101,7 +102,7 @@ function SaveChangesDialog({ request }: { request: SaveChangesRequest }) {
   );
 }
 
-function RecoveryDialog({ request }: { request: RecoveryRequest }) {
+function RecoveryDialog({ request, id }: { request: RecoveryRequest; id: number }) {
   const recover = useInitialFocus<HTMLButtonElement>();
   const when = new Date(request.savedAt).toLocaleString(undefined, {
     weekday: 'short',
@@ -110,7 +111,7 @@ function RecoveryDialog({ request }: { request: RecoveryRequest }) {
   });
   return (
     <ModalDialog
-      onOpenChange={dismiss}
+      onOpenChange={dismissFor(id)}
       title={
         <span className="flex items-center gap-2">
           <History className="size-4 text-cladd-primary" />
@@ -132,7 +133,7 @@ function RecoveryDialog({ request }: { request: RecoveryRequest }) {
   );
 }
 
-function TextDialog({ request }: { request: TextRequest }) {
+function TextDialog({ request, id }: { request: TextRequest; id: number }) {
   const field = useInitialFocus<HTMLInputElement>({ select: true });
   const [value, setValue] = useState(request.initialValue ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +152,7 @@ function TextDialog({ request }: { request: TextRequest }) {
   });
   return (
     <ModalDialog
-      onOpenChange={dismiss}
+      onOpenChange={dismissFor(id)}
       title={request.title}
       actions={
         <>
@@ -189,7 +190,7 @@ function sportName(id: string): string {
   return id === 'custom' ? 'Custom sport' : (SPORTS.find((sport) => sport.id === id)?.name ?? id);
 }
 
-function NewTeamDialog() {
+function NewTeamDialog({ id }: { id: number }) {
   const name = useInitialFocus<HTMLInputElement>();
   const [details, setDetails] = useState<NewTeamDetails>({
     name: '',
@@ -209,7 +210,7 @@ function NewTeamDialog() {
   const preset = SPORTS.find((sport) => sport.id === details.sport);
   return (
     <ModalDialog
-      onOpenChange={dismiss}
+      onOpenChange={dismissFor(id)}
       title="New team"
       text="A reusable team: roster, photos, intro videos and groups. Save it as a .pictateam to use it at every event."
       actions={
@@ -295,14 +296,14 @@ export function DialogHost() {
   const { request } = current;
   switch (request.kind) {
     case 'confirm':
-      return <ConfirmDialog key={current.id} request={request} />;
+      return <ConfirmDialog key={current.id} id={current.id} request={request} />;
     case 'save-changes':
-      return <SaveChangesDialog key={current.id} request={request} />;
+      return <SaveChangesDialog key={current.id} id={current.id} request={request} />;
     case 'recovery':
-      return <RecoveryDialog key={current.id} request={request} />;
+      return <RecoveryDialog key={current.id} id={current.id} request={request} />;
     case 'text':
-      return <TextDialog key={current.id} request={request} />;
+      return <TextDialog key={current.id} id={current.id} request={request} />;
     case 'new-team':
-      return <NewTeamDialog key={current.id} />;
+      return <NewTeamDialog key={current.id} id={current.id} />;
   }
 }

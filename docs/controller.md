@@ -68,7 +68,10 @@ Text uses only Cladd's `xs` (12px), `sm` and `md` sizes, so nothing in the contr
 - Cladd renders `<button>` without a `type`, so inside a `<form>` an unrelated Select, colour editor or segmented option would submit it. Forms use `explicitSubmit` (only Enter in a field or a `type="submit"` button submits).
 - Cladd's Popover does not move focus. `PictaPopover` focuses into the popover, names it, and returns focus to the trigger when it was dismissed from the keyboard. After a mouse dismissal focus is left alone so Space keeps advancing media.
 - Cladd Dialog has `role="dialog"` (not `alertdialog`), traps focus and focuses its confirm button. Picta supplies its own footer so the safe answer is focused (`useInitialFocus`).
-- Global shortcuts stay quiet while any Cladd overlay (`.cladd-dialog`, `.cladd-popup`, `.cladd-popover`) is open.
+- Global shortcuts stay quiet while any Cladd overlay (`.cladd-dialog`, `.cladd-popup`, `.cladd-popover`) is *open* (`data-open`), and Escape also while one is still fading out, so dismissing an overlay never ends the cue underneath.
+- `ModalDialog` ignores clicks outside it (Escape and Cancel still dismiss): a stray click must not discard crash recovery or a half-filled form. Cladd reports a dismissal when the close transition ends, so dialogs opened from elsewhere use `useDialogHost`, and queued requests are only cancelled by their own id.
+- Cladd lifts `inert` from the app only when no popover or popup remains, so `installInertGuard` repairs the case of a modal opened over an unrelated popover.
+- A Cladd `NumberField` does not name its input or step buttons; use `StepperField`.
 - Cladd positions popovers and tooltips with CSS anchor positioning and colours with relative colour syntax. Chromium (WebView2) and recent WebKit support both; see "Platform requirements" in the README.
 
 ## Drag and drop

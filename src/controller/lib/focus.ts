@@ -18,6 +18,8 @@ if (typeof document !== 'undefined') {
       const trigger =
         event.target instanceof Element ? event.target.closest('[aria-haspopup]') : null;
       if (!(trigger instanceof HTMLElement)) return;
+      // A submenu trigger lives inside an open menu, which owns keyboard focus.
+      if (trigger.closest('[role="menu"]')) return;
       if (trigger.getAttribute('aria-haspopup') === 'menu') menuTrigger = trigger;
       // A menu, select or popover button that gets focus because of the mouse
       // (including focus handed back when its overlay closes) must not keep it:
@@ -59,4 +61,22 @@ export function restoreFocusIfKeyboard(element: HTMLElement | null): void {
     if (keyboard && element?.isConnected && document.activeElement === document.body)
       element.focus({ preventScroll: true });
   }, 0);
+}
+
+/**
+ * Cladd makes `.app-container` inert while a modal is open, and lifts it again
+ * only when it finds no popover or popup left in the document. A modal opened
+ * over an unrelated popover (the palette over the display picker) could
+ * therefore leave the whole controller inert after it closed. Overlays are
+ * appended to #root, so watching its children is enough to repair that.
+ */
+export function installInertGuard(root: HTMLElement): () => void {
+  const repair = () => {
+    const container = document.querySelector<HTMLElement>('.app-container');
+    if (container?.inert && !document.querySelector('.cladd-dialog, .cladd-popup'))
+      container.inert = false;
+  };
+  const observer = new MutationObserver(repair);
+  observer.observe(root, { childList: true });
+  return () => observer.disconnect();
 }

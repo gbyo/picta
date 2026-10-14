@@ -1,5 +1,5 @@
 import { useMemo, type KeyboardEvent } from 'react';
-import { Button, NumberField, Surface } from '@cladd-ui/react';
+import { Button, Surface } from '@cladd-ui/react';
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -21,7 +21,7 @@ import type { MediaItem, MediaSet } from '@core/domain.js';
 import { basename, dirname } from '@core/paths.js';
 import { mediaDurationSeconds } from '@core/media.js';
 import type { MediaPreflightFailure } from '@app/media-preflight.js';
-import { ActionButton, Choice } from '@/components/picta/controls';
+import { ActionButton, Choice, StepperField } from '@/components/picta/controls';
 import { Banner, EmptyState } from '@/components/picta/feedback';
 import {
   ContextActions,
@@ -85,9 +85,8 @@ function SecondsField({
   label: string;
 }) {
   return (
-    <NumberField
-      role="group"
-      aria-label={label}
+    <StepperField
+      label={label}
       min={1}
       max={86400}
       value={value}
